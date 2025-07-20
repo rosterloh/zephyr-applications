@@ -1,0 +1,54 @@
+#include <zephyr/dt-bindings/input/input-event-codes.h>
+
+/ {
+	gpiokeys: gpio_keys {
+		compatible = "gpio-keys";
+		button_0: sw1 {
+			label = "SW1";
+			gpios = <&gpio0 23 (GPIO_PULL_UP | GPIO_ACTIVE_LOW)>;
+			zephyr,code = <INPUT_KEY_0>;
+		};
+
+		button_1: sw2 {
+			label = "SW2";
+			gpios = <&gpio0 24 (GPIO_PULL_UP | GPIO_ACTIVE_LOW)>;
+			zephyr,code = <INPUT_KEY_2>;
+		};
+
+		button_2: sw3 {
+			label = "SW3";
+			gpios = <&gpio0 8 (GPIO_PULL_UP | GPIO_ACTIVE_LOW)>;
+			zephyr,code = <INPUT_KEY_3>;
+		};
+
+		button_3: sw4 {
+			label = "SW4";
+			gpios = <&gpio0 9 (GPIO_PULL_UP | GPIO_ACTIVE_LOW)>;
+			zephyr,code = <INPUT_KEY_4>;
+		};
+	};
+
+	leds-gpio {
+		compatible = "gpio-leds";
+		gpio_led_2: led_2 {
+			gpios = <&gpio0 29 GPIO_ACTIVE_LOW>;
+			label = "LED2 green";
+		};
+
+		gpio_led_3: led_3 {
+			gpios = <&gpio0 30 GPIO_ACTIVE_LOW>;
+			label = "LED3 green";
+		};
+
+		gpio_led_4: led_4 {
+			gpios = <&gpio0 31 GPIO_ACTIVE_LOW>;
+			label = "LED4 green";
+		};
+	};
+
+	aliases {
+		led2 = &gpio_led_2;
+		led3 = &gpio_led_3;
+		led4 = &gpio_led_4;
+	};
+};

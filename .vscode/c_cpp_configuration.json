@@ -1,0 +1,30 @@
+{
+	"env": {
+		"SDK_PATH": "${env:HOME}/zephyr-sdk"
+	},
+	"configurations": [
+		{
+			"name": "ZephyrRTOSConfiguration",
+			"includePath": [
+				"${workspaceFolder}/**",
+				"${SDK_PATH}/arm-zephyr-eabi-elf/**",
+				"${SDK_PATH}/xtensa-espressif_esp32s3_zephyr-elf/**"
+			],
+			"defines": [],
+			"compilerPath": "${SDK_PATH}/arm-zephyr-eabi/bin/arm-zephyr-eabi-elf-gcc",
+			"compilerPath": "${SDK_PATH}/xtensa-espressif_esp32s3_zephyr-elf/bin/xtensa-espressif_esp32s3_zephyr-elf-gcc",
+			"cStandard": "c11",
+			"cppStandard": "c++17",
+			"IntelliSenseMode": "gcc-arm",
+			"browse": {
+				"path": [
+					"${SDK_PATH}/arm-zephyr-eabi-elf/include/*",
+					"${SDK_PATH}/xtensa-espressif_esp32s3_zephyr-elf/include/*",
+					"${workspaceFolder}/*"
+				],
+				"limitSymbolsToIncludedHeaders": true
+			}
+		}
+	],
+	"version": 4
+}

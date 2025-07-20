@@ -1,0 +1,86 @@
+#include <zephyr/dt-bindings/mipi_dbi/mipi_dbi.h>
+
+/ {
+	chosen {
+		zephyr,shell-uart = &cdc_acm_uart0;
+		zephyr,display = &st7789v_st7789v_ada_240x135;
+	};
+
+	mipi_dbi_st7789v_ada_240x135 {
+		compatible = "zephyr,mipi-dbi-spi";
+		spi-dev = <&arduino_mkr_spi>;
+		dc-gpios = <&arduino_mkr_header 6 GPIO_ACTIVE_HIGH>;	/* D6 */
+		reset-gpios = <&arduino_mkr_header 5 GPIO_ACTIVE_LOW>;	/* D5 */
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		/* https://learn.adafruit.com/adafruit-1-14-240x135-color-tft-breakout */
+		st7789v_st7789v_ada_240x135: st7789v@0 {
+			compatible = "sitronix,st7789v";
+			mipi-max-frequency = <20000000>;
+			mipi-mode = <MIPI_DBI_MODE_SPI_4WIRE>;
+			reg = <0>;
+			width = <240>;
+			height = <135>;
+			x-offset = <40>;
+			y-offset = <53>;
+			vcom = <0x19>;
+			gctrl = <0x35>;
+			vrhs = <0x12>;
+			vdvs = <0x20>;
+			mdac = <0x70>;
+			gamma = <0x01>;
+			colmod = <0x55>; // 16-bit
+			lcm = <0x2c>;
+			porch-param = [0c 0c 00 33 33];
+			cmd2en-param = [5a 69 02 01];
+			pwctrl1-param = [a4 a1];
+			pvgam-param = [d0 04 0d 11 13 2b 3f 54 4c 18 0d 0b 1f 23];
+			nvgam-param = [d0 04 0c 11 13 2c 3f 44 51 2f 1f 1f 20 23];
+			ram-param = [00 f0];
+			rgb-param = [cd 08 14];
+		};
+	};
+};
+
+&sercom2 {
+	status = "okay";
+	current-speed = <115200>;
+
+	dynamixel {
+		status = "okay";
+		compatible = "robotis,dynamixel";
+
+		test_motor {
+			id = <1>;
+			label = "TEST";
+		};
+	};
+};
+
+&arduino_mkr_i2c {
+	neoslider: seesaw@30 {
+		status = "okay";
+		compatible = "adafruit,seesaw";
+		reg = <0x30>;
+		read-delay-ms = <100>;
+	};
+
+	rotary_encoder: seesaw@36 {
+		status = "okay";
+		compatible = "adafruit,seesaw";
+		reg = <0x36>;
+		read-delay-ms = <100>;
+	};
+};
+
+&arduino_mkr_spi {
+	status = "okay";
+	cs-gpios = <&arduino_mkr_header 7 GPIO_ACTIVE_LOW>;		/* D7 */
+};
+
+&zephyr_udc0 {
+	cdc_acm_uart0: cdc_acm_uart0 {
+		compatible = "zephyr,cdc-acm-uart";
+	};
+};

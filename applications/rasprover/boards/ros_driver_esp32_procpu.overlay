@@ -1,0 +1,12 @@
+&i2c0 {
+	ina219: ina219@42 {
+		compatible = "ti,ina219";
+		reg = <0x42>;
+		brng = <0>;
+		pg = <0>;
+		sadc = <13>;
+		badc = <13>;
+		shunt-milliohm = <100>;
+		lsb-microamp = <10>;
+	};
+};

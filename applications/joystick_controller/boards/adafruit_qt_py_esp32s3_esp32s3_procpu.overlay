@@ -1,0 +1,14 @@
+&led_strip {
+	status = "okay";
+};
+
+&i2c1 {
+	clock-frequency = <I2C_BITRATE_FAST>;
+
+	// neokey_1x4: seesaw@30 {
+	// 	compatible = "adafruit,seesaw";
+	// 	status = "okay";
+	// 	reg = <0x30>;
+	// 	read-delay-ms = <100>;
+	// };
+};

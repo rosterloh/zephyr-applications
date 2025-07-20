@@ -1,0 +1,59 @@
+manifest:
+  remotes:
+    - name: zephyrproject-rtos
+      url-base: https://github.com/zephyrproject-rtos
+    - name: rosterloh
+      url-base: https://github.com/rosterloh
+    - name: golioth
+      url-base: https://github.com/golioth
+    - name: eclipse-zenoh
+      url-base: https://github.com/eclipse-zenoh
+
+  projects:
+    - name: zephyr
+      remote: zephyrproject-rtos
+      revision: main
+      west-commands: scripts/west-commands.yml
+      import:
+        # By using name-allowlist we can clone only the modules that are
+        # strictly needed by the application.
+        name-allowlist:
+          - cmsis_6
+          - hal_atmel
+          - hal_espressif
+          - hal_nordic
+          - hal_rpi_pico
+          - libmetal
+          - lvgl
+          - mbedtls
+          - mcuboot
+          - open-amp
+          - picolibc
+          - segger
+          - tfm-mcuboot
+          - trusted-firmware-m
+          - zcbor
+
+    - name: rosterloh-drivers
+      repo-path: zephyr-drivers
+      remote: rosterloh
+      revision: main
+      path: modules/lib/rosterloh-drivers
+
+    - name: golioth
+      repo-path: golioth-firmware-sdk
+      remote: golioth
+      path: modules/lib/golioth-firmware-sdk
+      revision: main
+      submodules: true
+
+    - name: pouch
+      path: modules/lib/pouch
+      revision: main
+      url: https://github.com/golioth/pouch.git
+
+    - name: zenoh
+      repo-path: zenoh-pico
+      remote: eclipse-zenoh
+      revision: main
+      path: modules/lib/zenoh

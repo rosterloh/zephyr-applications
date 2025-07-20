@@ -1,0 +1,15 @@
+# This file is provided so that the application can be compiled using Twister,
+# the Zephyr testing tool. In this file, multiple combinations can be specified,
+# so that you can easily test all of them locally or in CI.
+sample:
+  description: Joystick controller application
+  name: joystick-controller 
+common:
+  build_only: true
+  integration_platforms:
+    - adafruit_qt_py_esp32s3/esp32s3/procpu
+tests:
+  app.default: {}
+#  app.debug:
+#    extra_overlay_confs:
+#      - debug.conf

@@ -1,0 +1,8 @@
+# https://docs.nordicsemi.com/bundle/ncs-3.0.0/page/nrf/app_dev/bootloaders_dfu/mcuboot_nsib/bootloader_signature_keys.html
+# ECDSA
+openssl ecparam -name prime256v1 -genkey -noout -out priv.pem
+# RSA-2048
+openssl genrsa -out priv.pem 2048
+# Imgtool
+python3 bootloader/mcuboot/scripts/imgtool.py keygen -t ecdsa-p256 -k priv.pem
+python3 bootloader/mcuboot/scripts/imgtool.py keygen -t rsa-2048 -k priv.pem

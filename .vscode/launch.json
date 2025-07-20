@@ -1,0 +1,47 @@
+{
+	"version": "2.0.0",
+	// See available parameters under:
+	// https://github.com/Marus/cortex-debug/blob/master/src/common.ts#LL249C25-L249C25
+	"configurations": [
+		{
+			"name": "Flash & Debug AppUnderDev",
+			"cwd": "${workspaceFolder:AppUnderDev}",
+			"executable": "${config:app.build_dir}/zephyr/zephyr.elf",
+			"request": "launch",
+			"type": "cortex-debug",
+			"servertype": "openocd",
+			"interface": "swd",
+			"device": "${config:bsp.soc}",
+			"targetId": "${config:bsp.board}",
+			"boardId": "1",
+			"toolchainPrefix": "xtensa-espressif_esp32s3_zephyr-elf",
+			"armToolchainPath": "${env:HOME}/zephyr-sdk/xtensa-espressif_esp32s3_zephyr-elf/bin",
+			"svdFile": "${config:bsp.svd}",
+			"showDevDebugOutput": "raw",
+			// "rtos": "Zephyr",
+			"configFiles": [
+				"${config:bsp.debug_config}"
+			]
+		},
+		{
+			"name": "Flash & Debug BootloaderUnderDev",
+			"cwd": "${workspaceFolder:BootloaderUnderDev}",
+			"executable": "${config:app_boot.build_dir}/zephyr/zephyr.elf",
+			"request": "launch",
+			"type": "cortex-debug",
+			"servertype": "openocd",
+			"interface": "swd",
+			"device": "${config:bsp.soc}",
+			"targetId": "${config:bsp.board}",
+			"boardId": "1",
+			"toolchainPrefix": "xtensa-espressif_esp32s3_zephyr-elf",
+			"armToolchainPath": "${env:HOME}/zephyr-sdk/xtensa-espressif_esp32s3_zephyr-elf/bin",
+			"svdFile": "${config:bsp.svd}",
+			"showDevDebugOutput": "raw",
+			// "rtos": "Zephyr",
+			"configFiles": [
+				"${config:bsp.debug_config}"
+			]
+		}
+	]
+}

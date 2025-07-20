@@ -1,0 +1,388 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "West Build App",
+			"type": "process",
+			"group": "build",
+			"command": "${config:west}",
+			"args": [
+				"build",
+				"-p",
+				"auto",
+				"-d",
+				"${config:app.build_dir}",
+				"-b",
+				// "${config:bsp.board}/${config:bsp.soc}${config:bsp.cpu}",
+				"${input:boardName}",
+				"--sysbuild",
+				"${config:app.name}",
+				// "${config:app.zephyr_config}",
+				// "${config:app.zephyr_dtc_overlay}",
+				// "${config:app_boot.compile_args}",
+			],
+			"options": {
+				"env": {
+					"ZEPHYR_TOOLCHAIN_VARIANT": "zephyr",
+					"ZEPHYR_SDK_INSTALL_DIR": "${env:HOME}/zephyr-sdk",
+					"ZEPHYR_BASE": "${workspaceFolder:Zephyr}",
+					"ESP_IDF_PATH": "${workspaceFolder:Modules}/hal/espressif"
+				}
+			},
+			"dependsOn": [
+				// "Clean Build",
+			],
+			"problemMatcher": [ "$gcc" ]
+		},
+		{
+			"label": "West Flash App",
+			"type": "process",
+			"group": "build",
+			"command": "${config:west}",
+			"args": [
+				"flash",
+				"-d",
+				"${config:app.build_dir}",
+				"--esp-device",
+				"/dev/ttyACM0"
+			],
+			"dependsOn": [
+				// "West Build App",
+			],
+			"problemMatcher": []
+		},
+		{
+			"label": "West Application Flash",
+			"type": "process",
+			"group": "build",
+			"command": "${config:west}",
+			"args": [
+				"flash",
+				// "${input:west.runner}",
+				"-d",
+				"${config:app.build_dir}",
+				// "--esp-device",
+				// "${input:serialPort}"
+			],
+			"dependsOn": [
+				// "Clean Build",
+			],
+			"problemMatcher": []
+		},
+		{
+			"label": "West Monitor App",
+			"type": "process",
+			"group": "build",
+			"command": "${config:west}",
+			"args": [
+				"espressif",
+				"-e",
+				"${config:app.build_dir}/zephyr/zephyr.elf",
+				"-p",
+				"${input:serialPort}",
+				"monitor"
+			],
+			"dependsOn": [
+				// "West Flash App",
+			],
+			"problemMatcher": []
+		},
+		{
+			"label": "West Build Bootloader",
+			"type": "process",
+			"group": "build",
+			"command": "${config:west}",
+			"args": [
+				"build",
+				"-p",
+				"auto",
+				"-d",
+				"${config:app_boot.build_dir}",
+				"-b",
+				"${config:bsp.board}/${config:bsp.soc}${config:bsp.cpu}",
+				"${config:app_boot.name}",
+				// "${config:app_boot.zephyr_config}",
+				// "${config:app_boot.zephyr_dtc_overlay}",
+				// "${config:app_boot.compile_args}"
+			],
+			"dependsOn": [
+				// "Clean Build",
+			],
+			"problemMatcher": [ "$gcc" ]
+		},
+		{
+			"label": "West Application Configure",
+			"type": "process",
+			"group": "build",
+			"command": "${config:west}",
+			"args": [
+				"build",
+				"-d",
+				"${config:app.build_dir}",
+				"-t",
+				"guiconfig",
+			],
+			"dependsOn": [
+				// "Clean Build",
+			],
+			"problemMatcher": []
+		},
+		{
+			"label": "West Update",
+			"type": "process",
+			"group": "build",
+			"command": "${config:west}",
+			"args": [
+				"update",
+			],
+			"dependsOn": [
+				// "Clean Build",
+			],
+			"problemMatcher": []
+		},
+		{
+			"label": "West Twister Test",
+			"type": "process",
+			"group": "build",
+			"command": "${config:west}",
+			"args": [
+				"twister",
+				"-p",
+				"${config:twister.host_test_arch}",
+				"-T",
+				"${workspaceFolder:AppUnderDev}"
+			],
+			"dependsOn": [
+				// "West Build Bootloader",
+				// "West Build App",
+			],
+			"problemMatcher": []
+		},
+		{
+			"label": "West Twister Device Test",
+			"type": "process",
+			"group": "build",
+			"command": "${config:west}",
+			"args": [
+				"twister",
+				"--device-testing",
+				"--device-serial",
+				"${input:serialPort}",
+				"--device-serial-baud",
+				"115200",
+				"-p",
+				"${config:bsp.board}/${config:bsp.soc}${config:bsp.cpu}",
+				"-T",
+				"${workspaceFolder:AppUnderDev}"
+			],
+			"dependsOn": [
+				// "West Build Bootloader",
+				// "West Build App",
+			],
+			"problemMatcher": []
+		},
+		{
+			"label": "Twister Clean Output",
+			"type": "shell",
+			"group": "build",
+			"command": "rm",
+			"args": ["-rf", "*twister-out*"],
+			"dependsOn": [],
+			"problemMatcher": []
+		},
+		{
+			"label": "Set West Source",
+			"type": "process",
+			"group": "build",
+			"command": "${config:west}",
+			"args": [
+				"config",
+				"zephyr.base",
+				"${workspaceFolder:zephyrproject}"
+			],
+			"dependsOn": [],
+			"problemMatcher": []
+		},
+		{
+			"label": "Set West Source Prefer",
+			"type": "process",
+			"group": "build",
+			"command": "${config:west}",
+			"args": [
+				"config",
+				"zephyr.base-prefer",
+				"configfile"
+			],
+			"dependsOn": [],
+			"problemMatcher": []
+		},
+		{
+			"label": "West RAM Report",
+			"type": "process",
+			"group": "build",
+			"command": "${config:west}",
+			"args": [
+				"build",
+				"-t",
+				"ram_report",
+				"--board",
+				"${config:bsp.board}/${config:bsp.soc}${config:bsp.cpu}",
+				"--build-dir",
+				"\"${config:app.build_dir}\""
+			],
+			"dependsOn": [],
+			"problemMatcher": []
+		},
+		{
+			"label": "West ROM Report",
+			"type": "process",
+			"group": "build",
+			"command": "${config:west}",
+			"args": [
+				"build",
+				"-t",
+				"rom_report",
+				"--board",
+				" ${config:bsp.board}/${config:bsp.soc}${config:bsp.cpu}",
+				"--build-dir",
+				"\"${config:app.build_dir}\""
+			],
+			"dependsOn": [],
+			"problemMatcher": []
+		},
+		{
+			"label": "West Puncover",
+			"type": "process",
+			"group": "build",
+			"command": "${config:west}",
+			"args": [
+				"build",
+				"-t",
+				"puncover",
+				"--board",
+				" ${config:bsp.board}/${config:bsp.soc}${config:bsp.cpu}",
+				"--build-dir",
+				"\"${config:app.build_dir}\""
+			],
+			"dependsOn": [],
+			"problemMatcher": []
+		},
+		{
+			"label": "Harden Config",
+			"type": "process",
+			"group": "build",
+			"command": "${config:west}",
+			"args": [
+				"build",
+				"-t",
+				"hardenconfig",
+				"--board",
+				"${config:bsp.board}/${config:bsp.soc}${config:bsp.cpu}",
+				"--build-dir",
+				"\"${config:app.build_dir}\""
+			],
+			"dependsOn": [],
+			"problemMatcher": []
+		},
+		{
+			"label": "Clean Build App",
+			"type": "shell",
+			"group": "build",
+			"command": "rm",
+			"args": [
+				"-rf",
+				"${config:app.build_dir}"
+			],
+			"dependsOn": [],
+			"problemMatcher": []
+		},
+		{
+			"label": "Clean Build Bootloader",
+			"type": "shell",
+			"group": "build",
+			"command": "rm",
+			"args": [
+				"-rf",
+				"${config:app_boot.build_dir}"
+			],
+			"dependsOn": [],
+			"problemMatcher": []
+		},
+		{
+			"label": "Style Check (commited only)",
+			"type": "shell",
+			"group": "test",
+			"command": "",
+			"args": [],
+			"dependsOn": [
+				"GitLint (commited only)",
+				"Checkpatch (commited only)"
+			],
+			"problemMatcher": []
+		},
+		{
+			"label": "GitLint (commited only)",
+			"type": "shell",
+			"group": "test",
+			"command": "gitlint",
+			"args": [],
+			"dependsOn": [],
+			"problemMatcher": []
+		},
+		{
+			"label": "Checkpatch (commited only)",
+			"type": "shell",
+			"group": "test",
+			"command": "${workspaceFolder:zephyrproject}/zephyr/scripts/checkpatch.pl",
+			"args": [
+				"-g",
+				"HEAD-5"
+			],
+			"dependsOn": [],
+			"problemMatcher": []
+		}
+	],
+	"inputs": [
+		{
+			"id": "boardName",
+			"type": "pickString",
+			"description": "Device to build for",
+			"options": [
+				"arduino_mkrzero",
+				"robotis_openrb_150",
+			],
+			"default": "robotis_openrb_150"
+		},
+		{
+			"id": "serialPort",
+			"type": "promptString",
+			"description": "Serial port to use for flashing and monitoring",
+			"default": "/dev/ttyACM0"
+		},
+		{
+			"id": "west.runner",
+			"type": "pickString",
+			"description": "Override default runner. Runners can flash and/or debug Zephyr programs.",
+			"options": [
+				"",
+				"--runner blackmagicprobe",
+				"--runner bossac",
+				"--runner canopen_program",
+				"--runner dfu-util",
+				"--runner esp32",
+				"--runner jlink",
+				"--runner linkserver",
+				"--runner nrfjprog",
+				"--runner nrfutil",
+				"--runner openocd",
+				"--runner pyocd",
+				"--runner qemu",
+				"--runner stm32cubeprogrammer",
+				"--runner stm32flash",
+				"--runner uf2",
+				"--runner xtensa"
+			],
+			"default": ""
+		}
+	]
+}

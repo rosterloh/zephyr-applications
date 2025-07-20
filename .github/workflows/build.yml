@@ -1,0 +1,107 @@
+name: Build
+
+on:
+  push:
+  pull_request:
+  #schedule:
+  #  - cron: "0 0 * * *"
+  workflow_dispatch:
+    inputs:
+      BOARD:
+        required: true
+        type: string
+        default: ros_driver/esp32/procpu
+        description: |
+          The board to build for, e.g. `ros_driver/esp32/procpu`, `ros_driver/esp32s3/procpu`, `ros_driver/rpi_pico/m4`, etc.
+      ARTIFACT:
+        required: true
+        type: boolean
+        default: false
+        description: |
+          Whether to prepare artifacts for the build. If true, the artifacts will be saved and uploaded.
+      TAG:
+        type: string
+        description: |
+          The tag to use for the artifacts. If not provided, the artifacts will not be tagged.
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest] # , macos-latest, windows-latest
+        app: [
+          applications/joystick_controller,
+          applications/motor_controller,
+          applications/rasprover
+        ]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.12
+
+      - name: Setup Zephyr project
+        uses: zephyrproject-rtos/action-zephyr-setup@v1
+        with:
+          app-path: ${{ matrix.app }}
+          toolchains: arm-zephyr-eabi:xtensa-espressif_esp32_zephyr-elf:xtensa-espressif_esp32s3_zephyr-elf
+
+      - name: Build firmware
+        working-directory: zephyr-applications
+        shell: bash
+        run: |
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            EXTRA_TWISTER_FLAGS="--short-build-path -O/tmp/twister-out"
+          fi
+          west twister -T app -v --inline-logs --integration $EXTRA_TWISTER_FLAGS
+
+      - name: Twister Tests
+        working-directory: zephyr-applications
+        shell: bash
+        run: |
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            EXTRA_TWISTER_FLAGS="--short-build-path -O/tmp/twister-out"
+          fi
+          west twister -T tests -v --inline-logs --integration $EXTRA_TWISTER_FLAGS
+
+      # - name: Process Board name
+      #   id: nicename
+      #   shell: bash
+      #   run: |
+      #     BOARD_NICENAME=${{ inputs.BOARD }}
+      #     BOARD_NICENAME=${BOARD_NICENAME//\//_}
+      #     echo "BOARD_NICENAME=${BOARD_NICENAME}" >> $GITHUB_OUTPUT
+
+      # - name: Setup Blobs
+      #   shell: bash
+      #   run: |
+      #     west blobs fetch hal_espressif
+
+      # - name: Build firmware
+      #   shell: bash
+      #   run: |
+      #     west build -p -b ${{ inputs.BOARD }} --sysbuild app
+
+      # - name: Prepare artifacts
+      #   shell: bash
+      #   if: inputs.ARTIFACT == true && inputs.TAG != ''
+      #   run: |
+      #     cd build
+      #     mkdir -p artifacts
+      #     mv merged.hex                   ./artifacts/${{ github.event.repository.name }}_${{ inputs.TAG }}_${{ steps.nicename.outputs.BOARD_NICENAME }}_full.hex
+      #     mv app/zephyr/zephyr.signed.bin ./artifacts/${{ github.event.repository.name }}_${{ inputs.TAG }}_${{ steps.nicename.outputs.BOARD_NICENAME }}_update.bin
+      #     mv app/zephyr/zephyr.elf        ./artifacts/${{ github.event.repository.name }}_${{ inputs.TAG }}_${{ steps.nicename.outputs.BOARD_NICENAME }}.elf
+
+      # # Run IDs are unique per repo but are reused on re-runs
+      # - name: Save artifact
+      #   if: inputs.ARTIFACT == true
+      #   uses: actions/upload-artifact@v4
+      #   with:
+      #     name: build_artifacts_${{ github.run_id }}_${{ steps.nicename.outputs.BOARD_NICENAME }}
+      #     path: |
+      #       build/artifacts/*

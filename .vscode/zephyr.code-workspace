@@ -1,0 +1,209 @@
+{
+	"folders": [
+		{
+			"name": "RepoRoot",
+			"path": ".."
+		},
+		{
+			"name": "Zephyr",
+			"path": "../../../zephyr"
+		},
+		{
+			"name": "Tests",
+			"path": "../tests"
+		},
+		{
+			"name": "Modules",
+			"path": "../../../modules"
+		},
+		{
+			"name": "Bootloader",
+			"path": "../../../bootloader/mcuboot/boot/zephyr"
+		}
+	],
+
+	"settings": {
+		"west": "${env:HOME}/envs/zephyr/bin/west",
+		"twister": {
+			"host_test_arch": "qemu_x86",
+		},
+		// Board support package settings:
+		"bsp": {
+			"cpu": "/procpu",  // must be used if multi core system (put /m4 or /m7 here for example)
+			"rev": "psram",
+			"soc": "esp32s3",
+			"board": "adafruit_qt_py_esp32s3",
+			"vendor": "adafruit",
+			"board_root": "${workspaceFolder:Zephyr}/boards",
+			"board_path": "${config:bsp.board_root}/${config:bsp.vendor}/qt_py_esp32s3",
+			"svd": "${workspaceFolder:RepoRoot}/.vscode//svd/${config:bsp.soc}.svd",
+			"debug_config": "${config:bsp.board_path}/support/openocd.cfg",
+			// "cpu": "/cpuapp",
+			// "soc": "nrf5340",
+			// "board": "nrf5340dk",
+			// "vendor": "nordic",
+			// "board_root": "${workspaceFolder:Zephyr}/boards",
+			// "board_path": "${config:bsp.board_root}/${config:bsp.vendor}/${config:bsp.board}",
+			// "svd": "${workspaceFolder}/svd/${config:bsp.soc}_application.svd",
+			// "cpu": "_w",
+			// "soc": "rp2040",
+			// "board": "rpi_pico",
+			// "soc": "esp32",
+			// "board": "ros_driver",
+			// "vendor": "waveshare",
+			// "board_root": "${workspaceFolder:Modules}/lib/rosterloh-drivers/boards",
+		},
+
+		// App settings:
+		"app": {
+			"name": "${workspaceFolder:RepoRoot}",
+			"build_dir": "${workspaceFolder:RepoRoot}/build",
+			"zephyr_config": "",  // -DOVERLAY_CONFIG=<path_relative_to_sample> use ; for multiple files
+			"zephyr_dtc_overlay": "",  // // -DDTC_OVERLAY_FILE=<path_relative_to_sample> use ; for multiple files
+			"compile_args": ""
+		},
+
+		// Bootloader app settings:
+		"app_boot": {
+			"name": "${workspaceFolder:Bootloader}",
+			"build_dir": "${workspaceFolder:Bootloader}/build",
+			"zephyr_config": "",  // -DOVERLAY_CONFIG=<path_relative_to_sample> use ; for multiple files
+			"zephyr_dtc_overlay": "",  // -DDTC_OVERLAY_FILE=<path_relative_to_sample> use ; for multiple files
+			"compile_args": ""
+		},
+
+		"[c]": {
+			"editor.formatOnSave": true
+		},
+
+		"cmake.configureOnOpen": false,
+		"cmake.enableAutomaticKitScan": false,
+		"C_Cpp.clang_format_style": "file",
+		"C_Cpp.clang_format_fallbackStyle": "LLVM",
+		"C_Cpp.default.compilerPath": "${env:HOME}/zephyr-sdk/arm-zephyr-eabi/bin/arm-zephyr-eabi-gcc",
+		// "C_Cpp.default.compileCommands": "${workspaceFolder:RepoRoot}/build/primary/compile_commands.json",
+		
+		// The number of spaces a tab is equal to. This setting is overridden
+		// based on the file contents when `editor.detectIndentation` is true.
+		"editor.tabSize": 8,
+
+		// Insert spaces when pressing Tab. This setting is overriden
+		// based on the file contents when `editor.detectIndentation` is true.
+		"editor.insertSpaces": false,
+
+		// When opening a file, `editor.tabSize` and `editor.insertSpaces`
+		// will be detected based on the file contents. Set to false to keep
+		// the values you've explicitly set, above.
+		"editor.detectIndentation": false,
+		"editor.rulers": [100],
+		"editor.cursorBlinking": "smooth",
+		"editor.formatOnSave": false,
+		"editor.codeActionsOnSave": [],
+		"editor.renderWhitespace": "all",
+		"editor.renderControlCharacters": false,
+		"files.trimFinalNewlines": true,
+		"files.associations": {
+			"app_version.h": "c",
+			"chrono": "c",
+			"variant": "c",
+			"cstdint": "c",
+			"compare": "c",
+			"seesaw.h": "c",
+			"*.ipp": "c",
+			"array": "c",
+			"charconv": "c",
+			"functional": "c",
+			"ratio": "c",
+			"tuple": "c",
+			"type_traits": "c",
+			"utility": "c",
+			"string": "c",
+			"string_view": "c",
+			"span": "c",
+			"random": "c",
+			"cstdlib": "c"
+		},
+
+		"files.watcherExclude": {
+			"**/.git/objects/**": true,
+			"**/.git/subtree-cache/**": true,
+			"**/node_modules/**": true,
+			"**/tmp/**": true,
+			"**/.git": true,
+			"**/.svn": true,
+			"**/.hg": true,
+			"**/CVS": true,
+			"**/.DS_Store": true,
+			"**/node_modules": true,
+			"**/bower_components": true,
+			"**/dist/**": true,
+			"**/log/**": true,
+			"**/logs/**": true,
+			"**/.fdk/**": true,
+			"**/.west/**": true,
+			"**/.vscode/**": true,
+			"${workspaceRoot}/../zephyr/**": true
+		},
+		"files.exclude": {
+			"**/.git/objects/**": true,
+			"**/.git/subtree-cache/**": true,
+			"**/node_modules/**": true,
+			"**/tmp/**": true,
+			"**/.git": true,
+			"**/.svn": true,
+			"**/.hg": true,
+			"**/CVS": true,
+			"**/.DS_Store": true,
+			"**/node_modules": true,
+			"**/bower_components": true,
+			"**/dist/**": true,
+			"**/log/**": true,
+			"**/.fdk/**": true,
+			"**/.west/**": true
+		},
+		"search.exclude": {
+			"**/.git/objects/**": true,
+			"**/.git/subtree-cache/**": true,
+			"**/node_modules/**": true,
+			"**/tmp/**": true,
+			"**/.git": true,
+			"**/.svn": true,
+			"**/.hg": true,
+			"**/CVS": true,
+			"**/.DS_Store": true,
+			"**/node_modules": true,
+			"**/bower_components": true,
+			"**/dist/**": true,
+			"**/log/**": true,
+			"**/.west/**": true
+		},
+		
+		"python.defaultInterpreterPath": "${env:HOME}/envs/zephyr/bin/python",
+
+		// extensions settings
+		"cortex-debug.variableUseNaturalFormat": false,
+		"cortex-debug.openocdPath": "${env:HOME}/zephyr-sdk/sysroots/x86_64-pokysdk-linux/usr/bin/openocd",
+		"cortex-debug.gdbPath": "${env:HOME}/zephyr-sdk/xtensa-espressif_esp32s3_zephyr-elf/bin/xtensa-espressif_esp32s3_zephyr-elf-gdb",
+		"cortex-debug.armToolchainPath": "${env:HOME}/zephyr-sdk/xtensa-espressif_esp32s3_zephyr-elf/bin",
+		"cortex-debug.armToolchainPrefix": "xtensa-espressif_esp32s3_zephyr-elf",
+		"devicetree.defaultBoard": "adafruit_qt_py_esp32s3",
+		"devicetree.zephyr": "${workspaceFolder:Zephyr}",
+		"kconfig.python": "${env:HOME}/envs/zephyr/bin/python",
+		"kconfig.zephyr.base": "${workspaceFolder:Zephyr}",
+		"mcu-debug.peripheral-viewer.svdPathConfig": "${config:bsp.svd}",
+		"mcu-debug.rtos-views.showRTOS": true,
+		"zephyr-workbench.board": "nrf5340dk/nrf5340/cpuapp",
+		"zephyr-workbench.build.pristine": "auto",
+		"zephyr-workbench.build.configurations": [
+			{
+				"name": "primary",
+				"board": "nrf5340dk/nrf5340/cpuapp",
+				"active": "true"
+			}
+		],
+		"zephyr-workbench.debug.openocd.pathExec": "${env:HOME}/zephyr-sdk/sysroots/x86_64-pokysdk-linux/usr/bin/openocd",
+		// "zephyr-workbench.env.BOARD_ROOT": ["${workspaceFolder:Modules}/lib/rosterloh-drivers/boards"],
+		"zephyr-workbench.sdk": "${env:HOME}/zephyr-sdk",
+		"zephyr-workbench.westWorkspace": "${workspaceFolder:Zephyr}/.."
+	}
+}

@@ -1,0 +1,12 @@
+{
+	"recommendations": [
+		"marus25.cortex-debug",
+		"mcu-debug.memory-view",
+		"mcu-debug.rtos-views",
+		"ms-vscode.cmake-tools",
+		"ms-vscode.cpptools",
+		"nordic-semiconductor.nrf-devicetree",
+		"nordic-semiconductor.nrf-kconfig",
+		"streetsidesoftware.code-spell-checker"
+	]
+}

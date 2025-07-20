@@ -1,0 +1,59 @@
+config APP_DHCP_BIND
+	bool "Use DHCP for address"
+	depends on NET_L2_ETHERNET
+	depends on NET_DHCPV4
+	help
+	  Obtain an IPv4 address from the DHCP server.
+
+config APP_WIFI
+	bool "WiFi utilities for application"
+	depends on NET_L2_WIFI_MGMT
+	help
+	  Enable utilities for easy WiFi setup.
+
+if APP_WIFI
+
+config APP_WIFI_STACK_SIZE
+	int "WiFi manager stack size"
+	default 2048
+
+config APP_WIFI_INIT_PRIORITY
+	int "WiFi manager init priority"
+	default 90
+
+config APP_WIFI_THREAD_PRIORITY
+	int "WiFi manager thread priority"
+	default 7
+
+endif # APP_WIFI
+
+config APP_WIFI_SETTINGS
+	bool "Load SSID and PSK from settings subsystem"
+	depends on APP_WIFI
+	depends on SETTINGS
+	help
+	  Load WiFi SSID and PSK from settings subsystem, from 'wifi/ssid' and
+	  'wifi/psk' entries.
+
+if APP_WIFI && !APP_WIFI_SETTINGS
+
+config APP_WIFI_SSID
+	string "WiFi SSID"
+	help
+	  WiFi SSID used when connecting to WiFi AP.
+
+config APP_WIFI_PSK
+	string "WiFi PSK"
+	help
+	  WiFi PSK used when connecting to WiFi AP. Leave empty if connecting to
+	  unsecure (open) AP.
+
+endif # APP_WIFI && !APP_WIFI_SETTINGS
+
+menu "Zephyr"
+source "Kconfig.zephyr"
+endmenu
+
+module = APP
+module-str = APP
+source "subsys/logging/Kconfig.template.log_config"

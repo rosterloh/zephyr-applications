@@ -1,0 +1,31 @@
+manifest:
+  self:
+    path: pico_fw
+
+  remotes:
+    - name: zephyrproject-rtos
+      url-base: https://github.com/zephyrproject-rtos
+    - name: beechwoods-software
+      url-base: https://github.com/beechwoods-software/
+
+  projects:
+    - name: zephyr
+      remote: zephyrproject-rtos
+      revision: main
+      import:
+        # By using name-allowlist we can clone only the modules that are
+        # strictly needed by the application.
+        name-allowlist:
+          - cmsis
+          - hal_rpi_pico
+          - mbedtls
+          - mcuboot
+
+    - name: cyw43
+      repo-path: zephyr-cyw43-driver
+      remote: beechwoods-software
+      path: modules/lib/cyw43
+      revision: main
+      submodules:
+        - name: drivers/wifi/zephyr_cyw43/src/cyw43-driver
+          path: drivers/wifi/zephyr_cyw43/src/cyw43-driver
