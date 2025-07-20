@@ -28,7 +28,6 @@ manifest:
           - mbedtls
           - mcuboot
           - open-amp
-          - picolibc
           - segger
           - tfm-mcuboot
           - trusted-firmware-m

@@ -186,6 +186,7 @@
 		"cortex-debug.gdbPath": "${env:HOME}/zephyr-sdk/xtensa-espressif_esp32s3_zephyr-elf/bin/xtensa-espressif_esp32s3_zephyr-elf-gdb",
 		"cortex-debug.armToolchainPath": "${env:HOME}/zephyr-sdk/xtensa-espressif_esp32s3_zephyr-elf/bin",
 		"cortex-debug.armToolchainPrefix": "xtensa-espressif_esp32s3_zephyr-elf",
+		"cSpell.language": "en-GB",
 		"devicetree.defaultBoard": "adafruit_qt_py_esp32s3",
 		"devicetree.zephyr": "${workspaceFolder:Zephyr}",
 		"kconfig.python": "${env:HOME}/envs/zephyr/bin/python",
