@@ -1,4 +1,6 @@
 {
+	// See https://go.microsoft.com/fwlink/?LinkId=733558
+	// for the documentation about the tasks.json format
 	"version": "2.0.0",
 	"tasks": [
 		{
@@ -11,17 +13,20 @@
 				"-p",
 				"auto",
 				"-d",
-				"${config:app.build_dir}",
+				"${input:appName}/build",
+				// "${config:app.build_dir}",
 				"-b",
 				// "${config:bsp.board}/${config:bsp.soc}${config:bsp.cpu}",
 				"${input:boardName}",
 				"--sysbuild",
-				"${config:app.name}",
+				"${input:appName}",
+				// "${config:app.name}",
 				// "${config:app.zephyr_config}",
 				// "${config:app.zephyr_dtc_overlay}",
 				// "${config:app_boot.compile_args}",
 			],
 			"options": {
+				"cwd": "${workspaceFolder:RepoRoot}",
 				"env": {
 					"ZEPHYR_TOOLCHAIN_VARIANT": "zephyr",
 					"ZEPHYR_SDK_INSTALL_DIR": "${env:HOME}/zephyr-sdk",
@@ -42,9 +47,10 @@
 			"args": [
 				"flash",
 				"-d",
-				"${config:app.build_dir}",
-				"--esp-device",
-				"/dev/ttyACM0"
+				"${input:appName}/build",
+				// "${config:app.build_dir}",
+				// "--esp-device",
+				// "${input:serialPort}"
 			],
 			"dependsOn": [
 				// "West Build App",
@@ -60,7 +66,8 @@
 				"flash",
 				// "${input:west.runner}",
 				"-d",
-				"${config:app.build_dir}",
+				"${input:appName}/build",
+				// "${config:app.build_dir}",
 				// "--esp-device",
 				// "${input:serialPort}"
 			],
@@ -77,7 +84,8 @@
 			"args": [
 				"espressif",
 				"-e",
-				"${config:app.build_dir}/zephyr/zephyr.elf",
+				"${input:appName}/build/zephyr/zephyr.elf",
+				// "${config:app.build_dir}/zephyr/zephyr.elf",
 				"-p",
 				"${input:serialPort}",
 				"monitor"
@@ -118,7 +126,8 @@
 			"args": [
 				"build",
 				"-d",
-				"${config:app.build_dir}",
+				"${input:appName}/build",
+				// "${config:app.build_dir}",
 				"-t",
 				"guiconfig",
 			],
@@ -150,7 +159,7 @@
 				"-p",
 				"${config:twister.host_test_arch}",
 				"-T",
-				"${workspaceFolder:AppUnderDev}"
+				"${workspaceFolder:RepoRoot}",
 			],
 			"dependsOn": [
 				// "West Build Bootloader",
@@ -173,7 +182,7 @@
 				"-p",
 				"${config:bsp.board}/${config:bsp.soc}${config:bsp.cpu}",
 				"-T",
-				"${workspaceFolder:AppUnderDev}"
+				"${workspaceFolder:RepoRoot}"
 			],
 			"dependsOn": [
 				// "West Build Bootloader",
@@ -226,9 +235,11 @@
 				"-t",
 				"ram_report",
 				"--board",
-				"${config:bsp.board}/${config:bsp.soc}${config:bsp.cpu}",
+				"${input:boardName}",
+				// "${config:bsp.board}/${config:bsp.soc}${config:bsp.cpu}",
 				"--build-dir",
-				"\"${config:app.build_dir}\""
+				"\"${input:appName}/build\""
+				// "\"${config:app.build_dir}\""
 			],
 			"dependsOn": [],
 			"problemMatcher": []
@@ -243,9 +254,11 @@
 				"-t",
 				"rom_report",
 				"--board",
-				" ${config:bsp.board}/${config:bsp.soc}${config:bsp.cpu}",
+				"${input:boardName}",
+				// " ${config:bsp.board}/${config:bsp.soc}${config:bsp.cpu}",
 				"--build-dir",
-				"\"${config:app.build_dir}\""
+				"\"${input:appName}/build\""
+				// "\"${config:app.build_dir}\""
 			],
 			"dependsOn": [],
 			"problemMatcher": []
@@ -260,9 +273,11 @@
 				"-t",
 				"puncover",
 				"--board",
-				" ${config:bsp.board}/${config:bsp.soc}${config:bsp.cpu}",
+				"${input:boardName}",
+				// " ${config:bsp.board}/${config:bsp.soc}${config:bsp.cpu}",
 				"--build-dir",
-				"\"${config:app.build_dir}\""
+				"\"${input:appName}/build\""
+				// "\"${config:app.build_dir}\""
 			],
 			"dependsOn": [],
 			"problemMatcher": []
@@ -277,9 +292,11 @@
 				"-t",
 				"hardenconfig",
 				"--board",
-				"${config:bsp.board}/${config:bsp.soc}${config:bsp.cpu}",
+				"${input:boardName}",
+				// "${config:bsp.board}/${config:bsp.soc}${config:bsp.cpu}",
 				"--build-dir",
-				"\"${config:app.build_dir}\""
+				"\"${input:appName}/build\""
+				// "\"${config:app.build_dir}\""
 			],
 			"dependsOn": [],
 			"problemMatcher": []
@@ -291,7 +308,8 @@
 			"command": "rm",
 			"args": [
 				"-rf",
-				"${config:app.build_dir}"
+				"${input:appName}/build"
+				// "${config:app.build_dir}"
 			],
 			"dependsOn": [],
 			"problemMatcher": []
@@ -348,10 +366,28 @@
 			"type": "pickString",
 			"description": "Device to build for",
 			"options": [
+				"adafruit_qt_py_esp32c3",
+				"adafruit_qt_py_esp32s3",
 				"arduino_mkrzero",
 				"robotis_openrb_150",
+				"ros_driver_esp32_procpu",
+				"rpi_pico_w"
 			],
-			"default": "robotis_openrb_150"
+			"default": "adafruit_qt_py_esp32c3"
+		},
+		{
+			"id": "appName",
+			"type": "pickString",
+			"description": "Application to build",
+			"options": [
+				"applications/bluetooth_proxy_device",
+				"applications/force_sensor",
+				"applications/joystick_controller",
+				"applications/motor_controller",
+				"applications/pico_fw",
+				"applications/rasprover"
+			],
+			"default": "applications/force_sensor"
 		},
 		{
 			"id": "serialPort",

@@ -6,7 +6,7 @@
 		},
 		{
 			"name": "Zephyr",
-			"path": "../../../zephyr"
+			"path": "../../zephyr"
 		},
 		{
 			"name": "Tests",
@@ -14,11 +14,11 @@
 		},
 		{
 			"name": "Modules",
-			"path": "../../../modules"
+			"path": "../../modules"
 		},
 		{
 			"name": "Bootloader",
-			"path": "../../../bootloader/mcuboot/boot/zephyr"
+			"path": "../../bootloader/mcuboot/boot/zephyr"
 		}
 	],
 
@@ -80,7 +80,7 @@
 		"cmake.enableAutomaticKitScan": false,
 		"C_Cpp.clang_format_style": "file",
 		"C_Cpp.clang_format_fallbackStyle": "LLVM",
-		"C_Cpp.default.compilerPath": "${env:HOME}/zephyr-sdk/arm-zephyr-eabi/bin/arm-zephyr-eabi-gcc",
+		// "C_Cpp.default.compilerPath": "${env:HOME}/zephyr-sdk/arm-zephyr-eabi/bin/arm-zephyr-eabi-gcc",
 		// "C_Cpp.default.compileCommands": "${workspaceFolder:RepoRoot}/build/primary/compile_commands.json",
 		
 		// The number of spaces a tab is equal to. This setting is overridden
@@ -187,24 +187,28 @@
 		"cortex-debug.armToolchainPath": "${env:HOME}/zephyr-sdk/xtensa-espressif_esp32s3_zephyr-elf/bin",
 		"cortex-debug.armToolchainPrefix": "xtensa-espressif_esp32s3_zephyr-elf",
 		"cSpell.language": "en-GB",
-		"devicetree.defaultBoard": "adafruit_qt_py_esp32s3",
+		"devicetree.defaultBoard": "adafruit_qt_py_esp32c3",
 		"devicetree.zephyr": "${workspaceFolder:Zephyr}",
 		"kconfig.python": "${env:HOME}/envs/zephyr/bin/python",
 		"kconfig.zephyr.base": "${workspaceFolder:Zephyr}",
 		"mcu-debug.peripheral-viewer.svdPathConfig": "${config:bsp.svd}",
 		"mcu-debug.rtos-views.showRTOS": true,
-		"zephyr-workbench.board": "nrf5340dk/nrf5340/cpuapp",
+		"zephyr-workbench.board": "adafruit_qt_py_esp32c3/esp32c3",
 		"zephyr-workbench.build.pristine": "auto",
 		"zephyr-workbench.build.configurations": [
 			{
 				"name": "primary",
-				"board": "nrf5340dk/nrf5340/cpuapp",
+				"board": "adafruit_qt_py_esp32c3/esp32c3",
 				"active": "true"
 			}
 		],
 		"zephyr-workbench.debug.openocd.pathExec": "${env:HOME}/zephyr-sdk/sysroots/x86_64-pokysdk-linux/usr/bin/openocd",
-		// "zephyr-workbench.env.BOARD_ROOT": ["${workspaceFolder:Modules}/lib/rosterloh-drivers/boards"],
+		"zephyr-workbench.env.BOARD_ROOT": [
+			"${workspaceFolder:RepoRoot}/boards",
+			"${workspaceFolder:Modules}/lib/rosterloh-drivers/boards"
+		],
 		"zephyr-workbench.sdk": "${env:HOME}/zephyr-sdk",
-		"zephyr-workbench.westWorkspace": "${workspaceFolder:Zephyr}/.."
+		"zephyr-workbench.westWorkspace": "${env:HOME}/zephyr_ws",
+		"zephyr-workbench.venv.activatePath": "${env:HOME}/envs/zephyr/bin/activate"
 	}
 }

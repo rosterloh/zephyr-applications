@@ -9,7 +9,7 @@
 #include <espressif/esp32c3/esp32c3_fx4.dtsi>
 // #include <zephyr/dt-bindings/led/led.h>
 #include <zephyr/dt-bindings/input/input-event-codes.h>
-#include "xiao_esp32c3-pinctrl.dtsi"
+#include "adafruit_qt_py_esp32c3-pinctrl.dtsi"
 #include "seeed_xiao_connector.dtsi"
 #include <espressif/partitions_0x0_default.dtsi>
 
@@ -127,7 +127,8 @@ zephyr_i2c: &i2c0 {
 };
 
 &twai {
-	status = "okay";
+	/* requires external CAN transceiver or jumper on RX and TX pins for loopback testing */
+	status = "disabled";
 	pinctrl-0 = <&twai_default>;
 	pinctrl-names = "default";
 };

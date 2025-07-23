@@ -1,26 +1,29 @@
 {
 	"env": {
-		"SDK_PATH": "${env:HOME}/zephyr-sdk"
+		"SDK_PATH": "${env:HOME}/zephyr-sdk",
+		"ARM_COMPILER_PATH": "${env:HOME}/zephyr-sdk/arm-zephyr-eabi/bin/arm-zephyr-eabi-elf-gcc",
+		"RISCV_COMPILER_PATH": "${env:HOME}/zephyr-sdk/riscv64-zephyr-elf/bin/riscv64-zephyr-elf-gcc",
+		"ESP32_COMPILER_PATH": "${env:HOME}/zephyr-sdk/xtensa-espressif_esp32_zephyr-elf/bin/xtensa-espressif_esp32_zephyr-elf-gcc",
+		"ESP32S3_COMPILER_PATH": "${env:HOME}/zephyr-sdk/xtensa-espressif_esp32s3_zephyr-elf/bin/xtensa-espressif_esp32s3_zephyr-elf-gcc",
+		"COMPILER_NAME": "riscv64-zephyr-elf"
 	},
 	"configurations": [
 		{
 			"name": "ZephyrRTOSConfiguration",
 			"includePath": [
-				"${workspaceFolder}/**",
-				"${SDK_PATH}/arm-zephyr-eabi-elf/**",
-				"${SDK_PATH}/xtensa-espressif_esp32s3_zephyr-elf/**"
+				"${workspaceFolder:RepoRoot}/include",
+				"${workspaceFolder:Zephyr}/include",
+				"${SDK_PATH}/${COMPILER_NAME}/**"
 			],
 			"defines": [],
-			"compilerPath": "${SDK_PATH}/arm-zephyr-eabi/bin/arm-zephyr-eabi-elf-gcc",
-			"compilerPath": "${SDK_PATH}/xtensa-espressif_esp32s3_zephyr-elf/bin/xtensa-espressif_esp32s3_zephyr-elf-gcc",
+			"compilerPath": "${SDK_PATH}/${COMPILER_NAME}/bin/${COMPILER_NAME}-gcc",
 			"cStandard": "c11",
 			"cppStandard": "c++17",
 			"IntelliSenseMode": "gcc-arm",
 			"browse": {
 				"path": [
-					"${SDK_PATH}/arm-zephyr-eabi-elf/include/*",
-					"${SDK_PATH}/xtensa-espressif_esp32s3_zephyr-elf/include/*",
-					"${workspaceFolder}/*"
+					"${workspaceFolder:RepoRoot}/../*",
+					"${SDK_PATH}/${COMPILER_NAME}/include/*"
 				],
 				"limitSymbolsToIncludedHeaders": true
 			}

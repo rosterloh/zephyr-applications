@@ -49,7 +49,7 @@ jobs:
         uses: zephyrproject-rtos/action-zephyr-setup@v1
         with:
           app-path: ${{ matrix.app }}
-          toolchains: arm-zephyr-eabi:xtensa-espressif_esp32_zephyr-elf:xtensa-espressif_esp32s3_zephyr-elf
+          toolchains: arm-zephyr-eabi:riscv64-zephyr-elf:xtensa-espressif_esp32_zephyr-elf:xtensa-espressif_esp32s3_zephyr-elf
 
       - name: Build firmware
         working-directory: zephyr-applications
