@@ -328,6 +328,7 @@
 				"adafruit_qt_py_esp32c3",
 				"adafruit_qt_py_esp32s3",
 				"arduino_mkrzero",
+				"arduino_nicla_vision/stm32h747xx/m7",
 				"robotis_openrb_150",
 				"ros_driver_esp32_procpu",
 				"rpi_pico_w"
@@ -340,6 +341,7 @@
 			"description": "Application to build",
 			"options": [
 				"applications/bluetooth_proxy_device",
+				"applications/embedded_vision",
 				"applications/force_sensor",
 				"applications/joystick_controller",
 				"applications/motor_controller",

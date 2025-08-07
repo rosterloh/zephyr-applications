@@ -1,0 +1,5 @@
+/ {
+	uvc: uvc {
+		compatible = "zephyr,uvc-device";
+	};
+};

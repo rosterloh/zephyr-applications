@@ -21,8 +21,11 @@ manifest:
           - cmsis_6
           - hal_atmel
           - hal_espressif
+          - hal_infineon
           - hal_nordic
           - hal_rpi_pico
+          - hal_st
+          - hal_stm32
           - libmetal
           - lvgl
           - mbedtls
