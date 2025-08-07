@@ -1,0 +1,15 @@
+mainmenu "Application options"
+
+config APP_WIFI_STACK_SIZE
+	int "WiFi manager stack size"
+	default 2048
+
+config APP_WIFI_INIT_PRIORITY
+	int "WiFi manager init priority"
+	default 90
+
+config APP_WIFI_THREAD_PRIORITY
+	int "WiFi manager thread priority"
+	default 7
+
+source "Kconfig.zephyr"

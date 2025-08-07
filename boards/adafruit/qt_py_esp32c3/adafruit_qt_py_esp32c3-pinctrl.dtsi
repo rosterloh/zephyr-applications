@@ -26,7 +26,7 @@
 				 <SPIM2_SCLK_GPIO10>;
 		};
 		group2 {
-			pinmux = <SPIM2_MOSI_GPIO8>;
+			pinmux = <SPIM2_MOSI_GPIO7>;
 			output-low;
 		};
 	};

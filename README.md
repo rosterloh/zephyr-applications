@@ -29,7 +29,7 @@ west init -l ~/zephyr_ws/applications/zephyr-applications
 cd ~/zephyr_ws
 west update
 west packages pip --install
-west sdk install --version 0.17.2 --install-dir ~/zephyr-sdk --toolchains arm-zephyr-eabi riscv64-zephyr-elf xtensa-espressif_esp32_zephyr-elf xtensa-espressif_esp32s3_zephyr-elf
+west sdk install --version 0.17.3 --install-dir ~/zephyr-sdk --toolchains arm-zephyr-eabi riscv64-zephyr-elf xtensa-espressif_esp32_zephyr-elf xtensa-espressif_esp32s3_zephyr-elf
 west blobs fetch hal_espressif
 ```
 

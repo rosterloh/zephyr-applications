@@ -13,7 +13,7 @@
 				"-p",
 				"auto",
 				"-d",
-				"${input:appName}/build",
+				"${workspaceFolder:RepoRoot}/${input:appName}/build",
 				// "${config:app.build_dir}",
 				"-b",
 				// "${config:bsp.board}/${config:bsp.soc}${config:bsp.cpu}",
@@ -26,7 +26,7 @@
 				// "${config:app_boot.compile_args}",
 			],
 			"options": {
-				"cwd": "${workspaceFolder:RepoRoot}",
+				// "cwd": "${workspaceFolder:RepoRoot}",
 				"env": {
 					"ZEPHYR_TOOLCHAIN_VARIANT": "zephyr",
 					"ZEPHYR_SDK_INSTALL_DIR": "${env:HOME}/zephyr-sdk",
@@ -46,33 +46,15 @@
 			"command": "${config:west}",
 			"args": [
 				"flash",
+				// "--domain",
+				// "mcuboot",
 				"-d",
-				"${input:appName}/build",
-				// "${config:app.build_dir}",
-				// "--esp-device",
-				// "${input:serialPort}"
+				"${workspaceFolder:RepoRoot}/${input:appName}/build",
+				"--esp-device",
+				"${input:serialPort}"
 			],
 			"dependsOn": [
 				// "West Build App",
-			],
-			"problemMatcher": []
-		},
-		{
-			"label": "West Application Flash",
-			"type": "process",
-			"group": "build",
-			"command": "${config:west}",
-			"args": [
-				"flash",
-				// "${input:west.runner}",
-				"-d",
-				"${input:appName}/build",
-				// "${config:app.build_dir}",
-				// "--esp-device",
-				// "${input:serialPort}"
-			],
-			"dependsOn": [
-				// "Clean Build",
 			],
 			"problemMatcher": []
 		},
@@ -83,13 +65,15 @@
 			"command": "${config:west}",
 			"args": [
 				"espressif",
-				"-e",
-				"${input:appName}/build/zephyr/zephyr.elf",
-				// "${config:app.build_dir}/zephyr/zephyr.elf",
+				// "-e",
+				// "${input:appName}/build/zephyr/zephyr.elf",
 				"-p",
 				"${input:serialPort}",
 				"monitor"
 			],
+			"options": {
+				"cwd": "${workspaceFolder:RepoRoot}/${input:appName}",
+			},
 			"dependsOn": [
 				// "West Flash App",
 			],
@@ -105,13 +89,13 @@
 				"-p",
 				"auto",
 				"-d",
-				"${config:app_boot.build_dir}",
+				"${workspaceFolder:RepoRoot}/${input:appName}/build",
 				"-b",
-				"${config:bsp.board}/${config:bsp.soc}${config:bsp.cpu}",
-				"${config:app_boot.name}",
-				// "${config:app_boot.zephyr_config}",
-				// "${config:app_boot.zephyr_dtc_overlay}",
-				// "${config:app_boot.compile_args}"
+				"${input:boardName}",
+				"--domain",
+				"mcuboot",
+				"--sysbuild",
+				"${input:appName}",
 			],
 			"dependsOn": [
 				// "Clean Build",
@@ -126,7 +110,7 @@
 			"args": [
 				"build",
 				"-d",
-				"${input:appName}/build",
+				"${workspaceFolder:RepoRoot}/${input:appName}/build",
 				// "${config:app.build_dir}",
 				"-t",
 				"guiconfig",
@@ -207,7 +191,7 @@
 			"args": [
 				"config",
 				"zephyr.base",
-				"${workspaceFolder:zephyrproject}"
+				"${workspaceFolder:Zephyr}"
 			],
 			"dependsOn": [],
 			"problemMatcher": []
@@ -238,7 +222,7 @@
 				"${input:boardName}",
 				// "${config:bsp.board}/${config:bsp.soc}${config:bsp.cpu}",
 				"--build-dir",
-				"\"${input:appName}/build\""
+				"\"${workspaceFolder:RepoRoot}/${input:appName}/build\""
 				// "\"${config:app.build_dir}\""
 			],
 			"dependsOn": [],
@@ -257,7 +241,7 @@
 				"${input:boardName}",
 				// " ${config:bsp.board}/${config:bsp.soc}${config:bsp.cpu}",
 				"--build-dir",
-				"\"${input:appName}/build\""
+				"\"${workspaceFolder:RepoRoot}/${input:appName}/build\""
 				// "\"${config:app.build_dir}\""
 			],
 			"dependsOn": [],
@@ -276,7 +260,7 @@
 				"${input:boardName}",
 				// " ${config:bsp.board}/${config:bsp.soc}${config:bsp.cpu}",
 				"--build-dir",
-				"\"${input:appName}/build\""
+				"\"${workspaceFolder:RepoRoot}/${input:appName}/build\""
 				// "\"${config:app.build_dir}\""
 			],
 			"dependsOn": [],
@@ -295,33 +279,8 @@
 				"${input:boardName}",
 				// "${config:bsp.board}/${config:bsp.soc}${config:bsp.cpu}",
 				"--build-dir",
-				"\"${input:appName}/build\""
+				"\"${workspaceFolder:RepoRoot}/${input:appName}/build\""
 				// "\"${config:app.build_dir}\""
-			],
-			"dependsOn": [],
-			"problemMatcher": []
-		},
-		{
-			"label": "Clean Build App",
-			"type": "shell",
-			"group": "build",
-			"command": "rm",
-			"args": [
-				"-rf",
-				"${input:appName}/build"
-				// "${config:app.build_dir}"
-			],
-			"dependsOn": [],
-			"problemMatcher": []
-		},
-		{
-			"label": "Clean Build Bootloader",
-			"type": "shell",
-			"group": "build",
-			"command": "rm",
-			"args": [
-				"-rf",
-				"${config:app_boot.build_dir}"
 			],
 			"dependsOn": [],
 			"problemMatcher": []

@@ -121,7 +121,8 @@
 			"string_view": "c",
 			"span": "c",
 			"random": "c",
-			"cstdlib": "c"
+			"cstdlib": "c",
+			"bitset": "c"
 		},
 
 		"files.watcherExclude": {
