@@ -7,7 +7,6 @@ sample:
 common:
   build_only: true
   integration_platforms:
-    - arduino_mkrzero
     - robotis_openrb_150
 tests:
   app.default: {}

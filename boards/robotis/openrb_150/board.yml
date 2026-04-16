@@ -1,5 +1,6 @@
 board:
   name: robotis_openrb_150
+  full_name: Robotis OpenRB-150
   vendor: robotis
   socs:
     - name: samd21g18a
