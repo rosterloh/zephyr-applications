@@ -5,11 +5,25 @@
 
 # python
 .venv
+__pycache__/
+.cache/
+.ruff_cache/
 
-# build
+# west dependencies (managed via deps/ by west update)
+/deps/
+
+# west internals (keep .west/config committed)
+/.west/cache
+/.west/tmp
+
+# build artifacts
+/builds/
+/logs/
 **/build
 /twister-out*
 
-__pycache__/
+# environment (copy .env.example to .env and customise)
+.env
+
+# misc
 *.pdf
-.cache/

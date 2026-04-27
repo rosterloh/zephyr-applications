@@ -3,8 +3,6 @@ name: Build
 on:
   push:
   pull_request:
-  #schedule:
-  #  - cron: "0 0 * * *"
   workflow_dispatch:
 
 jobs:
@@ -17,58 +15,60 @@ jobs:
             board: adafruit_qt_py_esp32s3/esp32s3/procpu
           - app: applications/motor_controller
             board: robotis_openrb_150
-          # rasprover needs golioth + pouch modules, which are filtered out
-          # until pouch updates its board.yml with full_name.
-          # Board: ros_driver/esp32/procpu (from rosterloh-drivers)
+          # rasprover depends on golioth + pouch which are excluded from the
+          # west-project-filter until pouch updates its board.yml.
           # - app: applications/rasprover
           #   board: ros_driver/esp32/procpu
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v6
-        with:
-          path: zephyr-applications
 
-      - name: Set up Python
-        uses: actions/setup-python@v6
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
         with:
-          python-version: 3.12
+          python-version: "3.13"
+          enable-cache: true
 
-      - name: Setup Zephyr project
-        uses: zephyrproject-rtos/action-zephyr-setup@v1
+      - name: Install Python dependencies
+        run: uv sync
+
+      - name: Cache west deps
+        uses: actions/cache@v4
         with:
-          app-path: zephyr-applications
-          toolchains: arm-zephyr-eabi:riscv64-zephyr-elf:xtensa-espressif_esp32_zephyr-elf:xtensa-espressif_esp32s3_zephyr-elf
-          # TODO: Re-enable pouch and golioth once pouch updates its board.yml
-          # to include full_name (required by current Zephyr board schema).
-          # Only rasprover and bluetooth_proxy_device depend on these modules.
-          west-project-filter: -pouch,-golioth
+          path: deps/
+          key: west-deps-${{ hashFiles('west.yml') }}
+          restore-keys: |
+            west-deps-
+
+      - name: Cache Zephyr SDK
+        uses: actions/cache@v4
+        with:
+          path: ~/zephyr-sdk-*
+          key: zephyr-sdk-${{ hashFiles('west.yml') }}
+          restore-keys: |
+            zephyr-sdk-
+
+      - name: Setup workspace
+        run: uv run poe setup
 
       - name: Build firmware
-        run: west build -p always -b ${{ matrix.board }} zephyr-applications/${{ matrix.app }}
+        run: |
+          uv run west build \
+            -b ${{ matrix.board }} \
+            -p always \
+            --build-dir builds/${{ matrix.app }} \
+            ${{ matrix.app }}
 
-  # TODO: Re-enable test job once tests/drivers/seesaw is fixed.
-  # The test references a local drivers/seesaw/ path that doesn't exist —
-  # the seesaw driver lives in the rosterloh-drivers external module.
+  # Re-enable once tests/drivers/seesaw is updated to reference the
+  # seesaw driver via the rosterloh-drivers module path.
   # test:
   #   runs-on: ubuntu-latest
   #   steps:
-  #     - name: Checkout
-  #       uses: actions/checkout@v6
+  #     - uses: actions/checkout@v6
+  #     - uses: astral-sh/setup-uv@v5
   #       with:
-  #         path: zephyr-applications
-  #
-  #     - name: Set up Python
-  #       uses: actions/setup-python@v6
-  #       with:
-  #         python-version: 3.12
-  #
-  #     - name: Setup Zephyr project
-  #       uses: zephyrproject-rtos/action-zephyr-setup@v1
-  #       with:
-  #         app-path: zephyr-applications
-  #         toolchains: arm-zephyr-eabi
-  #         west-project-filter: -pouch,-golioth
-  #
-  #     - name: Run tests
-  #       run: west twister -T zephyr-applications/tests -v --inline-logs --integration
+  #         python-version: "3.13"
+  #     - run: uv sync
+  #     - run: uv run west update --narrow
+  #     - run: uv run west twister -T tests -v --inline-logs --integration

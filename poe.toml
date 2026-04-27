@@ -1,0 +1,69 @@
+[tool.poe]
+envfile = "${POE_ROOT}/.env"
+
+[tool.poe.tasks]
+fmt = "ruff format"
+
+[tool.poe.tasks.setup]
+sequence = ["west-update", "sdk-install"]
+help = "First-time workspace setup: fetch west deps and install Zephyr SDK toolchains. Safe to re-run."
+
+[tool.poe.tasks.west-update]
+cmd = "west update --narrow"
+help = "Fetch/update all west dependencies into deps/"
+
+[tool.poe.tasks.sdk-install]
+shell = """
+set -e
+SDK_VER=$(cat "${POE_ROOT}/deps/zephyr/SDK_VERSION")
+west sdk install --version "$SDK_VER" -t arm-zephyr-eabi xtensa-espressif_esp32s3_zephyr-elf
+"""
+help = "Install Zephyr SDK toolchains for this project's targets (version read from deps/zephyr/SDK_VERSION)."
+
+[tool.poe.tasks.build]
+cmd = "west build -b ${MY_BOARD} -p always --build-dir builds/${proj} ${proj}"
+args = [
+    { name = "proj", positional = true, help = "Application to build (e.g. applications/joystick_controller)" }
+]
+help = "Build a Zephyr application. Set MY_BOARD in .env or environment."
+
+[tool.poe.tasks.flash]
+cmd = "west flash --build-dir builds/${proj}"
+args = [
+    { name = "proj", positional = true, help = "Application to flash (e.g. applications/joystick_controller)" }
+]
+help = "Flash a previously built application."
+
+[tool.poe.tasks.build-joystick]
+cmd = "west build -b adafruit_qt_py_esp32s3/esp32s3/procpu -p always --build-dir builds/joystick_controller applications/joystick_controller"
+help = "Build joystick_controller for adafruit_qt_py_esp32s3."
+
+[tool.poe.tasks.build-motor]
+cmd = "west build -b robotis_openrb_150 -p always --build-dir builds/motor_controller applications/motor_controller"
+help = "Build motor_controller for robotis_openrb_150."
+
+[tool.poe.tasks.build-pico]
+cmd = "west build -b rpi_pico/rp2040 -p always --build-dir builds/pico_fw applications/pico_fw"
+help = "Build pico_fw for Raspberry Pi Pico."
+
+[tool.poe.tasks.agent-build]
+shell = """
+set -e
+mkdir -p logs
+TAIL_S="${TAIL_S:-5}"
+TAIL_F="${TAIL_F:-50}"
+if uv run west build -b ${MY_BOARD} -p always --build-dir builds/${proj} ${proj} > logs/${proj##*/}-build.log 2>&1; then
+    echo "Build succeeded"
+    tail -$TAIL_S logs/${proj##*/}-build.log
+    exit 0
+else
+    EXIT_CODE=$?
+    echo "Build failed (exit code: $EXIT_CODE)"
+    tail -$TAIL_F logs/${proj##*/}-build.log
+    exit $EXIT_CODE
+fi
+"""
+args = [
+    { name = "proj", positional = true, help = "Application path (e.g. applications/joystick_controller)" }
+]
+help = "Build with tail-truncated log output. Usage: [TAIL_S=5] [TAIL_F=50] uv run poe agent-build <proj>"

@@ -1,3 +1,5 @@
+#include <zephyr/dt-bindings/display/panel.h>
+
 / {
 	chosen {
 		zephyr,shell-uart = &cdc_acm_uart0;
@@ -17,6 +19,7 @@
 			compatible = "sitronix,st7789v";
 			mipi-max-frequency = <20000000>;
 			mipi-mode = "MIPI_DBI_MODE_SPI_4WIRE";
+			pixel-format = <PANEL_PIXEL_FORMAT_RGB_565>;
 			reg = <0>;
 			width = <240>;
 			height = <135>;
@@ -28,7 +31,6 @@
 			vdvs = <0x20>;
 			mdac = <0x70>;
 			gamma = <0x01>;
-			colmod = <0x55>; // 16-bit
 			lcm = <0x2c>;
 			porch-param = [0c 0c 00 33 33];
 			cmd2en-param = [5a 69 02 01];

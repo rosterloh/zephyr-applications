@@ -1,0 +1,5 @@
+[manifest]
+path = .
+
+[zephyr]
+base = deps/zephyr

@@ -1,4 +1,7 @@
 manifest:
+  self:
+    path: .
+
   remotes:
     - name: zephyrproject-rtos
       url-base: https://github.com/zephyrproject-rtos
@@ -15,8 +18,8 @@ manifest:
       revision: main
       west-commands: scripts/west-commands.yml
       import:
-        # By using name-allowlist we can clone only the modules that are
-        # strictly needed by the application.
+        path-prefix: deps
+        # Clone only the modules strictly needed by these applications.
         name-allowlist:
           - cmsis_6
           - hal_atmel
@@ -40,22 +43,25 @@ manifest:
       repo-path: zephyr-drivers
       remote: rosterloh
       revision: main
-      path: modules/lib/rosterloh-drivers
+      path: deps/modules/lib/rosterloh-drivers
 
-    - name: golioth
-      repo-path: golioth-firmware-sdk
-      remote: golioth
-      path: modules/lib/golioth-firmware-sdk
-      revision: main
-      submodules: true
-
-    - name: pouch
-      path: modules/lib/pouch
-      revision: main
-      url: https://github.com/golioth/pouch.git
+    # golioth and pouch are needed only by rasprover and bluetooth_proxy_device.
+    # Disabled until https://github.com/golioth/pouch adds full_name to its
+    # board.yml (required by the current Zephyr board schema).
+    # - name: golioth
+    #   repo-path: golioth-firmware-sdk
+    #   remote: golioth
+    #   path: deps/modules/lib/golioth-firmware-sdk
+    #   revision: main
+    #   submodules: true
+    #
+    # - name: pouch
+    #   path: deps/modules/lib/pouch
+    #   revision: main
+    #   url: https://github.com/golioth/pouch.git
 
     - name: zenoh
       repo-path: zenoh-pico
       remote: eclipse-zenoh
       revision: main
-      path: modules/lib/zenoh
+      path: deps/modules/lib/zenoh
