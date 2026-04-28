@@ -70,7 +70,12 @@ config APP_ZENOH_UART_DEVICE
 
 config APP_ZENOH_KEY_PREFIX
 	string "Zenoh key expression prefix for all published topics"
-	default "rasprover"
+	default "rt/rasprover"
+	help
+	  Key prefix for all zenoh publishers. The 'rt/' convention is required
+	  by the zenoh-ros2dds bridge to route topics into ROS2. The full key
+	  for the battery state topic will be <prefix>/battery_state, which
+	  maps to the ROS2 topic /<prefix_without_rt>/battery_state.
 
 endif # APP_ZENOH
 

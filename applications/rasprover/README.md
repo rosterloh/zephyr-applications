@@ -109,7 +109,9 @@ uv run west build -b ros_driver/esp32/procpu -p always --sysbuild \
 
 ## zenoh-pico sensor publishing
 
-The firmware publishes INA219 readings to a zenoh router on the host over **UART1** (the second USB serial port, `/dev/ttyUSB1` on Linux). The host runs a zenoh router that bridges into ROS2.
+The firmware publishes INA219 readings to a zenoh router on the host over **UART1** (the second USB serial port, `/dev/ttyUSB1` on Linux). Messages are CDR-encoded `sensor_msgs/msg/BatteryState`, making them directly consumable by the [zenoh-ros2dds bridge](https://github.com/eclipse-zenoh/zenoh-plugin-ros2dds) with no conversion step.
+
+The zenoh key follows the `rt/<topic>` convention the bridge uses for ROS2 topics. With the default prefix the key is `rt/rasprover/battery_state`, which appears in ROS2 as `/rasprover/battery_state`.
 
 ### Wiring
 
@@ -121,24 +123,23 @@ Connect the ESP32 UART1 TX/RX pins to a USB-serial adapter or directly to the Ra
 # 1. Run a zenoh router listening on the USB serial port
 zenohd -l serial:/dev/ttyUSB1#baudrate=115200
 
-# 2a. Subscribe with the zenoh Python SDK
-pip install eclipse-zenoh
-python3 - <<'EOF'
-import zenoh, time
-session = zenoh.open(zenoh.Config())
-sub = session.declare_subscriber("rasprover/power",
-        lambda s: print(s.payload.to_string()))
-time.sleep(3600)
-EOF
-
-# 2b. Or bridge into ROS2 with zenoh-ros2-bridge
+# 2. Launch the zenoh-ros2dds bridge on the host ROS2 machine
 ros2 launch zenoh_bridge_ros2dds zenoh_bridge_ros2dds.launch.py
+
+# 3. The topic is now visible in ROS2
+ros2 topic echo /rasprover/battery_state sensor_msgs/msg/BatteryState
 ```
 
-Each published message is a JSON payload on key `rasprover/power`:
-```json
-{"v":12.345,"i":0.234,"p":2.889}
-```
+Fields populated in each message:
+
+| Field | Source |
+|-------|--------|
+| `voltage` | INA219 bus voltage (V) |
+| `current` | INA219 current (A) |
+| `power_supply_status` | `DISCHARGING` (2) |
+| `power_supply_health` | `GOOD` (2) |
+| `present` | `true` |
+| all others | `NaN` / 0 / empty |
 
 ### Configuration
 
@@ -147,7 +148,7 @@ Each published message is a JSON payload on key `rasprover/power`:
 | `APP_ZENOH` | y | Enable the zenoh publisher |
 | `APP_ZENOH_UART_DEVICE` | `uart@3ff50000` | Zephyr device name for UART1 |
 | `APP_ZENOH_SERIAL_BAUDRATE` | `115200` | Baud rate for the serial transport |
-| `APP_ZENOH_KEY_PREFIX` | `rasprover` | Key expression prefix for all topics |
+| `APP_ZENOH_KEY_PREFIX` | `rt/rasprover` | Key prefix — `rt/` routes topics through the zenoh-ros2dds bridge |
 
 ## What it does
 
