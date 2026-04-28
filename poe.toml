@@ -20,7 +20,10 @@ help = "Fetch required binary blobs for the Espressif HAL (WiFi/BLE firmware)."
 shell = """
 set -e
 SDK_VER=$(cat "${POE_ROOT}/deps/zephyr/SDK_VERSION")
-west sdk install --version "$SDK_VER" -t arm-zephyr-eabi xtensa-espressif_esp32s3_zephyr-elf
+west sdk install --version "$SDK_VER" \
+  -t arm-zephyr-eabi \
+     riscv64-zephyr-elf \
+     xtensa-espressif_esp32s3_zephyr-elf
 """
 help = "Install Zephyr SDK toolchains for this project's targets (version read from deps/zephyr/SDK_VERSION)."
 
