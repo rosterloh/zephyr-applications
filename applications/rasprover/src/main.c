@@ -4,6 +4,7 @@ LOG_MODULE_REGISTER(main, LOG_LEVEL_DBG);
 #include "app_display.h"
 #include "app_sensors.h"
 #include "app_settings.h"
+#include "app_zenoh.h"
 #include <zephyr/kernel.h>
 
 static k_tid_t _system_thread = 0;
@@ -22,9 +23,10 @@ int main(void)
 	_system_thread = k_current_get();
 
 	app_sensors_init();
+	app_zenoh_init();
 
 #ifdef CONFIG_APP_DISPLAY
-	// app_display_init();
+	app_display_init();
 #endif
 
 	while (true) {

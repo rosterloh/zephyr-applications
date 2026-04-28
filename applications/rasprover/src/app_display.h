@@ -1,6 +1,12 @@
-#ifndef __APP_DISPLAY_H__
-#define __APP_DISPLAY_H__
+#ifndef APP_DISPLAY_H
+#define APP_DISPLAY_H
 
-int app_display_init(void);
+int  app_display_init(void);
+void app_display_update_power(double v, double i, double p);
 
-#endif /* __APP_DISPLAY_H__ */
+#if IS_ENABLED(CONFIG_APP_DISPLAY_BLANK_ON_IDLE)
+void app_display_blank(void);
+void app_display_unblank(void);
+#endif
+
+#endif /* APP_DISPLAY_H */
