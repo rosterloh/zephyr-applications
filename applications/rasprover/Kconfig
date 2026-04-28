@@ -47,4 +47,31 @@ endif # APP_DISPLAY_WORK_QUEUE_DEDICATED
 
 endif # APP_DISPLAY
 
+menuconfig APP_ZENOH
+	bool "Enable zenoh-pico publisher"
+	select ZENOH_PICO
+	select ZENOH_PICO_LINK_SERIAL
+	select ZENOH_PICO_PUBLICATION
+	select ZENOH_PICO_MULTI_THREAD
+	default y
+
+if APP_ZENOH
+
+config APP_ZENOH_SERIAL_BAUDRATE
+	int "Baud rate for zenoh serial transport (UART1 to host)"
+	default 115200
+
+config APP_ZENOH_UART_DEVICE
+	string "Zephyr device binding name for the zenoh UART"
+	default "uart@3ff50000"
+	help
+	  Passed to device_get_binding(). For the ROS Driver (ESP32) the
+	  second UART (UART1) is at address 0x3ff50000.
+
+config APP_ZENOH_KEY_PREFIX
+	string "Zenoh key expression prefix for all published topics"
+	default "rasprover"
+
+endif # APP_ZENOH
+
 source "Kconfig.zephyr"

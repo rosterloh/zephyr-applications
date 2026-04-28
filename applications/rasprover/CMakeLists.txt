@@ -7,10 +7,11 @@ project(rasprover)
 # We always want colored gcc output
 zephyr_compile_options(-fdiagnostics-color=always)
 
-target_sources(app PRIVATE 
+target_sources(app PRIVATE
   src/main.c
   src/app_display.c
   src/app_network.c
   src/app_sensors.c
   src/app_settings.c
+  src/app_zenoh.c
 )

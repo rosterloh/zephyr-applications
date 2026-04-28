@@ -5,8 +5,8 @@ envfile = "${POE_ROOT}/.env"
 fmt = "ruff format"
 
 [tool.poe.tasks.setup]
-sequence = ["west-update", "sdk-install", "blobs-fetch"]
-help = "First-time workspace setup: fetch west deps, install Zephyr SDK, fetch binary blobs. Safe to re-run."
+sequence = ["west-update", "sdk-install", "blobs-fetch", "patch-zenoh"]
+help = "First-time workspace setup: fetch west deps, install Zephyr SDK, fetch binary blobs, apply patches. Safe to re-run."
 
 [tool.poe.tasks.west-update]
 cmd = "west update --narrow"
@@ -15,6 +15,19 @@ help = "Fetch/update all west dependencies into deps/"
 [tool.poe.tasks.blobs-fetch]
 cmd = "west blobs fetch hal_espressif"
 help = "Fetch required binary blobs for the Espressif HAL (WiFi/BLE firmware)."
+
+[tool.poe.tasks.patch-zenoh]
+shell = '''
+set -e
+CMAKE="${POE_ROOT}/deps/modules/lib/zenoh/zephyr/CMakeLists.txt"
+if grep -q 'src/runtime' "$CMAKE"; then
+    echo "zenoh runtime patch already applied"
+else
+    sed -i '/src\/utils/a\  "../src/runtime/*.c"' "$CMAKE"
+    echo "zenoh runtime patch applied (src/runtime/*.c added to zenoh Zephyr module)"
+fi
+'''
+help = "Patch zenoh-pico Zephyr CMakeLists.txt to include missing src/runtime/ sources. Idempotent."
 
 [tool.poe.tasks.sdk-install]
 shell = """
