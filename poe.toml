@@ -66,7 +66,6 @@ help = "Build rasprover UI simulator (64-bit native_sim + SDL display)."
 [tool.poe.tasks.run-rasprover-sim]
 cmd = "west build -b native_sim/native/64 --build-dir builds/rasprover_sim -t run applications/rasprover"
 help = "Run an already-built native_sim rasprover image."
-help = "Build rasprover (+ MCUboot) for the Waveshare ROS Driver (ESP32)."
 
 [tool.poe.tasks.build-vision]
 cmd = "west build -b arduino_nicla_vision/stm32h747xx/m7 -p always --build-dir builds/embedded_vision applications/embedded_vision"
