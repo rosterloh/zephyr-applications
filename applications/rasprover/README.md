@@ -107,9 +107,51 @@ uv run west build -b ros_driver/esp32/procpu -p always --sysbuild \
   -- -DEXTRA_CONF_FILE=debug.conf
 ```
 
+## zenoh-pico sensor publishing
+
+The firmware publishes INA219 readings to a zenoh router on the host over **UART1** (the second USB serial port, `/dev/ttyUSB1` on Linux). The host runs a zenoh router that bridges into ROS2.
+
+### Wiring
+
+Connect the ESP32 UART1 TX/RX pins to a USB-serial adapter or directly to the Raspberry Pi UART.
+
+### Host setup
+
+```shell
+# 1. Run a zenoh router listening on the USB serial port
+zenohd -l serial:/dev/ttyUSB1#baudrate=115200
+
+# 2a. Subscribe with the zenoh Python SDK
+pip install eclipse-zenoh
+python3 - <<'EOF'
+import zenoh, time
+session = zenoh.open(zenoh.Config())
+sub = session.declare_subscriber("rasprover/power",
+        lambda s: print(s.payload.to_string()))
+time.sleep(3600)
+EOF
+
+# 2b. Or bridge into ROS2 with zenoh-ros2-bridge
+ros2 launch zenoh_bridge_ros2dds zenoh_bridge_ros2dds.launch.py
+```
+
+Each published message is a JSON payload on key `rasprover/power`:
+```json
+{"v":12.345,"i":0.234,"p":2.889}
+```
+
+### Configuration
+
+| Kconfig | Default | Description |
+|---------|---------|-------------|
+| `APP_ZENOH` | y | Enable the zenoh publisher |
+| `APP_ZENOH_UART_DEVICE` | `uart@3ff50000` | Zephyr device name for UART1 |
+| `APP_ZENOH_SERIAL_BAUDRATE` | `115200` | Baud rate for the serial transport |
+| `APP_ZENOH_KEY_PREFIX` | `rasprover` | Key expression prefix for all topics |
+
 ## What it does
 
-On startup the firmware initialises the INA219 current sensor and reads voltage, current, and power every `LOOP_DELAY_S` seconds (default 60), logging the values over serial.
+On startup the firmware initialises the INA219 current sensor and reads voltage, current, and power every `LOOP_DELAY_S` seconds (default 60). Each reading is logged over the console and published to the zenoh router over UART1.
 
 The SSD1306 display and WiFi stack are present in the build but not yet active — `app_display_init()` and `app_net_connect()` are commented out in `main.c` pending integration work.
 
