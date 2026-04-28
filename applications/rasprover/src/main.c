@@ -26,7 +26,7 @@ int main(void)
 	app_zenoh_init();
 
 #ifdef CONFIG_APP_DISPLAY
-	// app_display_init();
+	app_display_init();
 #endif
 
 	while (true) {

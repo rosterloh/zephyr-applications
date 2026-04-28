@@ -1,0 +1,5 @@
+/* Match the SSD1306 128x32 dimensions */
+&sdl_dc {
+	width  = <128>;
+	height = <32>;
+};
