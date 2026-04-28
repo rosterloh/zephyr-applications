@@ -13,6 +13,7 @@ jobs:
         include:
           - app: applications/rasprover
             board: ros_driver/esp32/procpu
+            flags: --sysbuild
           - app: applications/embedded_vision
             board: arduino_nicla_vision/stm32h747xx/m7
           - app: applications/force_sensor
@@ -22,7 +23,7 @@ jobs:
           - app: applications/motor_controller
             board: robotis_openrb_150
           # The following apps require modules not in this workspace:
-          # bluetooth_proxy_device + rasprover: need golioth/pouch
+          # bluetooth_proxy_device: needs golioth/pouch
           #   (disabled until pouch fixes board.yml full_name requirement)
           # pico_fw: needs cyw43 (beechwoods-software) which causes Kconfig
           #   conflicts on non-Pico targets; use applications/pico_fw/west.yml
@@ -64,6 +65,7 @@ jobs:
           uv run west build \
             -b ${{ matrix.board }} \
             -p always \
+            ${{ matrix.flags }} \
             --build-dir builds/${{ matrix.app }} \
             ${{ matrix.app }}
 
