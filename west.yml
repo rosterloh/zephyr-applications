@@ -35,6 +35,7 @@ manifest:
           - mcuboot
           - open-amp
           - segger
+          - tf-psa-crypto
           - tfm-mcuboot
           - trusted-firmware-m
           - zcbor
@@ -65,3 +66,8 @@ manifest:
       remote: eclipse-zenoh
       revision: main
       path: deps/modules/lib/zenoh
+
+    # pico_fw uses the cyw43 driver from beechwoods-software for rpi_pico_w.
+    # It cannot be integrated into this workspace because the cyw43 module
+    # introduces Kconfig conflicts (SPI_RPI_PICO_PIO) on non-Pico targets.
+    # Build pico_fw using its own west.yml in applications/pico_fw/.

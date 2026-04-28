@@ -39,7 +39,7 @@ int main(void)
 	}
 
 	/* Must be done before initializing USB */
-	uvc_set_video_dev(uvc_dev, video_dev);
+	uvc_device_init(uvc_dev, video_dev);
 
 	app_usbd = app_usbd_init_device(NULL);
 	if (app_usbd == NULL) {
@@ -73,12 +73,8 @@ int main(void)
 		VIDEO_FOURCC_TO_STR(fmt.pixelformat), fmt.width, fmt.height,
 		CONFIG_VIDEO_BUFFER_POOL_NUM_MAX, fmt.pitch * fmt.height);
 
-	/* Size to allocate for each buffer */
-	if (caps.min_line_count == LINE_COUNT_HEIGHT) {
-		bsize = fmt.pitch * fmt.height;
-	} else {
-		bsize = fmt.pitch * caps.min_line_count;
-	}
+	/* Allocate one full frame per buffer */
+	bsize = fmt.pitch * fmt.height;
 
 	for (int i = 0; i < CONFIG_VIDEO_BUFFER_POOL_NUM_MAX; i++) {
 		vbuf = video_buffer_alloc(bsize, K_NO_WAIT);

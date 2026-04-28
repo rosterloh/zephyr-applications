@@ -5,12 +5,16 @@ envfile = "${POE_ROOT}/.env"
 fmt = "ruff format"
 
 [tool.poe.tasks.setup]
-sequence = ["west-update", "sdk-install"]
-help = "First-time workspace setup: fetch west deps and install Zephyr SDK toolchains. Safe to re-run."
+sequence = ["west-update", "sdk-install", "blobs-fetch"]
+help = "First-time workspace setup: fetch west deps, install Zephyr SDK, fetch binary blobs. Safe to re-run."
 
 [tool.poe.tasks.west-update]
 cmd = "west update --narrow"
 help = "Fetch/update all west dependencies into deps/"
+
+[tool.poe.tasks.blobs-fetch]
+cmd = "west blobs fetch hal_espressif"
+help = "Fetch required binary blobs for the Espressif HAL (WiFi/BLE firmware)."
 
 [tool.poe.tasks.sdk-install]
 shell = """
@@ -34,6 +38,14 @@ args = [
 ]
 help = "Flash a previously built application."
 
+[tool.poe.tasks.build-vision]
+cmd = "west build -b arduino_nicla_vision/stm32h747xx/m7 -p always --build-dir builds/embedded_vision applications/embedded_vision"
+help = "Build embedded_vision for arduino_nicla_vision."
+
+[tool.poe.tasks.build-force]
+cmd = "west build -b adafruit_qt_py_esp32c3 -p always --build-dir builds/force_sensor applications/force_sensor"
+help = "Build force_sensor for adafruit_qt_py_esp32c3."
+
 [tool.poe.tasks.build-joystick]
 cmd = "west build -b adafruit_qt_py_esp32s3/esp32s3/procpu -p always --build-dir builds/joystick_controller applications/joystick_controller"
 help = "Build joystick_controller for adafruit_qt_py_esp32s3."
@@ -42,9 +54,9 @@ help = "Build joystick_controller for adafruit_qt_py_esp32s3."
 cmd = "west build -b robotis_openrb_150 -p always --build-dir builds/motor_controller applications/motor_controller"
 help = "Build motor_controller for robotis_openrb_150."
 
-[tool.poe.tasks.build-pico]
-cmd = "west build -b rpi_pico/rp2040 -p always --build-dir builds/pico_fw applications/pico_fw"
-help = "Build pico_fw for Raspberry Pi Pico."
+# pico_fw requires its own west workspace (see applications/pico_fw/west.yml).
+# It cannot be built from this workspace due to the cyw43 module conflict.
+# [tool.poe.tasks.build-pico]
 
 [tool.poe.tasks.agent-build]
 shell = """

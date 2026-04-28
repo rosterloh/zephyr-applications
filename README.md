@@ -54,9 +54,10 @@ uv run poe --help
 | `sdk-install` | Install Zephyr SDK toolchains for this project's targets |
 | `build <app>` | Build an app — requires `MY_BOARD` in `.env` or environment |
 | `flash <app>` | Flash a previously built app |
-| `build-motor` | Build `motor_controller` for robotis\_openrb\_150 |
+| `build-vision` | Build `embedded_vision` for arduino\_nicla\_vision |
+| `build-force` | Build `force_sensor` for adafruit\_qt\_py\_esp32c3 |
 | `build-joystick` | Build `joystick_controller` for adafruit\_qt\_py\_esp32s3 |
-| `build-pico` | Build `pico_fw` for rpi\_pico/rp2040 |
+| `build-motor` | Build `motor_controller` for robotis\_openrb\_150 |
 | `fmt` | Format Python scripts with ruff |
 
 ## Repository layout
@@ -86,9 +87,11 @@ west twister -p native_sim -s drivers/seesaw/drivers.sensor.seesaw
 
 ## Notes
 
-- `golioth` and `pouch` modules are excluded from the west manifest until
-  [pouch#board.yml](https://github.com/golioth/pouch) adds `full_name` (required
-  by the current Zephyr board schema). Re-enable them in `west.yml` to build
-  `rasprover` and `bluetooth_proxy_device`.
+- `golioth` and `pouch` are excluded until [pouch](https://github.com/golioth/pouch)
+  adds `full_name` to its `board.yml` (required by the current Zephyr board schema).
+  Re-enable in `west.yml` to build `rasprover` and `bluetooth_proxy_device`.
+- `pico_fw` requires the `cyw43` module (beechwoods-software), which causes Kconfig
+  conflicts on non-Pico targets and cannot be integrated into the shared workspace.
+  Build it using its own manifest: `cd applications/pico_fw && west init -l . && west update`.
 - `deps/` is git-ignored. Run `uv run poe west-update` to refresh after pulling
   changes to `west.yml`.
