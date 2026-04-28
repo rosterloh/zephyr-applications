@@ -42,6 +42,10 @@ args = [
 ]
 help = "Flash a previously built application."
 
+[tool.poe.tasks.build-rasprover]
+cmd = "west build -b ros_driver/esp32/procpu -p always --build-dir builds/rasprover applications/rasprover"
+help = "Build rasprover for the Waveshare ROS Driver (ESP32)."
+
 [tool.poe.tasks.build-vision]
 cmd = "west build -b arduino_nicla_vision/stm32h747xx/m7 -p always --build-dir builds/embedded_vision applications/embedded_vision"
 help = "Build embedded_vision for arduino_nicla_vision."

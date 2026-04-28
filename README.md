@@ -89,7 +89,8 @@ west twister -p native_sim -s drivers/seesaw/drivers.sensor.seesaw
 
 - `golioth` and `pouch` are excluded until [pouch](https://github.com/golioth/pouch)
   adds `full_name` to its `board.yml` (required by the current Zephyr board schema).
-  Re-enable in `west.yml` to build `rasprover` and `bluetooth_proxy_device`.
+  Re-enable in `west.yml` to restore Golioth support to `bluetooth_proxy_device`.
+  `rasprover` has had Golioth removed and builds cleanly without it.
 - `pico_fw` requires the `cyw43` module (beechwoods-software), which causes Kconfig
   conflicts on non-Pico targets and cannot be integrated into the shared workspace.
   Build it using its own manifest: `cd applications/pico_fw && west init -l . && west update`.

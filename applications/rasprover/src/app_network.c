@@ -3,8 +3,8 @@ LOG_MODULE_REGISTER(app_network, LOG_LEVEL_INF);
 
 #include <zephyr/device.h>
 #include <zephyr/kernel.h>
-#include <zephyr/net/dhcpv4.h>
 #include <zephyr/net/net_if.h>
+#include <zephyr/net/dhcpv4.h>
 #include <zephyr/net/net_mgmt.h>
 #include <zephyr/net/wifi_mgmt.h>
 #include <zephyr/pm/device.h>
@@ -408,7 +408,7 @@ static inline atomic_val_t atomic_update(atomic_t *target, atomic_val_t value, a
 	return flags;
 }
 
-static void ipv4_changed(struct net_mgmt_event_callback *cb, uint32_t mgmt_event,
+static void ipv4_changed(struct net_mgmt_event_callback *cb, uint64_t mgmt_event,
 			 struct net_if *iface)
 {
 	struct wifi_manager_data *wifi_mgmt =
@@ -433,7 +433,7 @@ static inline int wifi_connect_error(const struct wifi_status *status)
 	return status->status;
 }
 
-static void wifi_mgmt_event_handler(struct net_mgmt_event_callback *cb, uint32_t mgmt_event,
+static void wifi_mgmt_event_handler(struct net_mgmt_event_callback *cb, uint64_t mgmt_event,
 				    struct net_if *iface)
 {
 	struct wifi_manager_data *wifi_mgmt =
@@ -512,7 +512,7 @@ struct wait_data {
 	struct net_mgmt_event_callback cb;
 };
 
-static void event_cb_handler(struct net_mgmt_event_callback *cb, uint32_t mgmt_event,
+static void event_cb_handler(struct net_mgmt_event_callback *cb, uint64_t mgmt_event,
 			     struct net_if *iface)
 {
 	struct wait_data *wait = CONTAINER_OF(cb, struct wait_data, cb);
@@ -522,7 +522,7 @@ static void event_cb_handler(struct net_mgmt_event_callback *cb, uint32_t mgmt_e
 	}
 }
 
-static void wait_for_net_event(struct net_if *iface, uint32_t event)
+static void wait_for_net_event(struct net_if *iface, uint64_t event)
 {
 	struct wait_data wait;
 
