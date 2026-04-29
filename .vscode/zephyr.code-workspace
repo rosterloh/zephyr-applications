@@ -5,8 +5,11 @@
 			"path": ".."
 		},
 		{
+     		"path": "../builds"
+    	},
+		{
 			"name": "Zephyr",
-			"path": "../../zephyr"
+			"path": "../deps/zephyr"
 		},
 		{
 			"name": "Tests",
@@ -14,16 +17,20 @@
 		},
 		{
 			"name": "Modules",
-			"path": "../../modules"
+			"path": "../deps/modules"
 		},
 		{
 			"name": "Bootloader",
-			"path": "../../bootloader/mcuboot/boot/zephyr"
-		}
+			"path": "../deps/bootloader/mcuboot/boot/zephyr"
+		},
+		{
+			"name": "Rasprover",
+     		"path": "applications/rasprover"
+    	}
 	],
 
 	"settings": {
-		"west": "${env:HOME}/envs/zephyr/bin/west",
+		"west": "${workspaceFolder:RepoRoot}/.venv/bin/west",
 		"twister": {
 			"host_test_arch": "qemu_x86",
 		},
@@ -73,7 +80,18 @@
 		},
 
 		"[c]": {
-			"editor.formatOnSave": true
+			"editor.formatOnSave": true,
+			"editor.defaultFormatter": "ms-vscode.cpptools"
+		},
+		"[cpp]": {
+			"editor.formatOnSave": true,
+			"editor.defaultFormatter": "ms-vscode.cpptools"
+		},
+		"[python]": {
+			"editor.tabSize": 4,
+			"editor.insertSpaces": true,
+			"editor.formatOnSave": true,
+			"editor.defaultFormatter": "charliermarsh.ruff",
 		},
 
 		"cmake.configureOnOpen": false,
@@ -124,7 +142,6 @@
 			"cstdlib": "c",
 			"bitset": "c"
 		},
-
 		"files.watcherExclude": {
 			"**/.git/objects/**": true,
 			"**/.git/subtree-cache/**": true,
@@ -160,8 +177,12 @@
 			"**/dist/**": true,
 			"**/log/**": true,
 			"**/.fdk/**": true,
-			"**/.west/**": true
+			"**/.west/**": true,
+			"**/__pycache__": true,
+      		"**/*.pyc": true
 		},
+		"git.autoRepositoryDetection": true,
+    	"git.enabled": true,
 		"search.exclude": {
 			"**/.git/objects/**": true,
 			"**/.git/subtree-cache/**": true,
@@ -179,18 +200,31 @@
 			"**/.west/**": true
 		},
 		
-		"python.defaultInterpreterPath": "${env:HOME}/envs/zephyr/bin/python",
+		"python.defaultInterpreterPath": "${workspaceFolder:RepoRoot}/.venv/bin/python",
 
 		// extensions settings
 		"cortex-debug.variableUseNaturalFormat": false,
-		"cortex-debug.openocdPath": "${env:HOME}/zephyr-sdk/sysroots/x86_64-pokysdk-linux/usr/bin/openocd",
-		"cortex-debug.gdbPath": "${env:HOME}/zephyr-sdk/xtensa-espressif_esp32s3_zephyr-elf/bin/xtensa-espressif_esp32s3_zephyr-elf-gdb",
-		"cortex-debug.armToolchainPath": "${env:HOME}/zephyr-sdk/xtensa-espressif_esp32s3_zephyr-elf/bin",
+		"cortex-debug.openocdPath": "${env:HOME}/zephyr-sdk-1.0.1/sysroots/x86_64-pokysdk-linux/usr/bin/openocd",
+		"cortex-debug.gdbPath": "${env:HOME}/zephyr-sdk-1.0.1/xtensa-espressif_esp32s3_zephyr-elf/bin/xtensa-espressif_esp32s3_zephyr-elf-gdb",
+		"cortex-debug.armToolchainPath": "${env:HOME}/zephyr-sdk-1.0.1/xtensa-espressif_esp32s3_zephyr-elf/bin",
 		"cortex-debug.armToolchainPrefix": "xtensa-espressif_esp32s3_zephyr-elf",
 		"cSpell.language": "en-GB",
-		"devicetree.defaultBoard": "adafruit_qt_py_esp32c3",
-		"devicetree.zephyr": "${workspaceFolder:Zephyr}",
-		"kconfig.python": "${env:HOME}/envs/zephyr/bin/python",
+		"devicetree.cwd": "${workspaceFolder:deps}",
+		"devicetree.defaultIncludePaths": [
+			"./zephyr/dts",
+			"./zephyr/dts/arm",
+			"./zephyr/dts/arm64/",
+			"./zephyr/dts/riscv",
+			"./zephyr/dts/common",
+			"./zephyr/dts/vendor",
+			"./zephyr/include",
+			"./zephyr/dts/xtensa"
+		],
+		"devicetree.defaultBindingType": "Zephyr",
+		"devicetree.defaultZephyrBindings": [
+			"./zephyr/dts/bindings"
+		],
+		"kconfig.python": "${workspaceFolder:RepoRoot}/.venv/bin/python",
 		"kconfig.zephyr.base": "${workspaceFolder:Zephyr}",
 		"mcu-debug.peripheral-viewer.svdPathConfig": "${config:bsp.svd}",
 		"mcu-debug.rtos-views.showRTOS": true,
@@ -203,13 +237,13 @@
 				"active": "true"
 			}
 		],
-		"zephyr-workbench.debug.openocd.pathExec": "${env:HOME}/zephyr-sdk/sysroots/x86_64-pokysdk-linux/usr/bin/openocd",
+		"zephyr-workbench.debug.openocd.pathExec": "${env:HOME}/zephyr-sdk-1.0.1/sysroots/x86_64-pokysdk-linux/usr/bin/openocd",
 		"zephyr-workbench.env.BOARD_ROOT": [
 			"${workspaceFolder:RepoRoot}/boards",
 			"${workspaceFolder:Modules}/lib/rosterloh-drivers/boards"
 		],
-		"zephyr-workbench.sdk": "${env:HOME}/zephyr-sdk",
-		"zephyr-workbench.westWorkspace": "${env:HOME}/zephyr_ws",
-		"zephyr-workbench.venv.activatePath": "${env:HOME}/envs/zephyr/bin/activate"
+		"zephyr-workbench.sdk": "${env:HOME}/zephyr-sdk-1.0.1",
+		"zephyr-workbench.westWorkspace": "${workspaceFolder:RepoRoot}",
+		"zephyr-workbench.venv.activatePath": "${workspaceFolder:RepoRoot}/.venv/bin/activate"
 	}
 }

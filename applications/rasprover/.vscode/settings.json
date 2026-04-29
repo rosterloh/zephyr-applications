@@ -1,0 +1,9 @@
+{
+    "C_Cpp.default.compileCommands": [
+        "${workspaceFolder:builds}/rasprover/compile_commands.json"
+    ],
+    "C_Cpp.default.includePath": [
+        "${workspaceFolder:Zephyr}/include",
+        "${workspaceFolder:builds}/rasprover/zephyr/include/generated",
+    ]
+}
