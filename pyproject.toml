@@ -1,6 +1,6 @@
 [project]
 name = "zephyr-applications"
-version = "0.0.1"
+version = "1.0.0"
 requires-python = ">=3.13,<4.0"
 
 [dependency-groups]
@@ -33,23 +33,23 @@ dev = [
     "pygithub>=2.8.1",
     "pykwalify>=1.8.0",
     "pylink-square>=1.7.0",
-    "pyocd>=0.35.0",
+    "pyocd>=0.44.0",
     "pyserial>=3.5",
-    "pytest>=8.4.2",
+    "pytest>=9.0.3",
     "pytest-asyncio>=1.2.0",
     "pytest-env>=1.1.5",
     "python-dotenv>=1.2.1",
     "python-magic>=0.4.27 ; sys_platform != 'win32'",
     "python-magic-bin>=0.4.14 ; sys_platform == 'win32'",
-    "pyyaml>=6.0",
+    "pyyaml>=6.0.3",
     "requests>=2.32.4",
     "ruff==0.14.2",
     "semver>=3.0.4",
     "tabulate>=0.9.0",
-    "tqdm>=4.67.1",
+    "tqdm>=4.67.3",
     "unidiff>=0.7.5",
     "west>=0.14.0",
-    "windows-curses>=2.4.1 ; sys_platform == 'win32'",
+    "windows-curses>=2.4.2 ; sys_platform == 'win32'",
     "yamllint>=1.37.1",
     "zephyr-kconfig>=0.2.0",
 ]

@@ -1939,7 +1939,7 @@ wheels = [
 
 [[package]]
 name = "zephyr-applications"
-version = "0.0.1"
+version = "1.0.0"
 source = { virtual = "." }
 
 [package.dev-dependencies]
@@ -2025,23 +2025,23 @@ dev = [
     { name = "pygithub", specifier = ">=2.8.1" },
     { name = "pykwalify", specifier = ">=1.8.0" },
     { name = "pylink-square", specifier = ">=1.7.0" },
-    { name = "pyocd", specifier = ">=0.35.0" },
+    { name = "pyocd", specifier = ">=0.44.0" },
     { name = "pyserial", specifier = ">=3.5" },
-    { name = "pytest", specifier = ">=8.4.2" },
+    { name = "pytest", specifier = ">=9.0.3" },
     { name = "pytest-asyncio", specifier = ">=1.2.0" },
     { name = "pytest-env", specifier = ">=1.1.5" },
     { name = "python-dotenv", specifier = ">=1.2.1" },
     { name = "python-magic", marker = "sys_platform != 'win32'", specifier = ">=0.4.27" },
     { name = "python-magic-bin", marker = "sys_platform == 'win32'", specifier = ">=0.4.14" },
-    { name = "pyyaml", specifier = ">=6.0" },
+    { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "requests", specifier = ">=2.32.4" },
     { name = "ruff", specifier = "==0.14.2" },
     { name = "semver", specifier = ">=3.0.4" },
     { name = "tabulate", specifier = ">=0.9.0" },
-    { name = "tqdm", specifier = ">=4.67.1" },
+    { name = "tqdm", specifier = ">=4.67.3" },
     { name = "unidiff", specifier = ">=0.7.5" },
     { name = "west", specifier = ">=0.14.0" },
-    { name = "windows-curses", marker = "sys_platform == 'win32'", specifier = ">=2.4.1" },
+    { name = "windows-curses", marker = "sys_platform == 'win32'", specifier = ">=2.4.2" },
     { name = "yamllint", specifier = ">=1.37.1" },
     { name = "zephyr-kconfig", specifier = ">=0.2.0" },
 ]
