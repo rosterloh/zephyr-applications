@@ -36,7 +36,7 @@ dev = [
     "pyocd>=0.44.0",
     "pyserial>=3.5",
     "pytest>=9.0.3",
-    "pytest-asyncio>=1.2.0",
+    "pytest-asyncio>=1.3.0",
     "pytest-env>=1.1.5",
     "python-dotenv>=1.2.1",
     "python-magic>=0.4.27 ; sys_platform != 'win32'",
