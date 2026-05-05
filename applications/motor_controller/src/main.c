@@ -43,7 +43,7 @@ static void inputs_scan_fn(struct k_work *work)
 			lv_label_set_text(slide_label, slide_str);
 			last_slider = slide_val;
 
-			err = dxl_write(iface, motor_id, GOAL_POSITION, slide_val * 4);
+			err = dxl_write_u32(iface, motor_id, GOAL_POSITION, slide_val * 4);
 			if (err != 0) {
 				LOG_ERR("Failed to write goal position. %d", err);
 			}
@@ -74,9 +74,9 @@ int main(void)
 
 	ret = dxl_ping(iface, motor_id);
 	if (ret == 0) {
-		ret = dxl_write(iface, motor_id, TORQUE_ENABLE, 0);
-		ret |= dxl_write(iface, motor_id, OPERATING_MODE, DXL_OP_POSITION);
-		ret |= dxl_write(iface, motor_id, TORQUE_ENABLE, 1);
+		ret = dxl_write_u8(iface, motor_id, TORQUE_ENABLE, 0);
+		ret |= dxl_write_u8(iface, motor_id, OPERATING_MODE, DXL_OP_POSITION);
+		ret |= dxl_write_u8(iface, motor_id, TORQUE_ENABLE, 1);
 		if (ret != 0) {
 			LOG_ERR("Failed to configure motor. %d", ret);
 		}
