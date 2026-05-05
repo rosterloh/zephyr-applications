@@ -43,7 +43,9 @@ manifest:
     - name: rosterloh-drivers
       repo-path: zephyr-drivers
       remote: rosterloh
-      revision: main
+      # Temporarily pinned to the typed-API branch; flip back to `main`
+      # once rosterloh/zephyr-drivers#6 merges.
+      revision: feature/dynamixel-cleanup
       path: deps/modules/lib/rosterloh-drivers
 
     # golioth and pouch are needed only by rasprover and bluetooth_proxy_device.
