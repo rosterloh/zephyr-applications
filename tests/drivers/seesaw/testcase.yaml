@@ -1,6 +1,0 @@
-tests:
-  drivers.seesaw:
-    tags:
-      - drivers
-    platform_allow:
-      - native_sim

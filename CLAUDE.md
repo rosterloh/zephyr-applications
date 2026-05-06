@@ -62,7 +62,6 @@ The west.yml uses `name-allowlist` to clone only the modules these apps need; do
 
 - `applications/<app>/` — Zephyr apps (`prj.conf`, `CMakeLists.txt`, `src/`, optional `boards/<board>.overlay`).
 - `boards/<vendor>/<board>/` — out-of-tree board definitions.
-- `dts/bindings/` — out-of-tree DT bindings.
 - `deps/zephyr/` — Zephyr tree (managed by west, gitignored).
 - `deps/modules/lib/rosterloh-drivers/` — out-of-tree drivers repo. Tracks `main` via west.yml. Local edits during PR development are fine; commit them in that repo, not this one.
 - `deps/modules/lib/zenoh/` — zenoh-pico, patched by `poe patch-zenoh`.

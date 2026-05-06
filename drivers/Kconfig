@@ -1,3 +1,0 @@
-menu "Drivers"
-#rsource "seesaw/Kconfig"
-endmenu
