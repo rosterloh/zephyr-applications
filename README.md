@@ -16,7 +16,6 @@ git clone https://github.com/rosterloh/zephyr-applications
 cd zephyr-applications
 uv sync                  # create .venv and install all Python tools
 uv run poe setup         # west update (deps/) + Zephyr SDK toolchains
-cp .env.example .env     # set MY_BOARD for your target
 ```
 
 ### Building
@@ -29,10 +28,10 @@ uv run poe build-joystick   # adafruit_qt_py_esp32s3/esp32s3/procpu
 uv run poe build-pico       # rpi_pico/rp2040
 ```
 
-Or build any app against any board via `MY_BOARD` in `.env`:
+Or build any app against any board via the generic `build` task:
 
 ```shell
-uv run poe build applications/motor_controller
+uv run poe build --board robotis_openrb_150 applications/motor_controller
 ```
 
 ### Flashing
@@ -52,7 +51,7 @@ uv run poe --help
 | `setup` | First-time workspace setup (west update + SDK install) |
 | `west-update` | Fetch/update all west dependencies into `deps/` |
 | `sdk-install` | Install Zephyr SDK toolchains for this project's targets |
-| `build <app>` | Build an app — requires `MY_BOARD` in `.env` or environment |
+| `build --board <board> <app>` | Build an app for a given board |
 | `flash <app>` | Flash a previously built app |
 | `build-vision` | Build `embedded_vision` for arduino\_nicla\_vision |
 | `build-force` | Build `force_sensor` for adafruit\_qt\_py\_esp32c3 |
@@ -67,22 +66,10 @@ uv run poe --help
 ├── applications/       # Zephyr applications
 ├── boards/             # Out-of-tree board definitions
 ├── deps/               # West-managed dependencies (git-ignored)
-├── drivers/            # Out-of-tree drivers
-├── dts/                # Device tree bindings
 ├── scripts/            # Utility scripts
-├── tests/              # Twister test suites
 ├── poe.toml            # Task runner configuration
 ├── pyproject.toml      # Python dependencies (uv)
 └── west.yml            # West manifest
-```
-
-## Testing
-
-```shell
-west twister -T tests -v --inline-logs --integration
-
-# Single test
-west twister -p native_sim -s drivers/seesaw/drivers.sensor.seesaw
 ```
 
 ## Notes

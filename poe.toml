@@ -287,11 +287,12 @@ west sdk install --version "$SDK_VER" \
 help = "Install Zephyr SDK toolchains for this project's targets (version read from deps/zephyr/SDK_VERSION)."
 
 [tool.poe.tasks.build]
-cmd = "west build -b ${MY_BOARD} -p always --build-dir builds/${proj} ${proj}"
+cmd = "west build -b ${board} -p always --build-dir builds/${proj} ${proj}"
 args = [
+    { name = "board", required = true, options = ["-b", "--board"], help = "Target board (e.g. robotis_openrb_150)" },
     { name = "proj", positional = true, help = "Application to build (e.g. applications/joystick_controller)" }
 ]
-help = "Build a Zephyr application. Set MY_BOARD in .env or environment."
+help = "Build a Zephyr application. Usage: uv run poe build --board <board> <app-path>"
 
 [tool.poe.tasks.flash]
 cmd = "west flash --build-dir builds/${proj}"
@@ -338,7 +339,7 @@ set -e
 mkdir -p logs
 TAIL_S="${TAIL_S:-5}"
 TAIL_F="${TAIL_F:-50}"
-if uv run west build -b ${MY_BOARD} -p always --build-dir builds/${proj} ${proj} > logs/${proj##*/}-build.log 2>&1; then
+if uv run west build -b ${board} -p always --build-dir builds/${proj} ${proj} > logs/${proj##*/}-build.log 2>&1; then
     echo "Build succeeded"
     tail -$TAIL_S logs/${proj##*/}-build.log
     exit 0
@@ -350,6 +351,7 @@ else
 fi
 """
 args = [
+    { name = "board", required = true, options = ["-b", "--board"], help = "Target board (e.g. robotis_openrb_150)" },
     { name = "proj", positional = true, help = "Application path (e.g. applications/joystick_controller)" }
 ]
-help = "Build with tail-truncated log output. Usage: [TAIL_S=5] [TAIL_F=50] uv run poe agent-build <proj>"
+help = "Build with tail-truncated log output. Usage: [TAIL_S=5] [TAIL_F=50] uv run poe agent-build --board <board> <app-path>"

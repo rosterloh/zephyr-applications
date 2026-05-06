@@ -31,14 +31,14 @@ uv run poe build-force          # force_sensor
 uv run poe build-joystick       # joystick_controller
 uv run poe build-rasprover      # rasprover (sysbuild + MCUboot)
 uv run poe sim-rasprover        # rasprover native_sim
-uv run poe build <app-path>     # generic; needs MY_BOARD in .env or env
+uv run poe build --board <board> <app-path>   # generic; e.g. --board robotis_openrb_150
 uv run poe flash <app-path>     # flash a previously built app
 ```
 
 For agent-driven builds where you want truncated logs (and a full log on disk), use `agent-build`:
 
 ```bash
-uv run poe agent-build applications/motor_controller
+uv run poe agent-build --board robotis_openrb_150 applications/motor_controller
 # → builds with -p always, writes logs/motor_controller-build.log,
 #   prints last 5 lines on success, last 50 on failure.
 # Override with TAIL_S / TAIL_F.
@@ -67,7 +67,6 @@ The west.yml uses `name-allowlist` to clone only the modules these apps need; do
 - `deps/modules/lib/zenoh/` — zenoh-pico, patched by `poe patch-zenoh`.
 - `builds/<app>/` — build outputs (gitignored).
 - `logs/` — `agent-build` log destination.
-- `.env` — selects `MY_BOARD` for the generic `build` task.
 
 ## Formatting
 
