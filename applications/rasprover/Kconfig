@@ -50,23 +50,20 @@ endif # APP_DISPLAY
 menuconfig APP_ZENOH
 	bool "Enable zenoh-pico publisher"
 	select ZENOH_PICO
-	select ZENOH_PICO_LINK_SERIAL
+	select ZENOH_PICO_LINK_TCP
 	select ZENOH_PICO_PUBLICATION
 	select ZENOH_PICO_MULTI_THREAD
 	default y
 
 if APP_ZENOH
 
-config APP_ZENOH_SERIAL_BAUDRATE
-	int "Baud rate for zenoh serial transport (UART1 to host)"
-	default 115200
-
-config APP_ZENOH_UART_DEVICE
-	string "Zephyr device binding name for the zenoh UART"
-	default "uart@3ff50000"
+config APP_ZENOH_LOCATOR
+	string "Zenoh locator for the host router"
+	default "tcp/192.168.1.10:7447"
 	help
-	  Passed to device_get_binding(). For the ROS Driver (ESP32) the
-	  second UART (UART1) is at address 0x3ff50000.
+	  Locator string passed to z_open() as the connect endpoint. Format is
+	  '<protocol>/<host>:<port>'. The host typically runs zenohd configured
+	  with a matching listen endpoint, e.g. `zenohd -l tcp/0.0.0.0:7447`.
 
 config APP_ZENOH_KEY_PREFIX
 	string "Zenoh key expression prefix for all published topics"
@@ -76,6 +73,45 @@ config APP_ZENOH_KEY_PREFIX
 	  by the zenoh-ros2dds bridge to route topics into ROS2. The full key
 	  for the battery state topic will be <prefix>/battery_state, which
 	  maps to the ROS2 topic /<prefix_without_rt>/battery_state.
+
+# Numeric tunables consumed by the generated zenoh-pico/config.h (see
+# poe.toml: patch-zenoh). Defaults match the upstream zenoh-pico root
+# CMakeLists.txt so behaviour matches a stock build.
+config APP_ZENOH_FRAG_MAX_SIZE
+	int "Zenoh: maximum size for fragmented messages (bytes)"
+	default 4096
+
+config APP_ZENOH_BATCH_UNICAST_SIZE
+	int "Zenoh: maximum unicast batch size (bytes)"
+	default 2048
+
+config APP_ZENOH_BATCH_MULTICAST_SIZE
+	int "Zenoh: maximum multicast batch size (bytes)"
+	default 2048
+
+config APP_ZENOH_SOCKET_TIMEOUT_MS
+	int "Zenoh: default socket timeout (ms)"
+	default 100
+
+config APP_ZENOH_TRANSPORT_LEASE_MS
+	int "Zenoh: link lease duration announced to peers (ms)"
+	default 10000
+
+config APP_ZENOH_TRANSPORT_LEASE_EXPIRE_FACTOR
+	int "Zenoh: session lease expire factor"
+	default 3
+
+config APP_ZENOH_RUNTIME_MAX_TASKS
+	int "Zenoh: maximum number of runtime tasks"
+	default 64
+
+config APP_ZENOH_TRANSPORT_ACCEPT_TIMEOUT_MS
+	int "Zenoh: P2P link accept timeout (ms)"
+	default 1000
+
+config APP_ZENOH_TRANSPORT_CONNECT_TIMEOUT_MS
+	int "Zenoh: P2P link connect timeout (ms)"
+	default 10000
 
 endif # APP_ZENOH
 
