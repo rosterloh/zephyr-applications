@@ -22,29 +22,30 @@ If a command needs a sub-shell or background invocation, prefix the inner comman
 
 ## Build apps via `poe`, not bare `west build`
 
-Per-app build dirs live at `builds/<app>/`. The `poe` tasks already encode the right board, build dir, and flags. Use them.
+Per-app build dirs live at `builds/<app>/`. The `app` task takes a bare app name, looks up the per-app default board (and an allowed-board list), and builds. Pass `--board` to override; pass `--sysbuild` for MCUboot integration.
 
 ```bash
-uv run poe build-motor          # motor_controller
-uv run poe build-vision         # embedded_vision
-uv run poe build-force          # force_sensor
-uv run poe build-joystick       # joystick_controller
-uv run poe build-rasprover      # rasprover (sysbuild + MCUboot)
-uv run poe sim-rasprover        # rasprover native_sim
-uv run poe build --board <board> <app-path>   # generic; e.g. --board robotis_openrb_150
-uv run poe flash <app-path>     # flash a previously built app
+uv run poe app motor_controller                       # default: robotis_openrb_150
+uv run poe app joystick_controller                    # default: adafruit_qt_py_esp32s3/esp32s3/procpu
+uv run poe app embedded_vision                        # default: arduino_nicla_vision
+uv run poe app force_sensor                           # default: adafruit_qt_py_esp32c3
+uv run poe app rasprover --sysbuild                   # rasprover hw build (ros_driver/esp32 + MCUboot)
+uv run poe app rasprover --board native_sim/native/64 # rasprover native_sim
+uv run poe flash motor_controller                     # flash a previously built app
 ```
 
-For agent-driven builds where you want truncated logs (and a full log on disk), use `agent-build`:
+A board outside the app's allowed list is rejected — update the `case` in `poe.toml`'s `app` task to add new boards.
+
+For agent-driven builds where you want truncated logs (and a full log on disk), use `agent-build`. It accepts the same args as `app` and writes the full log to `logs/<app>-build.log`:
 
 ```bash
-uv run poe agent-build --board robotis_openrb_150 applications/motor_controller
+uv run poe agent-build motor_controller
 # → builds with -p always, writes logs/motor_controller-build.log,
 #   prints last 5 lines on success, last 50 on failure.
-# Override with TAIL_S / TAIL_F.
+# Override tail counts with TAIL_S / TAIL_F.
 ```
 
-If you must call `west build` directly, always pass `--build-dir builds/<app>` so artifacts don't pollute the repo root.
+If you must call `west build` directly, always pass `--build-dir builds/<app>` so artifacts don't pollute the repo root, and use the bare app name (e.g. `builds/motor_controller`, not `builds/applications/motor_controller`).
 
 `pico_fw` is the exception: it has its own west workspace under `applications/pico_fw/` due to a cyw43 module conflict. Build it from there.
 

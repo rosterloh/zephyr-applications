@@ -20,24 +20,21 @@ uv run poe setup         # west update (deps/) + Zephyr SDK toolchains
 
 ### Building
 
-Use the named shortcuts for common targets:
+Build any app against its default (or an explicitly allowed) board:
 
 ```shell
-uv run poe build-motor      # robotis_openrb_150
-uv run poe build-joystick   # adafruit_qt_py_esp32s3/esp32s3/procpu
-uv run poe build-pico       # rpi_pico/rp2040
+uv run poe app motor_controller                        # default: robotis_openrb_150
+uv run poe app joystick_controller                     # default: adafruit_qt_py_esp32s3
+uv run poe app rasprover --sysbuild                    # rasprover hw build + MCUboot
+uv run poe app rasprover --board native_sim/native/64  # rasprover native_sim
 ```
 
-Or build any app against any board via the generic `build` task:
-
-```shell
-uv run poe build --board robotis_openrb_150 applications/motor_controller
-```
+Each app has an allowed-board list (see the `app` task in `poe.toml`); boards outside it are rejected.
 
 ### Flashing
 
 ```shell
-uv run poe flash applications/motor_controller
+uv run poe flash motor_controller
 ```
 
 ### Available tasks
@@ -51,12 +48,10 @@ uv run poe --help
 | `setup` | First-time workspace setup (west update + SDK install) |
 | `west-update` | Fetch/update all west dependencies into `deps/` |
 | `sdk-install` | Install Zephyr SDK toolchains for this project's targets |
-| `build --board <board> <app>` | Build an app for a given board |
-| `flash <app>` | Flash a previously built app |
-| `build-vision` | Build `embedded_vision` for arduino\_nicla\_vision |
-| `build-force` | Build `force_sensor` for adafruit\_qt\_py\_esp32c3 |
-| `build-joystick` | Build `joystick_controller` for adafruit\_qt\_py\_esp32s3 |
-| `build-motor` | Build `motor_controller` for robotis\_openrb\_150 |
+| `app <name> [--board <b>] [--sysbuild]` | Build an app for its default (or an explicitly allowed) board |
+| `flash <name>` | Flash a previously built app |
+| `agent-build <name> [--board <b>] [--sysbuild]` | `app` with tail-truncated logs written to `logs/` |
+| `run-rasprover-sim` | Run an already-built native_sim rasprover image |
 | `fmt` | Format Python scripts with ruff |
 
 ## Repository layout

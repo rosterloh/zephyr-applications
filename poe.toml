@@ -286,52 +286,50 @@ west sdk install --version "$SDK_VER" \
 """
 help = "Install Zephyr SDK toolchains for this project's targets (version read from deps/zephyr/SDK_VERSION)."
 
-[tool.poe.tasks.build]
-cmd = "west build -b ${board} -p always --build-dir builds/${proj} ${proj}"
+[tool.poe.tasks.app]
+shell = """
+set -e
+case "${app}" in
+    motor_controller)     ALLOWED="robotis_openrb_150"; DEFAULT="robotis_openrb_150" ;;
+    joystick_controller)  ALLOWED="adafruit_qt_py_esp32s3/esp32s3/procpu"; DEFAULT="adafruit_qt_py_esp32s3/esp32s3/procpu" ;;
+    embedded_vision)      ALLOWED="arduino_nicla_vision/stm32h747xx/m7"; DEFAULT="arduino_nicla_vision/stm32h747xx/m7" ;;
+    force_sensor)         ALLOWED="adafruit_qt_py_esp32c3"; DEFAULT="adafruit_qt_py_esp32c3" ;;
+    rasprover)            ALLOWED="ros_driver/esp32/procpu native_sim/native/64"; DEFAULT="ros_driver/esp32/procpu" ;;
+    *) echo "unknown app: ${app}" >&2; exit 2 ;;
+esac
+
+BOARD="${board:-$DEFAULT}"
+if ! printf '%s\\n' $ALLOWED | grep -qx "$BOARD"; then
+    echo "board '$BOARD' not allowed for ${app}" >&2
+    echo "allowed: $ALLOWED" >&2
+    exit 2
+fi
+
+EXTRA=""
+case "${sysbuild}" in true|True|1|yes) EXTRA="--sysbuild" ;; esac
+
+west build -b "$BOARD" -p always $EXTRA --build-dir builds/${app} applications/${app}
+"""
 args = [
-    { name = "board", required = true, options = ["-b", "--board"], help = "Target board (e.g. robotis_openrb_150)" },
-    { name = "proj", positional = true, help = "Application to build (e.g. applications/joystick_controller)" }
+    { name = "app", positional = true, help = "App name (motor_controller, joystick_controller, embedded_vision, force_sensor, rasprover)" },
+    { name = "board", options = ["-b", "--board"], help = "Override target board (must be in app's allowed list)" },
+    { name = "sysbuild", type = "boolean", help = "Build with sysbuild (e.g. for MCUboot integration)" },
 ]
-help = "Build a Zephyr application. Usage: uv run poe build --board <board> <app-path>"
+help = "Build a Zephyr application for its default (or an explicitly allowed) board."
 
 [tool.poe.tasks.flash]
-cmd = "west flash --build-dir builds/${proj}"
+cmd = "west flash --build-dir builds/${app}"
 args = [
-    { name = "proj", positional = true, help = "Application to flash (e.g. applications/joystick_controller)" }
+    { name = "app", positional = true, help = "App name (e.g. motor_controller)" }
 ]
 help = "Flash a previously built application."
 
-[tool.poe.tasks.build-rasprover]
-cmd = "west build -b ros_driver/esp32/procpu -p always --sysbuild --build-dir builds/rasprover applications/rasprover"
-help = "Build rasprover (+ MCUboot) for the Waveshare ROS Driver (ESP32)."
-
-[tool.poe.tasks.sim-rasprover]
-cmd = "west build -b native_sim/native/64 -p always --build-dir builds/rasprover_sim applications/rasprover"
-help = "Build rasprover UI simulator (64-bit native_sim + SDL display)."
-
 [tool.poe.tasks.run-rasprover-sim]
-cmd = "west build -b native_sim/native/64 --build-dir builds/rasprover_sim -t run applications/rasprover"
+cmd = "west build -b native_sim/native/64 --build-dir builds/rasprover -t run applications/rasprover"
 help = "Run an already-built native_sim rasprover image."
-
-[tool.poe.tasks.build-vision]
-cmd = "west build -b arduino_nicla_vision/stm32h747xx/m7 -p always --build-dir builds/embedded_vision applications/embedded_vision"
-help = "Build embedded_vision for arduino_nicla_vision."
-
-[tool.poe.tasks.build-force]
-cmd = "west build -b adafruit_qt_py_esp32c3 -p always --build-dir builds/force_sensor applications/force_sensor"
-help = "Build force_sensor for adafruit_qt_py_esp32c3."
-
-[tool.poe.tasks.build-joystick]
-cmd = "west build -b adafruit_qt_py_esp32s3/esp32s3/procpu -p always --build-dir builds/joystick_controller applications/joystick_controller"
-help = "Build joystick_controller for adafruit_qt_py_esp32s3."
-
-[tool.poe.tasks.build-motor]
-cmd = "west build -b robotis_openrb_150 -p always --build-dir builds/motor_controller applications/motor_controller"
-help = "Build motor_controller for robotis_openrb_150."
 
 # pico_fw requires its own west workspace (see applications/pico_fw/west.yml).
 # It cannot be built from this workspace due to the cyw43 module conflict.
-# [tool.poe.tasks.build-pico]
 
 [tool.poe.tasks.agent-build]
 shell = """
@@ -339,19 +337,25 @@ set -e
 mkdir -p logs
 TAIL_S="${TAIL_S:-5}"
 TAIL_F="${TAIL_F:-50}"
-if uv run west build -b ${board} -p always --build-dir builds/${proj} ${proj} > logs/${proj##*/}-build.log 2>&1; then
+LOG="logs/${app}-build.log"
+
+ARGS=""
+[ -n "${board}" ] && ARGS="$ARGS --board ${board}"
+case "${sysbuild}" in true|True|1|yes) ARGS="$ARGS --sysbuild" ;; esac
+
+if uv run poe app $ARGS ${app} > "$LOG" 2>&1; then
     echo "Build succeeded"
-    tail -$TAIL_S logs/${proj##*/}-build.log
-    exit 0
+    tail -$TAIL_S "$LOG"
 else
     EXIT_CODE=$?
     echo "Build failed (exit code: $EXIT_CODE)"
-    tail -$TAIL_F logs/${proj##*/}-build.log
+    tail -$TAIL_F "$LOG"
     exit $EXIT_CODE
 fi
 """
 args = [
-    { name = "board", required = true, options = ["-b", "--board"], help = "Target board (e.g. robotis_openrb_150)" },
-    { name = "proj", positional = true, help = "Application path (e.g. applications/joystick_controller)" }
+    { name = "app", positional = true, help = "App name (e.g. motor_controller)" },
+    { name = "board", options = ["-b", "--board"], help = "Override target board" },
+    { name = "sysbuild", type = "boolean", help = "Build with sysbuild" },
 ]
-help = "Build with tail-truncated log output. Usage: [TAIL_S=5] [TAIL_F=50] uv run poe agent-build --board <board> <app-path>"
+help = "Build with tail-truncated log output. Usage: [TAIL_S=5] [TAIL_F=50] uv run poe agent-build [--board <board>] [--sysbuild] <app>"

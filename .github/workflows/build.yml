@@ -11,17 +11,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - app: applications/rasprover
-            board: ros_driver/esp32/procpu
+          - app: rasprover
             flags: --sysbuild
-          - app: applications/embedded_vision
-            board: arduino_nicla_vision/stm32h747xx/m7
-          - app: applications/force_sensor
-            board: adafruit_qt_py_esp32c3
-          - app: applications/joystick_controller
-            board: adafruit_qt_py_esp32s3/esp32s3/procpu
-          - app: applications/motor_controller
-            board: robotis_openrb_150
+          - app: embedded_vision
+          - app: force_sensor
+          - app: joystick_controller
+          - app: motor_controller
           # The following apps require modules not in this workspace:
           # bluetooth_proxy_device: needs golioth/pouch
           #   (disabled until pouch fixes board.yml full_name requirement)
@@ -61,10 +56,4 @@ jobs:
         run: uv run poe setup
 
       - name: Build firmware
-        run: |
-          uv run west build \
-            -b ${{ matrix.board }} \
-            -p always \
-            ${{ matrix.flags }} \
-            --build-dir builds/${{ matrix.app }} \
-            ${{ matrix.app }}
+        run: uv run poe app ${{ matrix.app }} ${{ matrix.flags }}
