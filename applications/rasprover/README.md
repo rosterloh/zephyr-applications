@@ -109,19 +109,29 @@ uv run west build -b ros_driver/esp32/procpu -p always --sysbuild \
 
 ## zenoh-pico sensor publishing
 
-The firmware publishes INA219 readings to a zenoh router on the host over **UART1** (the second USB serial port, `/dev/ttyUSB1` on Linux). Messages are CDR-encoded `sensor_msgs/msg/BatteryState`, making them directly consumable by the [zenoh-ros2dds bridge](https://github.com/eclipse-zenoh/zenoh-plugin-ros2dds) with no conversion step.
+The firmware publishes INA219 readings to a zenoh router on the host over **WiFi/TCP**. Messages are CDR-encoded `sensor_msgs/msg/BatteryState`, making them directly consumable by the [zenoh-ros2dds bridge](https://github.com/eclipse-zenoh/zenoh-plugin-ros2dds) with no conversion step.
 
 The zenoh key follows the `rt/<topic>` convention the bridge uses for ROS2 topics. With the default prefix the key is `rt/rasprover/battery_state`, which appears in ROS2 as `/rasprover/battery_state`.
 
-### Wiring
+> Why TCP rather than serial? The upstream `zenoh-pico` west-module Zephyr integration unconditionally accesses `sock->_fd`, a struct field that only exists when at least one socket-based transport is enabled. A serial-only build doesn't compile. See `poe patch-zenoh` for the workspace patches that paper over this.
 
-Connect the ESP32 UART1 TX/RX pins to a USB-serial adapter or directly to the Raspberry Pi UART.
+### WiFi credentials
+
+SSID and PSK are stored at runtime via the Zephyr settings subsystem. Set them once over the shell:
+
+```
+settings set wifi/ssid \"my-network\"
+settings set wifi/psk \"my-password\"
+settings save
+reboot
+```
 
 ### Host setup
 
 ```shell
-# 1. Run a zenoh router listening on the USB serial port
-zenohd -l serial:/dev/ttyUSB1#baudrate=115200
+# 1. Run a zenoh router listening on TCP. The address must match
+#    CONFIG_APP_ZENOH_LOCATOR (default tcp/192.168.1.10:7447).
+zenohd -l tcp/0.0.0.0:7447
 
 # 2. Launch the zenoh-ros2dds bridge on the host ROS2 machine
 ros2 launch zenoh_bridge_ros2dds zenoh_bridge_ros2dds.launch.py
@@ -146,15 +156,28 @@ Fields populated in each message:
 | Kconfig | Default | Description |
 |---------|---------|-------------|
 | `APP_ZENOH` | y | Enable the zenoh publisher |
-| `APP_ZENOH_UART_DEVICE` | `uart@3ff50000` | Zephyr device name for UART1 |
-| `APP_ZENOH_SERIAL_BAUDRATE` | `115200` | Baud rate for the serial transport |
+| `APP_ZENOH_LOCATOR` | `tcp/192.168.1.10:7447` | Locator passed to `z_open()`. Format `<protocol>/<host>:<port>`. |
 | `APP_ZENOH_KEY_PREFIX` | `rt/rasprover` | Key prefix — `rt/` routes topics through the zenoh-ros2dds bridge |
+
+#### Advanced tunables
+
+These feed the auto-generated `zenoh-pico/config.h` (see `poe patch-zenoh`). Defaults match upstream zenoh-pico; only change them if you have a specific reason.
+
+| Kconfig | Default | Maps to |
+|---------|---------|---------|
+| `APP_ZENOH_FRAG_MAX_SIZE` | `4096` | `Z_FRAG_MAX_SIZE` — max fragmented message size (bytes) |
+| `APP_ZENOH_BATCH_UNICAST_SIZE` | `2048` | `Z_BATCH_UNICAST_SIZE` — max unicast batch size (bytes) |
+| `APP_ZENOH_BATCH_MULTICAST_SIZE` | `2048` | `Z_BATCH_MULTICAST_SIZE` — max multicast batch size (bytes) |
+| `APP_ZENOH_SOCKET_TIMEOUT_MS` | `100` | `Z_CONFIG_SOCKET_TIMEOUT` — default socket timeout (ms) |
+| `APP_ZENOH_TRANSPORT_LEASE_MS` | `10000` | `Z_TRANSPORT_LEASE` — link lease announced to peers (ms) |
+| `APP_ZENOH_TRANSPORT_LEASE_EXPIRE_FACTOR` | `3` | `Z_TRANSPORT_LEASE_EXPIRE_FACTOR` |
+| `APP_ZENOH_RUNTIME_MAX_TASKS` | `64` | `Z_RUNTIME_MAX_TASKS` — max tasks in the zenoh-pico runtime |
+| `APP_ZENOH_TRANSPORT_ACCEPT_TIMEOUT_MS` | `1000` | `Z_TRANSPORT_ACCEPT_TIMEOUT` — P2P link accept timeout (ms) |
+| `APP_ZENOH_TRANSPORT_CONNECT_TIMEOUT_MS` | `10000` | `Z_TRANSPORT_CONNECT_TIMEOUT` — P2P link connect timeout (ms) |
 
 ## What it does
 
-On startup the firmware initialises the INA219 current sensor and reads voltage, current, and power every `LOOP_DELAY_S` seconds (default 60). Each reading is logged over the console and published to the zenoh router over UART1.
-
-The SSD1306 display and WiFi stack are present in the build but not yet active — `app_display_init()` and `app_net_connect()` are commented out in `main.c` pending integration work.
+On startup the firmware initialises the INA219 current sensor, brings up WiFi (using credentials from settings), opens a zenoh client session to the configured router, and reads voltage, current, and power every `LOOP_DELAY_S` seconds (default 60). Each reading is logged over the console and published to the zenoh router over TCP.
 
 ## Configuration
 

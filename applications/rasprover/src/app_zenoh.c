@@ -3,12 +3,10 @@ LOG_MODULE_REGISTER(app_zenoh, LOG_LEVEL_INF);
 
 #include <string.h>
 #include <zenoh-pico.h>
-#include <zephyr/device.h>
 #include <zephyr/kernel.h>
 
 #include "app_zenoh.h"
 
-#define ZENOH_CONNECT_FMT  "serial/%s?baudrate=%d"
 #define BATTERY_STATE_KEY  CONFIG_APP_ZENOH_KEY_PREFIX "/battery_state"
 
 /*
@@ -105,22 +103,12 @@ static bool _ready;
 
 bool app_zenoh_init(void)
 {
-	const struct device *uart = device_get_binding(CONFIG_APP_ZENOH_UART_DEVICE);
-
-	if (uart == NULL) {
-		LOG_ERR("zenoh UART '%s' not found", CONFIG_APP_ZENOH_UART_DEVICE);
-		return false;
-	}
-
-	char locator[64];
-	snprintf(locator, sizeof(locator), ZENOH_CONNECT_FMT,
-		 uart->name, CONFIG_APP_ZENOH_SERIAL_BAUDRATE);
-	LOG_INF("zenoh connecting via %s", locator);
+	LOG_INF("zenoh connecting via %s", CONFIG_APP_ZENOH_LOCATOR);
 
 	z_owned_config_t cfg;
 	z_config_default(&cfg);
 	zp_config_insert(z_loan_mut(cfg), Z_CONFIG_MODE_KEY, "client");
-	zp_config_insert(z_loan_mut(cfg), Z_CONFIG_CONNECT_KEY, locator);
+	zp_config_insert(z_loan_mut(cfg), Z_CONFIG_CONNECT_KEY, CONFIG_APP_ZENOH_LOCATOR);
 
 	if (z_open(&_session, z_move(cfg), NULL) < 0) {
 		LOG_ERR("zenoh session open failed");
