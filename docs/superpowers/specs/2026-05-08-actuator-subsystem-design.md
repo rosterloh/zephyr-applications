@@ -25,7 +25,6 @@ The Zephyr PR is too narrow for our hardware (smart servos with rich feedback an
 4. Feedback via callback now, with the vtable shaped so an RTIO `submit` op can be added later without breaking callers.
 5. Subsystem-owned state machine and fault policy; app-overridable.
 6. Shell support from v1 for bring-up.
-7. Stay reasonably aligned with PR #98741 in spirit so an eventual upstream merge is a renaming exercise, not a redesign.
 
 ## Non-goals
 
@@ -583,4 +582,3 @@ Net: ~150 LoC of register-shuffling out of `main.c`, replaced by ~30 LoC of actu
 
 - **Group-level enable barrier.** Should `actuator_group_enable` synchronously wait for all members to reach READY before returning? For Dynamixel this is fast (a single SYNC_WRITE of TORQUE_ENABLE); for FOC it could block on alignment for hundreds of milliseconds. Default v1: synchronous wait with a configurable timeout, returning `-ETIMEDOUT` on fail. Revisit if the FOC backend makes this painful.
 - **Per-motor `torque-constant` vs per-model defaults.** Required-on-DT keeps things explicit but is repetitive when a robot has eight identical XL330-M288s. Possible compromise: include files (`xl330-m288.dtsi`) shipped with the dxl backend. Defer until pain emerges.
-- **Where the DT bindings live for upstreaming.** v1 uses `rosterloh,*` compatibles. If/when PR #98741 lands and we want to track upstream, rename to `zephyr,actuator-*` compatibles. Driver code is unaffected.
