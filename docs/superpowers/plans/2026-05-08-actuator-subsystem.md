@@ -3944,25 +3944,246 @@ git commit -m "drivers/actuator/hbridge: minimal PWM + direction backend"
 **Files:**
 - Modify: `drivers/actuator/hbridge/actuator_hbridge.c`
 
-Adds CAP_POSITION/CAP_VELOCITY when an `encoder` phandle is present, reading from the qdec sensor each worker tick.
+Adds the periodic feedback worker and qdec-based position/velocity reading when `CONFIG_ACTUATOR_HBRIDGE_ENCODER` is enabled and the DT instance has an `encoder` phandle. Velocity is computed from successive position samples and the worker timestamp delta.
 
-- [ ] **Step 1: Add encoder reads**
+- [ ] **Step 1: Replace actuator_hbridge.c with the encoder-aware version**
 
-Wrap the encoder logic in `#ifdef CONFIG_ACTUATOR_HBRIDGE_ENCODER`. Use `sensor_sample_fetch` + `sensor_channel_get(SENSOR_CHAN_ROTATION)` against the qdec phandle. Update `caps` to include `ACTUATOR_CAP_POSITION` when the DT has the property. (Implementation pattern follows Zephyr's qdec sensor sample.)
+`drivers/actuator/hbridge/actuator_hbridge.c`:
 
-For brevity, the full code is not duplicated here — follow Zephyr's `samples/sensor/qdec/` for the read pattern. Update `read_feedback` to populate `position`, `velocity`, and the corresponding `valid_mask` bits.
+```c
+/*
+ * Copyright (c) 2026 Richard Osterloh <richard.osterloh@gmail.com>
+ * SPDX-License-Identifier: Apache-2.0
+ */
 
-- [ ] **Step 2: Build**
+#define DT_DRV_COMPAT rosterloh_actuator_hbridge
+
+#include <math.h>
+#include <zephyr/kernel.h>
+#include <zephyr/device.h>
+#include <zephyr/drivers/pwm.h>
+#include <zephyr/drivers/gpio.h>
+#include <zephyr/drivers/sensor.h>
+#include <zephyr/logging/log.h>
+#include <zephyr/actuator/actuator.h>
+#include "../actuator_internal.h"
+
+LOG_MODULE_REGISTER(actuator_hbridge, CONFIG_ACTUATOR_LOG_LEVEL);
+
+#define HB_CB_POOL CONFIG_ACTUATOR_MAX_CALLBACKS_PER_DEVICE
+
+struct hbridge_data {
+	struct actuator_common_data common;
+	struct actuator_cb_storage cb_storage;
+	struct actuator_cb_node cb_pool[HB_CB_POOL];
+	const struct device *self;
+	struct k_work_delayable feedback_work;
+	float last_position_rad;
+	uint64_t last_timestamp_us;
+	bool position_valid;
+};
+
+struct hbridge_config {
+	struct actuator_cb_offsets cb_offsets;
+	struct pwm_dt_spec pwm;
+	struct gpio_dt_spec dir;
+	const struct device *encoder; /* may be NULL */
+	uint32_t pwm_period_ns;
+	uint32_t update_period_ms;
+	enum actuator_mode default_mode;
+	uint32_t caps;
+};
+
+static int hbridge_set_pwm(const struct hbridge_config *cfg, float duty)
+{
+	if (duty > 1.0f) duty = 1.0f;
+	if (duty < -1.0f) duty = -1.0f;
+	int dir = (duty >= 0.0f) ? 1 : 0;
+	uint32_t pulse_ns = (uint32_t)(fabsf(duty) * (float)cfg->pwm_period_ns);
+	int err = gpio_pin_set_dt(&cfg->dir, dir);
+	if (err) return err;
+	return pwm_set_dt(&cfg->pwm, cfg->pwm_period_ns, pulse_ns);
+}
+
+static int hb_read_feedback(const struct device *dev,
+			    struct actuator_feedback *out)
+{
+	const struct hbridge_config *cfg = dev->config;
+	struct hbridge_data *d = dev->data;
+
+	*out = (struct actuator_feedback){
+		.valid_mask = 0,
+		.timestamp_us = k_uptime_get() * 1000,
+	};
+
+#ifdef CONFIG_ACTUATOR_HBRIDGE_ENCODER
+	if (cfg->encoder != NULL) {
+		struct sensor_value rot;
+		int err = sensor_sample_fetch(cfg->encoder);
+		if (err == 0) {
+			err = sensor_channel_get(cfg->encoder, SENSOR_CHAN_ROTATION, &rot);
+		}
+		if (err == 0) {
+			/* sensor_value: degrees in val1 + microdegrees in val2. */
+			float deg = (float)rot.val1 + (float)rot.val2 * 1e-6f;
+			float rad = deg * (float)M_PI / 180.0f;
+			out->position = rad;
+			out->valid_mask |= ACTUATOR_FB_POSITION;
+
+			if (d->position_valid) {
+				uint64_t dt_us = out->timestamp_us - d->last_timestamp_us;
+				if (dt_us > 0) {
+					out->velocity = (rad - d->last_position_rad) /
+							((float)dt_us * 1e-6f);
+					out->valid_mask |= ACTUATOR_FB_VELOCITY;
+				}
+			}
+			d->last_position_rad = rad;
+			d->last_timestamp_us = out->timestamp_us;
+			d->position_valid = true;
+		}
+	}
+#else
+	ARG_UNUSED(d);
+	ARG_UNUSED(cfg);
+#endif
+	return 0;
+}
+
+static void hb_feedback_work(struct k_work *work)
+{
+	struct k_work_delayable *dw = k_work_delayable_from_work(work);
+	struct hbridge_data *d = CONTAINER_OF(dw, struct hbridge_data, feedback_work);
+	const struct device *dev = d->self;
+	const struct hbridge_config *cfg = dev->config;
+
+	struct actuator_feedback fb;
+	if (hb_read_feedback(dev, &fb) == 0 && fb.valid_mask != 0) {
+		actuator_report_feedback(dev, &fb);
+	}
+	if (d->common.state != ACTUATOR_STATE_DISABLED) {
+		k_work_schedule(&d->feedback_work, K_MSEC(cfg->update_period_ms));
+	}
+}
+
+static int hb_enable(const struct device *dev)
+{
+	struct hbridge_data *d = dev->data;
+	const struct hbridge_config *cfg = dev->config;
+	actuator_report_state(dev, ACTUATOR_SM_EVT_ENABLE, 0);
+	if (cfg->encoder != NULL) {
+		k_work_schedule(&d->feedback_work, K_MSEC(cfg->update_period_ms));
+	}
+	return 0;
+}
+
+static int hb_disable(const struct device *dev)
+{
+	struct hbridge_data *d = dev->data;
+	const struct hbridge_config *cfg = dev->config;
+	(void)pwm_set_dt(&cfg->pwm, cfg->pwm_period_ns, 0);
+	k_work_cancel_delayable(&d->feedback_work);
+	d->position_valid = false;
+	actuator_report_state(dev, ACTUATOR_SM_EVT_DISABLE, 0);
+	return 0;
+}
+
+static int hb_set_setpoint(const struct device *dev, enum actuator_mode mode,
+			   float value)
+{
+	const struct hbridge_config *cfg = dev->config;
+	if (mode != ACTUATOR_MODE_VELOCITY && mode != ACTUATOR_MODE_EFFORT) {
+		return -ENOTSUP;
+	}
+	return hbridge_set_pwm(cfg, value);
+}
+
+static const struct actuator_driver_api hb_api = {
+	.enable = hb_enable,
+	.disable = hb_disable,
+	.set_setpoint = hb_set_setpoint,
+	.read_feedback = hb_read_feedback,
+};
+
+static int hb_init(const struct device *dev)
+{
+	struct hbridge_data *d = dev->data;
+	const struct hbridge_config *cfg = dev->config;
+
+	if (!device_is_ready(cfg->pwm.dev) || !device_is_ready(cfg->dir.port)) {
+		return -ENODEV;
+	}
+	if (cfg->encoder != NULL && !device_is_ready(cfg->encoder)) {
+		LOG_ERR("encoder for %s not ready", dev->name);
+		return -ENODEV;
+	}
+	int err = gpio_pin_configure_dt(&cfg->dir, GPIO_OUTPUT_INACTIVE);
+	if (err) return err;
+
+	d->self = dev;
+	d->common.state = ACTUATOR_STATE_DISABLED;
+	d->common.caps = cfg->caps;
+	d->cb_storage.pool = d->cb_pool;
+	d->cb_storage.pool_n = HB_CB_POOL;
+	sys_slist_init(&d->cb_storage.list);
+	k_work_init_delayable(&d->feedback_work, hb_feedback_work);
+	return 0;
+}
+
+#define HB_HAS_ENCODER(inst) DT_INST_NODE_HAS_PROP(inst, encoder)
+
+#define HB_CAPS(inst)                                                          \
+	(ACTUATOR_CAP_VELOCITY | ACTUATOR_CAP_EFFORT |                          \
+	 (HB_HAS_ENCODER(inst) ? ACTUATOR_CAP_POSITION : 0))
+
+#define HB_ENCODER_DEV(inst)                                                   \
+	COND_CODE_1(HB_HAS_ENCODER(inst),                                       \
+		    (DEVICE_DT_GET(DT_INST_PHANDLE(inst, encoder))),            \
+		    (NULL))
+
+#define HB_DEFINE(inst)                                                        \
+	static struct hbridge_data hb_data_##inst;                              \
+	static const struct hbridge_config hb_config_##inst = {                 \
+		.cb_offsets = {                                                 \
+			.storage_offset = offsetof(struct hbridge_data, cb_storage),\
+		},                                                               \
+		.pwm = PWM_DT_SPEC_INST_GET(inst),                              \
+		.dir = GPIO_DT_SPEC_INST_GET(inst, dir_gpios),                  \
+		.encoder = HB_ENCODER_DEV(inst),                                \
+		.pwm_period_ns = DT_INST_PROP(inst, pwm_period_ns),             \
+		.update_period_ms = DT_INST_PROP(inst, update_period_ms),       \
+		.default_mode = ACTUATOR_MODE_VELOCITY,                         \
+		.caps = HB_CAPS(inst),                                          \
+	};                                                                       \
+	DEVICE_DT_INST_DEFINE(inst, hb_init, NULL, &hb_data_##inst,             \
+			      &hb_config_##inst, POST_KERNEL,                   \
+			      CONFIG_ACTUATOR_INIT_PRIORITY, &hb_api);
+
+DT_INST_FOREACH_STATUS_OKAY(HB_DEFINE)
+```
+
+- [ ] **Step 2: Update test prj.conf and rebuild**
+
+Append to `tests/drivers/actuator/hbridge/prj.conf`:
+
+```
+CONFIG_SENSOR=y
+CONFIG_ACTUATOR_HBRIDGE_ENCODER=y
+```
+
+The build-only test overlay can leave `encoder` unset; the code path is gated on `cfg->encoder != NULL`. If you add a `qdec-emul` (or any sensor-class emul) node and reference it from the motor's `encoder = <&qdec_emul>;`, the encoder branch compiles in. Either form passes a build-only check.
 
 Run: `uv run west twister -p native_sim -T deps/modules/lib/rosterloh-drivers/tests/drivers/actuator/hbridge -i`
 Expected: builds.
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 3: Format and commit**
 
 ```bash
+uv run clang-format -i deps/modules/lib/rosterloh-drivers/drivers/actuator/hbridge/actuator_hbridge.c
 cd deps/modules/lib/rosterloh-drivers
-git add drivers/actuator/hbridge/actuator_hbridge.c
-git commit -m "drivers/actuator/hbridge: optional qdec encoder feedback"
+git add drivers/actuator/hbridge/actuator_hbridge.c \
+        tests/drivers/actuator/hbridge/prj.conf
+git commit -m "drivers/actuator/hbridge: qdec encoder feedback + worker"
 ```
 
 ---
@@ -3970,24 +4191,204 @@ git commit -m "drivers/actuator/hbridge: optional qdec encoder feedback"
 ### Task 28: H-bridge current sense + overcurrent fault
 
 **Files:**
+- Modify: `dts/bindings/actuator/rosterloh,actuator-hbridge.yaml`
 - Modify: `drivers/actuator/hbridge/actuator_hbridge.c`
 
-- [ ] **Step 1: Add ADC-based current measurement**
+ADC reads the voltage across a shunt resistor (`current-sense-mohms`); current = V / R. Effort in N·m derives from current via `torque-constant-mnm-per-a`. Overcurrent triggers `ACTUATOR_FAULT_OVERCURRENT` when |I| exceeds `max-current-ma`.
 
-Wrap in `#ifdef CONFIG_ACTUATOR_HBRIDGE_CURRENT_SENSE`. Each feedback tick: `adc_read_dt` against the io-channel; convert to amps via the sense resistor; convert amps to N·m via `torque-constant-mnm-per-a`; populate `effort` and `valid_mask |= ACTUATOR_FB_EFFORT`. Compare against `max-current-ma` and report `ACTUATOR_FAULT_OVERCURRENT` when exceeded.
+- [ ] **Step 1: Extend the binding**
 
-(Full code omitted — pattern matches Zephyr's `samples/drivers/adc/`.)
+Append to `dts/bindings/actuator/rosterloh,actuator-hbridge.yaml` `properties:` block:
 
-- [ ] **Step 2: Build**
+```yaml
+  current-sense-mohms:
+    type: int
+    description: |
+      Shunt resistor value in milliohms used by the ADC current sense path.
+      Required when io-channels is set and CONFIG_ACTUATOR_HBRIDGE_CURRENT_SENSE
+      is enabled. For an INA-style amp, set this to (R_shunt_mohms / amp_gain).
+```
+
+- [ ] **Step 2: Update `actuator_hbridge.c`**
+
+Add to the includes (top of file):
+
+```c
+#include <stdlib.h>          /* for abs() */
+#include <zephyr/drivers/adc.h>
+```
+
+Replace `struct hbridge_config` with:
+
+```c
+struct hbridge_config {
+	struct actuator_cb_offsets cb_offsets;
+	struct pwm_dt_spec pwm;
+	struct gpio_dt_spec dir;
+	const struct device *encoder; /* may be NULL */
+#ifdef CONFIG_ACTUATOR_HBRIDGE_CURRENT_SENSE
+	struct adc_dt_spec adc;
+	uint32_t current_sense_mohms;
+	int32_t max_current_ma;
+	int32_t torque_const_mnm_per_a;
+	bool has_current_sense;
+#endif
+	uint32_t pwm_period_ns;
+	uint32_t update_period_ms;
+	enum actuator_mode default_mode;
+	uint32_t caps;
+};
+```
+
+In `hb_read_feedback`, append before the final `return 0;`:
+
+```c
+#ifdef CONFIG_ACTUATOR_HBRIDGE_CURRENT_SENSE
+	if (cfg->has_current_sense) {
+		int16_t raw = 0;
+		struct adc_sequence seq = {
+			.buffer = &raw,
+			.buffer_size = sizeof(raw),
+		};
+		int err = adc_sequence_init_dt(&cfg->adc, &seq);
+		if (err == 0) {
+			err = adc_read(cfg->adc.dev, &seq);
+		}
+		int32_t mv = raw;
+		if (err == 0) {
+			err = adc_raw_to_millivolts_dt(&cfg->adc, &mv);
+		}
+		if (err == 0) {
+			/* I_mA = V_mV * 1000 / R_mOhm  (mV/mOhm = A; *1000 -> mA). */
+			int32_t i_ma =
+				(mv * 1000) / (int32_t)cfg->current_sense_mohms;
+
+			if (cfg->torque_const_mnm_per_a > 0) {
+				float amps = (float)i_ma / 1000.0f;
+				out->effort = amps *
+					      (float)cfg->torque_const_mnm_per_a /
+					      1000.0f;
+				out->valid_mask |= ACTUATOR_FB_EFFORT;
+			}
+			if (cfg->max_current_ma > 0 &&
+			    abs(i_ma) > cfg->max_current_ma) {
+				out->fault_flags |= ACTUATOR_FAULT_OVERCURRENT;
+			}
+		}
+	}
+#endif
+```
+
+Replace `hb_enable` with the version that schedules the worker when either feedback source is configured:
+
+```c
+static int hb_enable(const struct device *dev)
+{
+	struct hbridge_data *d = dev->data;
+	const struct hbridge_config *cfg = dev->config;
+	bool need_worker = (cfg->encoder != NULL);
+#ifdef CONFIG_ACTUATOR_HBRIDGE_CURRENT_SENSE
+	need_worker = need_worker || cfg->has_current_sense;
+#endif
+	actuator_report_state(dev, ACTUATOR_SM_EVT_ENABLE, 0);
+	if (need_worker) {
+		k_work_schedule(&d->feedback_work, K_MSEC(cfg->update_period_ms));
+	}
+	return 0;
+}
+```
+
+Add ADC readiness in `hb_init`, just before the final `return 0;`:
+
+```c
+#ifdef CONFIG_ACTUATOR_HBRIDGE_CURRENT_SENSE
+	if (cfg->has_current_sense) {
+		if (!adc_is_ready_dt(&cfg->adc)) {
+			LOG_ERR("ADC for %s not ready", dev->name);
+			return -ENODEV;
+		}
+		err = adc_channel_setup_dt(&cfg->adc);
+		if (err) return err;
+	}
+#endif
+```
+
+Replace `HB_CAPS` with the version that adds EFFORT only when both current sense and the torque constant are present:
+
+```c
+#define HB_HAS_CURRENT_SENSE(inst) DT_INST_NODE_HAS_PROP(inst, io_channels)
+
+#define HB_CAPS(inst)                                                          \
+	(ACTUATOR_CAP_VELOCITY |                                                \
+	 ((HB_HAS_CURRENT_SENSE(inst) &&                                        \
+	   DT_INST_PROP_OR(inst, torque_constant_mnm_per_a, 0) > 0)             \
+		  ? ACTUATOR_CAP_EFFORT                                          \
+		  : 0) |                                                         \
+	 (HB_HAS_ENCODER(inst) ? ACTUATOR_CAP_POSITION : 0))
+```
+
+Add a current-sense init macro and update `HB_DEFINE` to use it:
+
+```c
+#ifdef CONFIG_ACTUATOR_HBRIDGE_CURRENT_SENSE
+#define HB_CURRENT_SENSE_INIT(inst)                                            \
+	.adc = COND_CODE_1(HB_HAS_CURRENT_SENSE(inst),                          \
+			   (ADC_DT_SPEC_INST_GET(inst)),                        \
+			   ({0})),                                              \
+	.current_sense_mohms = DT_INST_PROP_OR(inst, current_sense_mohms, 1),  \
+	.max_current_ma = DT_INST_PROP_OR(inst, max_current_ma, 0),            \
+	.torque_const_mnm_per_a =                                              \
+		DT_INST_PROP_OR(inst, torque_constant_mnm_per_a, 0),           \
+	.has_current_sense = HB_HAS_CURRENT_SENSE(inst),
+#else
+#define HB_CURRENT_SENSE_INIT(inst)
+#endif
+
+#undef HB_DEFINE
+#define HB_DEFINE(inst)                                                        \
+	static struct hbridge_data hb_data_##inst;                              \
+	static const struct hbridge_config hb_config_##inst = {                 \
+		.cb_offsets = {                                                 \
+			.storage_offset = offsetof(struct hbridge_data, cb_storage),\
+		},                                                               \
+		.pwm = PWM_DT_SPEC_INST_GET(inst),                              \
+		.dir = GPIO_DT_SPEC_INST_GET(inst, dir_gpios),                  \
+		.encoder = HB_ENCODER_DEV(inst),                                \
+		HB_CURRENT_SENSE_INIT(inst)                                     \
+		.pwm_period_ns = DT_INST_PROP(inst, pwm_period_ns),             \
+		.update_period_ms = DT_INST_PROP(inst, update_period_ms),       \
+		.default_mode = ACTUATOR_MODE_VELOCITY,                         \
+		.caps = HB_CAPS(inst),                                          \
+	};                                                                       \
+	DEVICE_DT_INST_DEFINE(inst, hb_init, NULL, &hb_data_##inst,             \
+			      &hb_config_##inst, POST_KERNEL,                   \
+			      CONFIG_ACTUATOR_INIT_PRIORITY, &hb_api);
+```
+
+(`#undef HB_DEFINE` is needed because the macro was already defined in Task 27. The `DT_INST_FOREACH_STATUS_OKAY(HB_DEFINE)` line at the bottom of the file remains unchanged and now expands using the new macro definition.)
+
+- [ ] **Step 3: Update test prj.conf and overlay**
+
+Append to `tests/drivers/actuator/hbridge/prj.conf`:
+
+```
+CONFIG_ADC=y
+CONFIG_ACTUATOR_HBRIDGE_CURRENT_SENSE=y
+```
+
+For the build-only test, leave `io-channels` unset on the motor node — `cfg->has_current_sense` is false, the runtime code is dead, and the macro expansion succeeds. If you want to exercise the macro, add an `adc-emul` node to the overlay and set `io-channels = <&adc_emul 0>;` on the motor.
 
 Run: `uv run west twister -p native_sim -T deps/modules/lib/rosterloh-drivers/tests/drivers/actuator/hbridge -i`
 Expected: builds.
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 4: Format and commit**
 
 ```bash
+uv run clang-format -i deps/modules/lib/rosterloh-drivers/drivers/actuator/hbridge/actuator_hbridge.c
 cd deps/modules/lib/rosterloh-drivers
-git add drivers/actuator/hbridge/actuator_hbridge.c
+git add drivers/actuator/hbridge/actuator_hbridge.c \
+        dts/bindings/actuator/rosterloh,actuator-hbridge.yaml \
+        tests/drivers/actuator/hbridge/prj.conf
 git commit -m "drivers/actuator/hbridge: ADC current sense + overcurrent fault"
 ```
 
@@ -4262,7 +4663,7 @@ Gaps fixed: none — every spec section maps to at least one task.
 
 **Placeholder scan:**
 
-The hbridge encoder (T27) and current sense (T28) tasks describe the implementation pattern rather than show full code, which violates the no-placeholders rule for purely-mechanical tasks. The full code follows Zephyr's qdec and ADC sample patterns; the implementing engineer should consult those samples. If a stricter version of this plan is needed, expand T27 and T28 with the explicit sensor_sample_fetch / adc_read_dt sequences. Left as-is here because the hbridge backend has no in-tree consumer in v1 and the build-only test is the verification gate; the tasks are explicit about that.
+T27 and T28 (hbridge encoder + current sense) include full code: sensor_sample_fetch + sensor_channel_get(SENSOR_CHAN_ROTATION) for the encoder path with velocity computed from successive samples; adc_sequence_init_dt + adc_read + adc_raw_to_millivolts_dt for the current-sense path with current = V/R via `current-sense-mohms` and overcurrent against `max-current-ma`. The hbridge backend has no in-tree consumer in v1; verification is via the `build_only` twister target.
 
 **Type consistency:**
 
