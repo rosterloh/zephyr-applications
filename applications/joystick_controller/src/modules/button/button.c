@@ -20,80 +20,84 @@ static struct gpio_callback button_cb_data;
 
 static struct k_work_delayable send_event_work;
 
-#define NEOKEY_NODE DT_NODELABEL(neokey_1x4)
-#if DT_NODE_HAS_STATUS(NEOKEY_NODE, okay)
-#include <drivers/seesaw.h>
+#define NEOKEY_GPIO_NODE DT_NODELABEL(neokey_gpio)
+#define NEOKEY_LED_NODE  DT_NODELABEL(neokey_leds)
+#if DT_NODE_HAS_STATUS(NEOKEY_GPIO_NODE, okay) && DT_NODE_HAS_STATUS(NEOKEY_LED_NODE, okay)
+#include <zephyr/drivers/led_strip.h>
 
-static const struct device *const neokey = DEVICE_DT_GET(NEOKEY_NODE);
-static uint8_t last_buttons = 0;
-struct k_work_delayable neokey_scan_work;
+#define NEOKEY_BTN_A 4
+#define NEOKEY_BTN_B 5
+#define NEOKEY_BTN_C 6
+#define NEOKEY_BTN_D 7
+#define NEOKEY_BTN_MASK                                                                            \
+	(BIT(NEOKEY_BTN_A) | BIT(NEOKEY_BTN_B) | BIT(NEOKEY_BTN_C) | BIT(NEOKEY_BTN_D))
+#define NEOKEY_NUM_LEDS 4
+
+static const struct device *const neokey_gpio = DEVICE_DT_GET(NEOKEY_GPIO_NODE);
+static const struct device *const neokey_leds = DEVICE_DT_GET(NEOKEY_LED_NODE);
+static uint8_t last_buttons;
+static struct k_work_delayable neokey_scan_work;
+static struct led_rgb neokey_pixels[NEOKEY_NUM_LEDS];
+
+static void neokey_set_pixel(int idx, uint8_t r, uint8_t g, uint8_t b)
+{
+	neokey_pixels[idx].r = r;
+	neokey_pixels[idx].g = g;
+	neokey_pixels[idx].b = b;
+}
 
 static void neokey_scan_fn(struct k_work *work)
 {
-	int err;
-	enum sys_events msg;
-	uint32_t buttons = 0;
+	ARG_UNUSED(work);
 
-	err = seesaw_read_digital(neokey, NEOKEY_1X4_BUTTONMASK, &buttons);
-	if (err == 0) {
-		buttons ^= NEOKEY_1X4_BUTTONMASK;
-		buttons &= NEOKEY_1X4_BUTTONMASK;
-		buttons >>= NEOKEY_1X4_BUTTONA;
+	gpio_port_value_t raw;
 
-		uint8_t just_pressed = (buttons ^ last_buttons) & buttons;
-		uint8_t just_released = (buttons ^ last_buttons) & ~buttons;
-		if (just_pressed | just_released) {
-			LOG_DBG("Pressed 0x%x, Released 0x%x", just_pressed, just_released);
-			for (int b = 0; b < 4; b++) {
-				if (just_pressed & BIT(b)) {
-					switch (b) {
-					case 0:
-						seesaw_neopixel_set_colour(neokey, b, 0xFF, 0, 0,
-									   0);
-						break;
+	if (gpio_port_get(neokey_gpio, &raw) != 0) {
+		k_work_reschedule(&neokey_scan_work, K_MSEC(30));
+		return;
+	}
+	/* Active-low: invert and mask. */
+	uint8_t pressed = (uint8_t)((~raw & NEOKEY_BTN_MASK) >> NEOKEY_BTN_A);
+	uint8_t just_pressed = (pressed ^ last_buttons) & pressed;
+	uint8_t just_released = (pressed ^ last_buttons) & ~pressed;
 
-					case 1:
-						seesaw_neopixel_set_colour(neokey, b, 0, 0xFF, 0,
-									   0);
-						break;
-
-					case 2:
-						seesaw_neopixel_set_colour(neokey, b, 0, 0, 0xFF,
-									   0);
-						break;
-
-					case 3:
-						seesaw_neopixel_set_colour(neokey, b, 0xFF, 0, 0xFF,
-									   0);
-						break;
-
-					default:
-						seesaw_neopixel_set_colour(neokey, b, 0, 0, 0, 0);
-						break;
-					}
-
-					msg = BUTTON_A_PRESSED + b;
-					err = zbus_chan_pub(&button_ch, &msg, K_SECONDS(1));
-					if (err) {
-						LOG_ERR("zbus_chan_pub, error: %d", err);
-					}
+	if (just_pressed | just_released) {
+		LOG_DBG("Pressed 0x%x, Released 0x%x", just_pressed, just_released);
+		for (int b = 0; b < NEOKEY_NUM_LEDS; b++) {
+			if (just_pressed & BIT(b)) {
+				switch (b) {
+				case 0:
+					neokey_set_pixel(b, 0xFF, 0x00, 0x00);
+					break;
+				case 1:
+					neokey_set_pixel(b, 0x00, 0xFF, 0x00);
+					break;
+				case 2:
+					neokey_set_pixel(b, 0x00, 0x00, 0xFF);
+					break;
+				case 3:
+					neokey_set_pixel(b, 0xFF, 0x00, 0xFF);
+					break;
+				default:
+					neokey_set_pixel(b, 0x00, 0x00, 0x00);
+					break;
 				}
 
-				if (just_released & BIT(b)) {
-					seesaw_neopixel_set_colour(neokey, b, 0, 0, 0, 0);
-					msg = BUTTON_A_RELEASED + b;
-					err = zbus_chan_pub(&button_ch, &msg, K_SECONDS(1));
-					if (err) {
-						LOG_ERR("zbus_chan_pub, error: %d", err);
-					}
+				enum sys_events msg = SYS_BUTTON_PRESSED;
+				int err = zbus_chan_pub(&button_ch, &msg, K_SECONDS(1));
+
+				if (err) {
+					LOG_ERR("zbus_chan_pub, error: %d", err);
 				}
 			}
-			seesaw_neopixel_show(neokey);
+
+			if (just_released & BIT(b)) {
+				neokey_set_pixel(b, 0x00, 0x00, 0x00);
+			}
 		}
-		last_buttons = buttons;
-	} else {
-		LOG_WRN("Failed to read NeoKey (%d)", err);
+		(void)led_strip_update_rgb(neokey_leds, neokey_pixels, ARRAY_SIZE(neokey_pixels));
 	}
+	last_buttons = pressed;
 	k_work_reschedule(&neokey_scan_work, K_MSEC(30));
 }
 #endif
@@ -157,29 +161,22 @@ static int init(void)
 	LOG_INF("Set up button at %s pin %d", button.port->name, button.pin);
 
 	k_work_init_delayable(&send_event_work, send_event_work_handler);
-#if DT_NODE_HAS_STATUS(NEOKEY_NODE, okay)
-	if (!device_is_ready(neokey)) {
-		LOG_ERR("Error: neokey not ready");
+#if DT_NODE_HAS_STATUS(NEOKEY_GPIO_NODE, okay) && DT_NODE_HAS_STATUS(NEOKEY_LED_NODE, okay)
+	if (!device_is_ready(neokey_gpio) || !device_is_ready(neokey_leds)) {
+		LOG_ERR("Error: neokey devices not ready");
 		return 0;
 	}
 
-	ret = seesaw_write_pin_mode(neokey, NEOKEY_1X4_BUTTONMASK, SEESAW_INPUT_PULLUP);
-	if (ret != 0) {
-		LOG_ERR("Error %d: failed to configure neokey gpios", ret);
-		return 0;
+	for (int pin = NEOKEY_BTN_A; pin <= NEOKEY_BTN_D; pin++) {
+		ret = gpio_pin_configure(neokey_gpio, pin, GPIO_INPUT | GPIO_PULL_UP);
+		if (ret != 0) {
+			LOG_ERR("Error %d: failed to configure neokey pin %d", ret, pin);
+			return 0;
+		}
 	}
-	ret = seesaw_gpio_interrupts(neokey, NEOKEY_1X4_BUTTONMASK, 1);
-	if (ret != 0) {
-		LOG_ERR("Error %d: failed to enable neokey interrupts", ret);
-		return 0;
-	}
-	ret = seesaw_neopixel_setup(neokey, NEO_GRB + NEO_KHZ800, NEOKEY_1X4_KEYS,
-				    NEOKEY_1X4_NEOPIN);
-	ret |= seesaw_neopixel_set_brightness(neokey, 40);
-	if (ret != 0) {
-		LOG_ERR("Error %d: failed to setup neokey leds", ret);
-		return 0;
-	}
+
+	/* Clear all neopixels at startup. */
+	(void)led_strip_update_rgb(neokey_leds, neokey_pixels, ARRAY_SIZE(neokey_pixels));
 
 	k_work_init_delayable(&neokey_scan_work, neokey_scan_fn);
 	k_work_reschedule(&neokey_scan_work, K_NO_WAIT);

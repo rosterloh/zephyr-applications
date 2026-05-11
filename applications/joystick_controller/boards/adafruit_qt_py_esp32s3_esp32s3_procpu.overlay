@@ -1,3 +1,5 @@
+#include <zephyr/dt-bindings/led/led.h>
+
 &led_strip {
 	status = "okay";
 };
@@ -5,10 +7,32 @@
 &i2c1 {
 	clock-frequency = <I2C_BITRATE_FAST>;
 
-	// neokey_1x4: seesaw@30 {
-	// 	compatible = "adafruit,seesaw";
-	// 	status = "okay";
-	// 	reg = <0x30>;
-	// 	read-delay-ms = <100>;
-	// };
+	/* Re-enable when the NeoKey 1x4 (Adafruit PID 4980) is connected.
+	 * Also set CONFIG_MFD_ADAFRUIT_SEESAW=y, CONFIG_GPIO_ADAFRUIT_SEESAW=y,
+	 * CONFIG_LED_STRIP=y, and CONFIG_LED_STRIP_ADAFRUIT_SEESAW=y in prj.conf
+	 * or the board .conf.
+
+	neokey_mfd: seesaw@30 {
+		compatible = "adafruit,seesaw-mfd";
+		status = "okay";
+		reg = <0x30>;
+		read-delay-us = <100000>;
+
+		neokey_gpio: gpio {
+			compatible = "adafruit,seesaw-gpio";
+			gpio-controller;
+			#gpio-cells = <2>;
+			ngpios = <16>;
+		};
+
+		neokey_leds: neopixel {
+			compatible = "adafruit,seesaw-neopixel";
+			chain-length = <4>;
+			color-mapping = <LED_COLOR_ID_GREEN LED_COLOR_ID_RED LED_COLOR_ID_BLUE>;
+			seesaw-pin = <3>;
+			frequency = <800000>;
+		};
+	};
+
+	*/
 };
