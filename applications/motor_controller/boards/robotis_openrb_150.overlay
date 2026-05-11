@@ -47,12 +47,16 @@
 	status = "okay";
 	current-speed = <115200>;
 
-	dynamixel {
+	dxl_bus: dynamixel {
 		status = "okay";
 		compatible = "robotis,dynamixel";
+		#address-cells = <1>;
+		#size-cells = <0>;
 
-		test_motor {
-			id = <1>;
+		motor0: motor@1 {
+			compatible = "rosterloh,actuator-dxl";
+			reg = <1>;
+			default-mode = "position";
 			label = "TEST";
 		};
 	};
