@@ -14,8 +14,9 @@ Everything else — Python, west, and the Zephyr SDK — is managed by the tooli
 ```shell
 git clone https://github.com/rosterloh/zephyr-applications
 cd zephyr-applications
-uv sync                  # create .venv and install all Python tools
-uv run poe setup         # west update (deps/) + Zephyr SDK toolchains
+uv sync                   # create .venv and install all Python tools
+uv run pre-commit install # install pre-commit hooks
+uv run poe setup          # west update (deps/) + Zephyr SDK toolchains
 ```
 
 ### Building
@@ -43,16 +44,16 @@ uv run poe flash motor_controller
 uv run poe --help
 ```
 
-| Task | Description |
-|------|-------------|
-| `setup` | First-time workspace setup (west update + SDK install) |
-| `west-update` | Fetch/update all west dependencies into `deps/` |
-| `sdk-install` | Install Zephyr SDK toolchains for this project's targets |
-| `app <name> [--board <b>] [--sysbuild]` | Build an app for its default (or an explicitly allowed) board |
-| `flash <name>` | Flash a previously built app |
-| `agent-build <name> [--board <b>] [--sysbuild]` | `app` with tail-truncated logs written to `logs/` |
-| `run-rasprover-sim` | Run an already-built native_sim rasprover image |
-| `fmt` | Format Python scripts with ruff |
+| Task                                            | Description                                                   |
+| ----------------------------------------------- | ------------------------------------------------------------- |
+| `setup`                                         | First-time workspace setup (west update + SDK install)        |
+| `west-update`                                   | Fetch/update all west dependencies into `deps/`               |
+| `sdk-install`                                   | Install Zephyr SDK toolchains for this project's targets      |
+| `app <name> [--board <b>] [--sysbuild]`         | Build an app for its default (or an explicitly allowed) board |
+| `flash <name>`                                  | Flash a previously built app                                  |
+| `agent-build <name> [--board <b>] [--sysbuild]` | `app` with tail-truncated logs written to `logs/`             |
+| `run-rasprover-sim`                             | Run an already-built native_sim rasprover image               |
+| `fmt`                                           | Format Python scripts with ruff                               |
 
 ## Repository layout
 

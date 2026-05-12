@@ -9,17 +9,16 @@
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(wifi, LOG_LEVEL_INF);
 
-#define RESET_AFTER_DISCONNECT_AND_EMPTY_SCAN_RESULT \
+#define RESET_AFTER_DISCONNECT_AND_EMPTY_SCAN_RESULT                                               \
 	IS_ENABLED(CONFIG_WIFI_MANAGER_RESET_AFTER_DISCONNECT_AND_EMPTY_SCAN_RESULT)
 
 #define WIFI_MANAGER_MGMT_EVENTS (NET_EVENT_WIFI_CONNECT_RESULT | NET_EVENT_WIFI_DISCONNECT_RESULT)
 
-#define NET_STATE_WIFI_CONNECTED BIT(0)
+#define NET_STATE_WIFI_CONNECTED  BIT(0)
 #define NET_STATE_WIFI_CONNECTING BIT(1)
-#define NET_STATE_IPV4_READY BIT(2)
+#define NET_STATE_IPV4_READY      BIT(2)
 
-enum wifi_state
-{
+enum wifi_state {
 	WIFI_STATE_IDLE,
 	WIFI_STATE_WAITING_FOR_LOWER_UP,
 	WIFI_STATE_CONNECTING,
@@ -30,8 +29,7 @@ enum wifi_state
 	WIFI_STATE_WAIT,
 };
 
-enum wifi_event
-{
+enum wifi_event {
 	WIFI_EVENT_START,
 	WIFI_EVENT_LOWER_UP,
 	WIFI_EVENT_CONNECTED,
@@ -40,21 +38,18 @@ enum wifi_event
 	WIFI_EVENT_IP_DEL,
 };
 
-struct wifi_manager_config
-{
+struct wifi_manager_config {
 	k_thread_stack_t *workq_stack;
 	size_t workq_stack_size;
 	struct k_work_queue_config workq_config;
 };
 
-enum wifi_manager_flags
-{
+enum wifi_manager_flags {
 	WIFI_FLAG_ENABLE,
 	WIFI_FLAG_RECONNECT,
 };
 
-struct wifi_manager_data
-{
+struct wifi_manager_data {
 	struct net_if *iface;
 
 	struct k_work_q workq;
@@ -118,12 +113,12 @@ static const char *wifi_event_str(enum wifi_event event)
 
 #define MAP_OFFSET 1
 
-#define IDL (WIFI_STATE_IDLE + MAP_OFFSET)
-#define LUP (WIFI_STATE_WAITING_FOR_LOWER_UP + MAP_OFFSET)
-#define CON (WIFI_STATE_CONNECTING + MAP_OFFSET)
-#define DIS (WIFI_STATE_DISCONNECTING + MAP_OFFSET)
-#define RDY (WIFI_STATE_READY + MAP_OFFSET)
-#define INV (WIFI_STATE_INVALID + MAP_OFFSET)
+#define IDL      (WIFI_STATE_IDLE + MAP_OFFSET)
+#define LUP      (WIFI_STATE_WAITING_FOR_LOWER_UP + MAP_OFFSET)
+#define CON      (WIFI_STATE_CONNECTING + MAP_OFFSET)
+#define DIS      (WIFI_STATE_DISCONNECTING + MAP_OFFSET)
+#define RDY      (WIFI_STATE_READY + MAP_OFFSET)
+#define INV      (WIFI_STATE_INVALID + MAP_OFFSET)
 #define WAIT(ms) (WIFI_STATE_WAIT + MAP_OFFSET + (ms))
 
 static const int wifi_state_change_map[][WIFI_STATE_LAST + 1] = {
@@ -141,8 +136,7 @@ static size_t wifi_ssid_len = sizeof(CONFIG_APP_WIFI_SSID) - 1;
 static uint8_t wifi_psk[] = CONFIG_APP_WIFI_PSK;
 static size_t wifi_psk_len = sizeof(CONFIG_APP_WIFI_PSK) - 1;
 
-static void wifi_event_notify(struct wifi_manager_data *wifi_mgmt,
-			      enum wifi_event event)
+static void wifi_event_notify(struct wifi_manager_data *wifi_mgmt, enum wifi_event event)
 {
 	wifi_mgmt->event = event;
 	k_work_submit_to_queue(&wifi_mgmt->workq, &wifi_mgmt->event_work);
@@ -156,10 +150,9 @@ static void wifi_event_notify(struct wifi_manager_data *wifi_mgmt,
  * 'net_state_old' is altered to make clear that CONNECTING state is up-to-date
  * with workqueue processing logic.
  */
-static void wifi_mgmt_connecting_update(struct wifi_manager_data *wifi_mgmt,
-					bool connecting)
+static void wifi_mgmt_connecting_update(struct wifi_manager_data *wifi_mgmt, bool connecting)
 {
-	if (connecting)	{
+	if (connecting) {
 		atomic_or(&wifi_mgmt->net_state, NET_STATE_WIFI_CONNECTING);
 		wifi_mgmt->net_state_old |= NET_STATE_WIFI_CONNECTING;
 	} else {
@@ -238,14 +231,10 @@ static void wifi_ready(struct wifi_manager_data *wifi_mgmt)
 	LOG_DBG("ready");
 }
 
-static void wifi_state_change(struct wifi_manager_data *wifi_mgmt,
-			      enum wifi_state state)
+static void wifi_state_change(struct wifi_manager_data *wifi_mgmt, enum wifi_state state)
 {
-	LOG_DBG("state %s (%d) -> %s (%d)",
-		wifi_state_str(wifi_mgmt->state),
-		wifi_mgmt->state,
-		wifi_state_str(state),
-		state);
+	LOG_DBG("state %s (%d) -> %s (%d)", wifi_state_str(wifi_mgmt->state), wifi_mgmt->state,
+		wifi_state_str(state), state);
 
 	wifi_mgmt->state = state;
 }
@@ -278,7 +267,7 @@ static void net_mgmt_event_handle(struct k_work *work)
 
 static void wifi_event_handle(struct k_work *work)
 {
-	struct wifi_manager_data *wifi_mgmt = 
+	struct wifi_manager_data *wifi_mgmt =
 		CONTAINER_OF(work, struct wifi_manager_data, event_work);
 	enum wifi_event event = wifi_mgmt->event;
 	enum wifi_state old_state = wifi_mgmt->state;
@@ -288,30 +277,22 @@ static void wifi_event_handle(struct k_work *work)
 
 	if (map_value - MAP_OFFSET >= WIFI_STATE_WAIT) {
 		new_state = old_state;
-		sleep_msec = map_value - MAP_OFFSET - (int) WIFI_STATE_WAIT;
+		sleep_msec = map_value - MAP_OFFSET - (int)WIFI_STATE_WAIT;
 	}
 
 	if (map_value == 0) {
 		LOG_DBG("Nothing to do according to state map (state %s[%d])",
-			wifi_state_str(old_state),
-			(int) old_state);
+			wifi_state_str(old_state), (int)old_state);
 		return;
 	}
 
-	LOG_DBG("event %s (%d) (%s[%d] -> %s[%d])",
-		wifi_event_str(event),
-		event,
-		wifi_state_str(old_state),
-		(int) old_state,
-		wifi_state_str(new_state),
-		(int) new_state);
+	LOG_DBG("event %s (%d) (%s[%d] -> %s[%d])", wifi_event_str(event), event,
+		wifi_state_str(old_state), (int)old_state, wifi_state_str(new_state),
+		(int)new_state);
 
 	if (new_state == WIFI_STATE_INVALID) {
-		LOG_ERR("Invalid event %s (%d) during state %s (%d)",
-			wifi_event_str(event),
-			event,
-			wifi_state_str(old_state),
-			old_state);
+		LOG_ERR("Invalid event %s (%d) during state %s (%d)", wifi_event_str(event), event,
+			wifi_state_str(old_state), old_state);
 		return;
 	}
 
@@ -348,9 +329,7 @@ static void wifi_event_handle(struct k_work *work)
 	}
 }
 
-static inline atomic_val_t atomic_update(atomic_t *target,
-					 atomic_val_t value,
-					 atomic_val_t mask)
+static inline atomic_val_t atomic_update(atomic_t *target, atomic_val_t value, atomic_val_t mask)
 {
 	atomic_val_t flags;
 
@@ -361,25 +340,22 @@ static inline atomic_val_t atomic_update(atomic_t *target,
 	return flags;
 }
 
-static void ipv4_changed(struct net_mgmt_event_callback *cb,
-			 uint32_t mgmt_event,
+static void ipv4_changed(struct net_mgmt_event_callback *cb, uint32_t mgmt_event,
 			 struct net_if *iface)
 {
 	struct wifi_manager_data *wifi_mgmt =
 		CONTAINER_OF(cb, struct wifi_manager_data, ipv4_mgmt_cb);
 
-	LOG_DBG("ipv4 event: %x", (unsigned int) mgmt_event);
+	LOG_DBG("ipv4 event: %x", (unsigned int)mgmt_event);
 
 	switch (mgmt_event) {
 	case NET_EVENT_IPV4_ADDR_ADD:
 		atomic_or(&wifi_mgmt->net_state, NET_STATE_IPV4_READY);
-		k_work_submit_to_queue(&wifi_mgmt->workq,
-				       &wifi_mgmt->net_mgmt_event_work);
+		k_work_submit_to_queue(&wifi_mgmt->workq, &wifi_mgmt->net_mgmt_event_work);
 		break;
 	case NET_EVENT_IPV4_ADDR_DEL:
 		atomic_and(&wifi_mgmt->net_state, ~NET_STATE_IPV4_READY);
-		k_work_submit_to_queue(&wifi_mgmt->workq,
-				       &wifi_mgmt->net_mgmt_event_work);
+		k_work_submit_to_queue(&wifi_mgmt->workq, &wifi_mgmt->net_mgmt_event_work);
 		break;
 	}
 }
@@ -389,39 +365,32 @@ static inline int wifi_connect_error(const struct wifi_status *status)
 	return status->status;
 }
 
-static void wifi_mgmt_event_handler(struct net_mgmt_event_callback *cb,
-				    uint32_t mgmt_event,
+static void wifi_mgmt_event_handler(struct net_mgmt_event_callback *cb, uint32_t mgmt_event,
 				    struct net_if *iface)
 {
 	struct wifi_manager_data *wifi_mgmt =
 		CONTAINER_OF(cb, struct wifi_manager_data, wifi_mgmt_cb);
 	const struct wifi_status *status = cb->info;
 
-	LOG_DBG("wifi event: %x", (unsigned int) mgmt_event);
+	LOG_DBG("wifi event: %x", (unsigned int)mgmt_event);
 
 	switch (mgmt_event) {
 	case NET_EVENT_WIFI_CONNECT_RESULT:
 		if (wifi_connect_error(status)) {
 			atomic_and(&wifi_mgmt->net_state,
-				   ~(NET_STATE_WIFI_CONNECTED | 
-				     NET_STATE_WIFI_CONNECTING | 
+				   ~(NET_STATE_WIFI_CONNECTED | NET_STATE_WIFI_CONNECTING |
 				     NET_STATE_IPV4_READY));
 		} else {
-			atomic_update(&wifi_mgmt->net_state,
-				      NET_STATE_WIFI_CONNECTED,
-				      (NET_STATE_WIFI_CONNECTED | 
-				       NET_STATE_WIFI_CONNECTING));
+			atomic_update(&wifi_mgmt->net_state, NET_STATE_WIFI_CONNECTED,
+				      (NET_STATE_WIFI_CONNECTED | NET_STATE_WIFI_CONNECTING));
 		}
-		k_work_submit_to_queue(&wifi_mgmt->workq,
-				       &wifi_mgmt->net_mgmt_event_work);
+		k_work_submit_to_queue(&wifi_mgmt->workq, &wifi_mgmt->net_mgmt_event_work);
 		break;
 	case NET_EVENT_WIFI_DISCONNECT_RESULT:
 		atomic_and(&wifi_mgmt->net_state,
-			   ~(NET_STATE_WIFI_CONNECTED | 
-			     NET_STATE_WIFI_CONNECTING | 
+			   ~(NET_STATE_WIFI_CONNECTED | NET_STATE_WIFI_CONNECTING |
 			     NET_STATE_IPV4_READY));
-		k_work_submit_to_queue(&wifi_mgmt->workq,
-				       &wifi_mgmt->net_mgmt_event_work);
+		k_work_submit_to_queue(&wifi_mgmt->workq, &wifi_mgmt->net_mgmt_event_work);
 		break;
 	default:
 		break;
@@ -435,9 +404,10 @@ K_THREAD_STACK_DEFINE(wifi_manager_work_q_stack, CONFIG_APP_WIFI_STACK_SIZE);
 static const struct wifi_manager_config wifi_manager_config = {
 	.workq_stack = wifi_manager_work_q_stack,
 	.workq_stack_size = K_THREAD_STACK_SIZEOF(wifi_manager_work_q_stack),
-	.workq_config = {
-		.name = "wifi_manager",
-	},
+	.workq_config =
+		{
+			.name = "wifi_manager",
+		},
 };
 
 static int wifi_manager_init(void)
@@ -448,21 +418,16 @@ static int wifi_manager_init(void)
 	wifi_mgmt->iface = net_if_get_default();
 	__ASSERT_NO_MSG(wifi_mgmt->iface);
 
-	k_work_queue_start(&wifi_mgmt->workq,
-			   config->workq_stack,
-			   config->workq_stack_size,
-			   CONFIG_APP_WIFI_THREAD_PRIORITY,
-			   &config->workq_config);
+	k_work_queue_start(&wifi_mgmt->workq, config->workq_stack, config->workq_stack_size,
+			   CONFIG_APP_WIFI_THREAD_PRIORITY, &config->workq_config);
 	k_work_init(&wifi_mgmt->event_work, wifi_event_handle);
 	k_work_init(&wifi_mgmt->net_mgmt_event_work, net_mgmt_event_handle);
 
-	net_mgmt_init_event_callback(&wifi_mgmt->ipv4_mgmt_cb,
-				     ipv4_changed,
+	net_mgmt_init_event_callback(&wifi_mgmt->ipv4_mgmt_cb, ipv4_changed,
 				     NET_EVENT_IPV4_ADDR_ADD | NET_EVENT_IPV4_ADDR_DEL);
 	net_mgmt_add_event_callback(&wifi_mgmt->ipv4_mgmt_cb);
 
-	net_mgmt_init_event_callback(&wifi_mgmt->wifi_mgmt_cb,
-				     wifi_mgmt_event_handler,
+	net_mgmt_init_event_callback(&wifi_mgmt->wifi_mgmt_cb, wifi_mgmt_event_handler,
 				     WIFI_MANAGER_MGMT_EVENTS);
 	net_mgmt_add_event_callback(&wifi_mgmt->wifi_mgmt_cb);
 

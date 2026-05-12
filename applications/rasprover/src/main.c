@@ -17,9 +17,7 @@ void wake_system_thread(void)
 
 int main(void)
 {
-	LOG_INF("Firmware version: %s",
-		STRINGIFY(APP_VERSION_MAJOR) "." STRINGIFY(APP_VERSION_MINOR) "."
-		STRINGIFY(APP_PATCHLEVEL));
+	LOG_INF("Firmware version: %s", STRINGIFY(APP_VERSION_MAJOR) "." STRINGIFY(APP_VERSION_MINOR) "." STRINGIFY(APP_PATCHLEVEL));
 
 	_system_thread = k_current_get();
 

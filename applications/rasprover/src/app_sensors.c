@@ -36,8 +36,7 @@ void app_sensors_read_and_stream(void)
 	sensor_channel_get(current_sensor, SENSOR_CHAN_POWER, &power);
 	sensor_channel_get(current_sensor, SENSOR_CHAN_CURRENT, &current);
 
-	publish(sensor_value_to_double(&v_bus),
-		sensor_value_to_double(&current),
+	publish(sensor_value_to_double(&v_bus), sensor_value_to_double(&current),
 		sensor_value_to_double(&power));
 #else
 	/* Simulated data for targets without INA219 (e.g. native_sim) */

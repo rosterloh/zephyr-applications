@@ -29,8 +29,7 @@ static void display_tick_cb(struct k_work *work)
 K_WORK_DEFINE(display_tick_work, display_tick_cb);
 
 #if IS_ENABLED(CONFIG_APP_DISPLAY_WORK_QUEUE_DEDICATED)
-K_THREAD_STACK_DEFINE(display_work_stack_area,
-		      CONFIG_APP_DISPLAY_DEDICATED_THREAD_STACK_SIZE);
+K_THREAD_STACK_DEFINE(display_work_stack_area, CONFIG_APP_DISPLAY_DEDICATED_THREAD_STACK_SIZE);
 static struct k_work_q display_work_q;
 #endif
 
@@ -109,8 +108,7 @@ static lv_obj_t *build_screen(void)
 
 	status_label = lv_label_create(scr);
 	lv_label_set_text(status_label, "Rasprover v" APP_VERSION_STRING);
-	lv_obj_set_style_text_color(status_label,
-				    lv_color_make(0x80, 0x80, 0x80), LV_PART_MAIN);
+	lv_obj_set_style_text_color(status_label, lv_color_make(0x80, 0x80, 0x80), LV_PART_MAIN);
 	lv_obj_align(status_label, LV_ALIGN_BOTTOM_LEFT, 2, 0);
 
 	return scr;

@@ -1,7 +1,7 @@
 [project]
 name = "zephyr-applications"
 version = "1.0.0"
-requires-python = ">=3.13,<4.0"
+requires-python = ">=3.14,<4.0"
 
 [dependency-groups]
 dev = [
@@ -12,6 +12,7 @@ dev = [
   "coverage>=7.13.1",
   "esptool>=5.2.0",
   "gcovr>=6.0",
+  "gitlint-core>=0.19.1",
   "gitpython>=3.1.41",
   "graphviz>=0.21",
   "intelhex>=2.3.0",
@@ -19,6 +20,7 @@ dev = [
   "junit2html>=31.0.5",
   "junitparser>=5.0.0",
   "lxml>=6.1.0",
+  "mypy>=1.17.1",
   "natsort>=8.4.0",
   "numpy>=1.26.4",
   "opencv-python>=4.9.0.80",
@@ -33,6 +35,7 @@ dev = [
   "pygithub>=2.8.1",
   "pykwalify>=1.8.0",
   "pylink-square>=1.7.0",
+  "pylint>=3",
   "pyocd>=0.44.0",
   "pyserial>=3.5",
   "pytest>=9.0.3",
@@ -57,7 +60,7 @@ dev = [
 [tool.ruff]
 line-length = 120
 fix = true
-target-version = "py313"
+target-version = "py314"
 
 [tool.ruff.format]
 docstring-code-format = true
@@ -65,6 +68,27 @@ docstring-code-format = true
 [tool.ruff.lint]
 select = ["E", "F", "W", "B", "Q", "I", "ASYNC", "T20"]
 ignore = ["F401", "E501", "T201"]
+
+[tool.ruff.lint.flake8-tidy-imports]
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"unittest".msg = "Use `pytest` instead."
+
+[tool.mypy]
+strict = true
+python_version = "3.14"
+ignore_missing_imports = true
+
+# from https://blog.wolt.com/engineering/2021/09/30/professional-grade-mypy-configuration/
+disallow_untyped_defs = true
+no_implicit_optional = true
+check_untyped_defs = true
+warn_return_any = true
+show_error_codes = true
+warn_unused_ignores = false
+
+disallow_incomplete_defs = true
+disallow_untyped_decorators = true
+disallow_any_unimported = false
 
 [tool.poe]
 include = "poe.toml"

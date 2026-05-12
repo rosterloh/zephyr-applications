@@ -7,7 +7,7 @@ LOG_MODULE_REGISTER(app_zenoh, LOG_LEVEL_INF);
 
 #include "app_zenoh.h"
 
-#define BATTERY_STATE_KEY  CONFIG_APP_ZENOH_KEY_PREFIX "/battery_state"
+#define BATTERY_STATE_KEY CONFIG_APP_ZENOH_KEY_PREFIX "/battery_state"
 
 /*
  * CDR Little-Endian encoding for sensor_msgs/msg/BatteryState.
@@ -61,12 +61,15 @@ static size_t encode_battery_state(uint8_t *buf, float voltage, float current)
 	memset(buf, 0, CDR_BATTERY_STATE_SIZE);
 
 	/* CDR LE header */
-	buf[0] = 0x00; buf[1] = 0x01; buf[2] = 0x00; buf[3] = 0x00;
+	buf[0] = 0x00;
+	buf[1] = 0x01;
+	buf[2] = 0x00;
+	buf[3] = 0x00;
 
 	/* Header.stamp = {0, 0} — already zero */
 
 	/* Header.frame_id = "" */
-	write_u32_le(buf + 12, 1);    /* length = 1 (null terminator only) */
+	write_u32_le(buf + 12, 1); /* length = 1 (null terminator only) */
 	/* buf[16] = '\0' — already zero; buf[17..19] padding — already zero */
 
 	/* float32 fields */
@@ -135,8 +138,7 @@ bool app_zenoh_init(void)
 		return false;
 	}
 
-	LOG_INF("zenoh ready, publishing sensor_msgs/BatteryState to '%s'",
-		BATTERY_STATE_KEY);
+	LOG_INF("zenoh ready, publishing sensor_msgs/BatteryState to '%s'", BATTERY_STATE_KEY);
 	_ready = true;
 	return true;
 }

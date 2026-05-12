@@ -1,5 +1,5 @@
 default_language_version:
-  python: python3.13
+  python: python3.14
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
@@ -9,7 +9,7 @@ repos:
       - id: check-case-conflict
       - id: debug-statements
       - id: end-of-file-fixer
-        exclude: (.*\.vscode\/.+json|.+code-workspace)
+        exclude: (.*\.vscode\/.+json|.+code-workspace) # vscode </3 LF
       - id: mixed-line-ending
       - id: trailing-whitespace
   - repo: https://github.com/astral-sh/ruff-pre-commit
@@ -18,6 +18,13 @@ repos:
       - id: ruff
       - id: ruff-format
   - repo: https://github.com/astral-sh/uv-pre-commit
-    rev: 0.11.8
+    rev: 0.11.13
     hooks:
       - id: uv-lock
+  - repo: local
+    hooks:
+      - id: clang-format
+        name: clang-format
+        entry: uv run clang-format -i
+        language: system
+        types_or: [c, c++]
