@@ -165,3 +165,8 @@ zephyr_udc0: &usb0 {
 	pinctrl-0 = <&usb_dc_default>;
 	pinctrl-names = "default";
 };
+
+/* Zephyr-shield convention: shields hook &zephyr_i2c. Alias the Arduino
+ * MKR I2C bus so out-of-tree shields apply on OpenRB.
+ */
+zephyr_i2c: &arduino_mkr_i2c {};
