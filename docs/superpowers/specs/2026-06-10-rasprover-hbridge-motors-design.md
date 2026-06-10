@@ -10,24 +10,42 @@ Drive the two H-bridge motor channels on the Waveshare ROS Driver board from the
 `rasprover` app, commanded over zenoh via ROS 2 `geometry_msgs/Twist` (`cmd_vel`),
 with per-wheel encoder feedback wired through the actuator subsystem.
 
-## Hardware facts (from rasprover-rs firmware, `firmware/src/bin/main.rs`)
+## Hardware facts
+
+Cross-checked between rasprover-rs (`firmware/src/bin/main.rs`) and the vendor
+firmware (`waveshareteam/ugv_base_ros`, `ROS_Driver/ugv_config.h` +
+`movtion_module.h`), which is authoritative for this board.
 
 | Signal | GPIO | Notes |
 |---|---|---|
 | Left  AIN1 | 21 | direction input 1 |
 | Left  AIN2 | 17 | direction input 2 |
-| Left  PWMA | 25 | PWM, 20 kHz (LEDC LS ch2 sigmap available) |
+| Left  PWMA | 25 | PWM (LEDC LS ch2 sigmap available) |
 | Right BIN1 | 22 | direction input 1 |
 | Right BIN2 | 23 | direction input 2 |
-| Right PWMB | 26 | PWM, 20 kHz (LEDC LS ch3 sigmap available) |
-| Left encoder | 35 | single-channel, input-only pin, PCNT unit 0 |
-| Right encoder | 16 | single-channel, PCNT unit 1 |
+| Right PWMB | 26 | PWM (LEDC LS ch3 sigmap available) |
+| Left encoder A (AENCA) | 35 | PCNT unit 0 signal input (input-only pin) |
+| Left encoder B (AENCB) | 34 | PCNT unit 0 control input (input-only pin) |
+| Right encoder A (BENCA) | 27 | PCNT unit 1 signal input |
+| Right encoder B (BENCB) | 16 | PCNT unit 1 control input |
 
 - TB6612-style PWM + IN1/IN2 signalling; no STBY pin wired.
-- Encoders are single-channel: **no direction information**. Ticks accumulate on
-  both edges regardless of rotation direction (same limitation as the Rust
-  firmware). 10 µs glitch filter.
-- Channel A = left, channel B = right (matches `motors.set_velocity(left, right)`).
+- **Encoders are quadrature.** The vendor firmware uses
+  `ESP32Encoder::attachHalfQuad(ENCA, ENCB)` — half-quad decode (both edges of
+  ENCA, direction from ENCB). rasprover-rs only wired ENCA per wheel and lost
+  direction; we use both channels, so feedback is signed.
+- **Forward polarity**: vendor positive drive is IN1 low / IN2 high (both
+  channels). Our hbridge driver asserts in1 for forward, so the DT swaps the
+  assignment (`in1-gpios` = AIN2/BIN2 pin, `in2-gpios` = AIN1/BIN1 pin), which
+  preserves brake = both-high / coast = both-low semantics.
+- **PWM**: vendor runs 100 kHz, 8-bit (rasprover-rs used 20 kHz). Use the
+  vendor-proven 100 kHz → `pwm-period-ns = <10000>`.
+- Channel A = left, channel B = right (both firmwares agree).
+- Vendor RaspRover constants (`mainType:01`): wheel Ø 0.080 m,
+  `ONE_CIRCLE_PLUSES` 2100 (half-quad counts/wheel-rev), track width 0.125 m,
+  no direction inversion. Vendor stops motors after a 3 s command heartbeat
+  timeout and runs a speed PID (kp=20, ki=2000, kd=0, ±255) — we stay
+  open-loop this pass.
 
 ## Existing building blocks
 
@@ -58,34 +76,38 @@ upstream driver stays out of the build.
 - **Accumulation:** 16-bit hardware counter with high/low-limit interrupts
   folding overflow into a software `int64` total (same scheme as the Rust
   firmware's `LIMIT = 30_000` handling).
-- **Counting mode:** per-unit channel config; for this board, channel 0 signal
-  input with both edges incrementing, control input unused (Keep).
+- **Counting mode:** per-unit channel config (sig pos/neg edge actions, ctrl
+  high/low actions, as in the upstream child binding). For this board: half-quad
+  decode — channel 0 signal input counts both edges, control input inverts the
+  count direction (matches vendor `attachHalfQuad`), giving **signed** counts.
 - **Filter:** per-unit glitch filter property (APB ticks, as upstream), set to
   ~10 µs for this board.
 - **Scaling:** required per-unit `counts-per-revolution` property converts the
   accumulated count to degrees for `SENSOR_CHAN_ROTATION`
   (val1 = whole degrees, val2 = micro-degrees), which is exactly what
   `actuator_hbridge.c`'s feedback path consumes.
-- **Direction:** none available from single-channel encoders; rotation is
-  monotonically increasing. Documented in the binding.
 
 ## Part 2 — Board DTS additions (rosterloh-drivers, same branch)
 
 In `ros_driver_procpu.dts` / `ros_driver-pinctrl.dtsi`:
 
 - **Pinctrl:** `LEDC_CH2_GPIO25`, `LEDC_CH3_GPIO26` added to the ledc group;
-  new `pcnt_default` group with `PCNT0_CH0SIG_GPIO35`, `PCNT1_CH0SIG_GPIO16`
-  (bias-pull-up, matching the Rust firmware's pull-ups).
+  new `pcnt_default` group with `PCNT0_CH0SIG_GPIO35`, `PCNT0_CH0CTRL_GPIO34`,
+  `PCNT1_CH0SIG_GPIO27`, `PCNT1_CH0CTRL_GPIO16` (bias-pull-up; all four macros
+  verified present in `esp32-pinctrl.h`).
 - **`&ledc0`:** add `channel2@2` (timer 2) and `channel3@3` (timer 3).
 - **`&pcnt`:** `compatible = "rosterloh,esp32-pcnt"`, `status = "okay"`,
-  `unit0@0` (left) and `unit1@1` (right), each with ch0 both-edge increment,
-  10 µs filter, placeholder `counts-per-revolution` (see Calibration).
-- **Two hbridge nodes** (root-level, e.g. under a `motors` container):
-  - `left_motor`: `pwms = <&ledc0 2 …>`, `in1-gpios = <&gpio0 21 …>`,
-    `in2-gpios = <&gpio0 17 …>`, `encoder = <&pcnt_unit0>`.
-  - `right_motor`: `pwms = <&ledc0 3 …>`, `in1-gpios = <&gpio0 22 …>`,
-    `in2-gpios = <&gpio0 23 …>`, `encoder = <&pcnt_unit1>`.
-  - `pwm-period-ns` left at the binding default 50000 (20 kHz). No `stby-gpios`.
+  `unit0@0` (left) and `unit1@1` (right), each in half-quad mode (ch0 sig both
+  edges, ctrl inverts), 10 µs filter, `counts-per-revolution = <2100>` (vendor
+  value for RaspRover).
+- **Two hbridge nodes** (root-level, e.g. under a `motors` container), with
+  in1/in2 swapped relative to the silkscreen names so that the driver's
+  forward = vendor's forward (see polarity note above):
+  - `left_motor`: `pwms = <&ledc0 2 …>`, `in1-gpios = <&gpio0 17 …>` (AIN2),
+    `in2-gpios = <&gpio0 21 …>` (AIN1), `encoder = <&pcnt_unit0>`.
+  - `right_motor`: `pwms = <&ledc0 3 …>`, `in1-gpios = <&gpio0 23 …>` (BIN2),
+    `in2-gpios = <&gpio0 22 …>` (BIN1), `encoder = <&pcnt_unit1>`.
+  - `pwm-period-ns = <10000>` (vendor's 100 kHz). No `stby-gpios`.
 - **Aliases:** `left-motor`, `right-motor`.
 
 ## Part 3 — rasprover app (this repo)
@@ -123,14 +145,15 @@ In `ros_driver_procpu.dts` / `ros_driver-pinctrl.dtsi`:
   cmd_vel → mixing → actuator path builds and runs in simulation
   (`CONFIG_ACTUATOR_FAKE=y` in the board conf; hbridge/encoder configs stay off).
 
-## Calibration defaults (placeholders, flagged for tuning on hardware)
+## Robot constants (vendor values for RaspRover, `mainType:01`)
 
-- `counts-per-revolution`: 1320 (typical GB37-520-class gearmotor, 1:30 gear,
-  both-edge single-channel counting) — set in board DTS, override per robot.
-- `APP_MOTORS_WHEEL_SEPARATION_MM`: 150.
-- `APP_MOTORS_MAX_SPEED_MM_S`: 500.
-
-These only affect feedback scaling and twist mixing, not signal correctness.
+- `counts-per-revolution = <2100>` (half-quad counts per wheel revolution) —
+  board DTS.
+- `APP_MOTORS_WHEEL_SEPARATION_MM`: 125 (vendor `TRACK_WIDTH` 0.125 m).
+- Wheel diameter 80 mm (vendor `WHEEL_D`) — recorded here for the odometry
+  follow-up; not needed by this pass.
+- `APP_MOTORS_MAX_SPEED_MM_S`: 500 (estimate; only scales twist→duty mixing,
+  tune on hardware).
 
 ## Error handling
 
@@ -157,8 +180,9 @@ These only affect feedback scaling and twist mixing, not signal correctness.
 ## Out of scope / follow-ups
 
 - Odometry/JointState publishing from encoder feedback (natural next step; the
-  feedback plumbing this design adds makes it cheap).
-- Closed-loop wheel velocity control (needs direction-aware encoders or
-  commanded-direction sign injection).
+  feedback plumbing this design adds makes it cheap, and quadrature decode
+  makes it signed).
+- Closed-loop wheel velocity control (quadrature feedback makes this feasible;
+  vendor reference gains kp=20, ki=2000, kd=0 on ±255 duty).
 - After the module PR merges: `uv run poe west-update` and drop any temporary
   local module state.
