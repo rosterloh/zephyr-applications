@@ -3,3 +3,19 @@
 	width  = <128>;
 	height = <32>;
 };
+
+/* Fake motors so the cmd_vel -> mixing -> actuator path runs in sim */
+/ {
+	aliases {
+		left-motor = &fake_motor_left;
+		right-motor = &fake_motor_right;
+	};
+
+	fake_motor_left: fake-motor-left {
+		compatible = "rosterloh,actuator-fake";
+	};
+
+	fake_motor_right: fake-motor-right {
+		compatible = "rosterloh,actuator-fake";
+	};
+};
