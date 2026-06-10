@@ -62,6 +62,7 @@ menuconfig APP_ZENOH
 	select ZENOH_PICO
 	select ZENOH_PICO_LINK_TCP
 	select ZENOH_PICO_PUBLICATION
+	select ZENOH_PICO_SUBSCRIPTION
 	select ZENOH_PICO_MULTI_THREAD
 	default y
 

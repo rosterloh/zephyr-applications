@@ -7,7 +7,12 @@ LOG_MODULE_REGISTER(app_zenoh, LOG_LEVEL_INF);
 
 #include "app_zenoh.h"
 
+#ifdef CONFIG_APP_MOTORS
+#include "app_motors.h"
+#endif
+
 #define BATTERY_STATE_KEY CONFIG_APP_ZENOH_KEY_PREFIX "/battery_state"
+#define CMD_VEL_KEY       CONFIG_APP_ZENOH_KEY_PREFIX "/cmd_vel"
 
 /*
  * CDR Little-Endian encoding for sensor_msgs/msg/BatteryState.
@@ -102,7 +107,74 @@ static size_t encode_battery_state(uint8_t *buf, float voltage, float current)
 
 static z_owned_session_t _session;
 static z_owned_publisher_t _pub_battery;
+#ifdef CONFIG_APP_MOTORS
+static z_owned_subscriber_t _sub_cmd_vel;
+#endif
 static bool _ready;
+
+#ifdef CONFIG_APP_MOTORS
+/*
+ * CDR Little-Endian geometry_msgs/msg/Twist as produced by the
+ * zenoh-ros2dds bridge:
+ *
+ *  [0]  CDR LE header  4 B  { 0x00, 0x01, 0x00, 0x00 }
+ *  [4]  linear.x       8 B  f64 LE
+ *  [12] linear.y       8 B  f64 LE
+ *  [20] linear.z       8 B  f64 LE
+ *  [28] angular.x      8 B  f64 LE
+ *  [36] angular.y      8 B  f64 LE
+ *  [44] angular.z      8 B  f64 LE
+ *  Total: 52 bytes
+ */
+#define CDR_TWIST_SIZE 52
+
+static void cmd_vel_handler(z_loaned_sample_t *sample, void *arg)
+{
+	ARG_UNUSED(arg);
+
+	z_owned_slice_t slice;
+
+	if (z_bytes_to_slice(z_sample_payload(sample), &slice) < 0) {
+		return;
+	}
+
+	const uint8_t *buf = z_slice_data(z_loan(slice));
+	size_t len = z_slice_len(z_loan(slice));
+
+	if (len < CDR_TWIST_SIZE || buf[1] != 0x01) {
+		LOG_WRN("cmd_vel: bad payload (len %zu)", len);
+		z_drop(z_move(slice));
+		return;
+	}
+
+	/* ESP32 is little-endian; CDR LE doubles can be memcpy'd directly. */
+	double linear_x, angular_z;
+
+	memcpy(&linear_x, buf + 4, sizeof(linear_x));
+	memcpy(&angular_z, buf + 44, sizeof(angular_z));
+	z_drop(z_move(slice));
+
+	app_motors_cmd_vel((float)linear_x, (float)angular_z);
+}
+
+static bool declare_cmd_vel_subscriber(void)
+{
+	z_view_keyexpr_t ke;
+	z_view_keyexpr_from_str_unchecked(&ke, CMD_VEL_KEY);
+
+	z_owned_closure_sample_t callback;
+	z_closure(&callback, cmd_vel_handler, NULL, NULL);
+
+	if (z_declare_subscriber(z_loan(_session), &_sub_cmd_vel, z_loan(ke), z_move(callback),
+				 NULL) < 0) {
+		LOG_ERR("zenoh subscriber declare failed for '%s'", CMD_VEL_KEY);
+		return false;
+	}
+
+	LOG_INF("zenoh subscribed to '%s'", CMD_VEL_KEY);
+	return true;
+}
+#endif /* CONFIG_APP_MOTORS */
 
 bool app_zenoh_init(void)
 {
@@ -137,6 +209,12 @@ bool app_zenoh_init(void)
 		z_drop(z_move(_session));
 		return false;
 	}
+
+#ifdef CONFIG_APP_MOTORS
+	if (!declare_cmd_vel_subscriber()) {
+		LOG_WRN("continuing without cmd_vel subscription");
+	}
+#endif
 
 	LOG_INF("zenoh ready, publishing sensor_msgs/BatteryState to '%s'", BATTERY_STATE_KEY);
 	_ready = true;
