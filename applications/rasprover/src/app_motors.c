@@ -18,7 +18,10 @@ static void cmd_watchdog_handler(struct k_work *work)
 
 	(void)actuator_set_velocity(left_motor, 0.0f);
 	(void)actuator_set_velocity(right_motor, 0.0f);
-	/* COAST is best-effort: backends without ACTUATOR_CAP_DRIVE_MODE reject it. */
+	/* Must come after set_velocity(0): setpoints reset the stage to NORMAL,
+	 * so COAST last leaves the bridge high-Z. Best-effort: backends without
+	 * ACTUATOR_CAP_DRIVE_MODE reject it.
+	 */
 	(void)actuator_set_drive_mode(left_motor, ACTUATOR_DRIVE_MODE_COAST);
 	(void)actuator_set_drive_mode(right_motor, ACTUATOR_DRIVE_MODE_COAST);
 	LOG_WRN("cmd_vel timeout, motors stopped");
