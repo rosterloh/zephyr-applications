@@ -125,4 +125,34 @@ config APP_ZENOH_TRANSPORT_CONNECT_TIMEOUT_MS
 
 endif # APP_ZENOH
 
+menuconfig APP_MOTORS
+	bool "Enable differential drive motor control"
+	default y
+	depends on ACTUATOR
+	help
+	  Drives the two h-bridge wheel motors from cmd_vel twist commands
+	  with open-loop duty mixing and a stop-on-silence watchdog.
+
+if APP_MOTORS
+
+config APP_MOTORS_WHEEL_SEPARATION_MM
+	int "Wheel separation (track width) in mm"
+	default 125
+	help
+	  Distance between the left and right wheel contact points.
+	  Vendor value for the Waveshare RaspRover is 125 mm.
+
+config APP_MOTORS_MAX_SPEED_MM_S
+	int "Wheel speed mapped to 100% duty, in mm/s"
+	default 500
+	help
+	  Open-loop scaling: a commanded wheel speed of this magnitude
+	  produces full PWM duty. Tune on hardware.
+
+config APP_MOTORS_CMD_TIMEOUT_MS
+	int "Stop motors after this many ms without a cmd_vel"
+	default 500
+
+endif # APP_MOTORS
+
 source "Kconfig.zephyr"
