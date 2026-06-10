@@ -1,5 +1,15 @@
 mainmenu "Application options"
 
+# Workaround for an upstream regression: mcumgr's img_mgmt.c references
+# CONFIG_FLASH_BASE_ADDRESS, but arch/Kconfig only defines that symbol for
+# ARC/ARM/ARM64/X86/RISCV/RX/OPENRISC/ARCH_POSIX — not Xtensa. ESP32 flash
+# partition addresses are zero-based offsets, so 0 is the correct base.
+# Remove once deps/zephyr carries the upstream fix.
+config FLASH_BASE_ADDRESS
+	hex
+	depends on XTENSA
+	default 0
+
 if DNS_RESOLVER
 
 config DNS_SERVER_IP_ADDRESSES
