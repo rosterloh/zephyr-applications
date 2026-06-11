@@ -32,3 +32,12 @@ def test_gimbal_topic_defaults_to_joint_state_command() -> None:
     assert "CONFIG_APP_ZENOH_GIMBAL_CMD_KEY" in app_zenoh
     assert "pan_joint" in (REPO_ROOT / "applications" / "rasprover" / "src" / "app_gimbal.c").read_text()
     assert "tilt_joint" in (REPO_ROOT / "applications" / "rasprover" / "src" / "app_gimbal.c").read_text()
+
+
+def test_gimbal_command_subscriber_is_declared() -> None:
+    app_zenoh = (REPO_ROOT / "applications" / "rasprover" / "src" / "app_zenoh.c").read_text()
+
+    assert "GIMBAL_CMD_KEY" in app_zenoh
+    assert "declare_gimbal_cmd_subscriber" in app_zenoh
+    assert "app_ros_decode_joint_command" in app_zenoh
+    assert "app_gimbal_set_positions" in app_zenoh
