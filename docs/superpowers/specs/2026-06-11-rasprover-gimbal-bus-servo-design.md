@@ -35,10 +35,14 @@ The Waveshare reference firmware under `waveshareteam/ugv_base_ros`,
 | Pan limit | -180..180 deg | Vendor clamps command input |
 | Tilt limit | -30..90 deg for simple/move | Vendor also uses -45..90 in user/steady helpers |
 
-The existing `ros_driver/esp32/procpu` board definition already routes UART1 to
-GPIO19 TX and GPIO18 RX. The same physical UART is currently aliased as
-`zenoh-serial`, but rasprover's zenoh transport is TCP/WiFi, not serial. The
-gimbal design reuses UART1 for the servo bus.
+The existing `ros_driver/esp32/procpu` board definition keeps UART0 on GPIO1 TX
+/ GPIO3 RX and uses it for `zephyr,console` and `zephyr,shell-uart`. That
+remains the serial debug path.
+
+The board also routes UART1 to GPIO19 TX and GPIO18 RX, matching the vendor
+servo bus pins. The current rasprover overlay aliases that UART as
+`zenoh-serial`, but rasprover's zenoh transport is TCP/WiFi, not serial. This
+design removes that stale alias and makes UART1 the gimbal bus-servo UART.
 
 The vendor Arduino code includes `SCServo.h`, calls `SyncWritePosEx()`, reads
 feedback fields via `FeedBack()`, and exposes gimbal commands as JSON IDs
@@ -164,8 +168,10 @@ Conversion rules:
 
 Update the Waveshare `ros_driver/esp32/procpu` board definition:
 
+- Keep UART0 on GPIO1 TX / GPIO3 RX as `zephyr,console` and
+  `zephyr,shell-uart`.
 - Keep UART1 on GPIO19 TX / GPIO18 RX.
-- Add a bus-servo node on UART1.
+- Add a bus-servo node under UART1.
 - Add child actuator nodes for servo IDs 2 and 1.
 - Add aliases:
   - `gimbal-pan = &pan_servo`
@@ -186,6 +192,12 @@ The rasprover hardware config will select/enable:
 - `CONFIG_BUS_SERVO=y`
 - `CONFIG_ACTUATOR_BUS_SERVO=y`
 - UART interrupt support if the bus driver needs it
+
+Update `applications/rasprover/boards/ros_driver_esp32_procpu.overlay`:
+
+- remove the stale `zenoh-serial = &uart1` alias
+- leave zenoh on TCP/WiFi via `CONFIG_APP_ZENOH_LOCATOR`
+- keep the display and INA219 overlay additions unchanged
 
 Native simulation should not instantiate the real bus driver. It will use fake
 actuators for the same `gimbal-pan` and `gimbal-tilt` aliases.
