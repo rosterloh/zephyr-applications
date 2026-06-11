@@ -4,11 +4,13 @@
 	height = <32>;
 };
 
-/* Fake motors so the cmd_vel -> mixing -> actuator path runs in sim */
+/* Fake actuators so motor and gimbal paths run in sim */
 / {
 	aliases {
 		left-motor = &fake_motor_left;
 		right-motor = &fake_motor_right;
+		gimbal-pan = &fake_gimbal_pan;
+		gimbal-tilt = &fake_gimbal_tilt;
 	};
 
 	fake_motor_left: fake-motor-left {
@@ -16,6 +18,14 @@
 	};
 
 	fake_motor_right: fake-motor-right {
+		compatible = "rosterloh,actuator-fake";
+	};
+
+	fake_gimbal_pan: fake-gimbal-pan {
+		compatible = "rosterloh,actuator-fake";
+	};
+
+	fake_gimbal_tilt: fake-gimbal-tilt {
 		compatible = "rosterloh,actuator-fake";
 	};
 };

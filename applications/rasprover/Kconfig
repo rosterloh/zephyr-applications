@@ -206,4 +206,24 @@ config APP_MOTORS_CMD_TIMEOUT_MS
 
 endif # APP_MOTORS
 
+menuconfig APP_GIMBAL
+	bool "Enable gimbal bus-servo control"
+	default y
+	depends on ACTUATOR
+	help
+	  Controls the Waveshare pan/tilt gimbal through two actuator devices.
+
+if APP_GIMBAL
+
+config APP_ZENOH_GIMBAL_CMD_KEY
+	string "Zenoh key expression for gimbal JointState commands"
+	default "rt/rasprover/gimbal_cmd"
+	depends on APP_ZENOH
+	help
+	  Zenoh key used for sensor_msgs/JointState gimbal position commands.
+	  Keep this aligned with APP_ZENOH_KEY_PREFIX unless intentionally
+	  routing the gimbal command topic elsewhere.
+
+endif # APP_GIMBAL
+
 source "Kconfig.zephyr"

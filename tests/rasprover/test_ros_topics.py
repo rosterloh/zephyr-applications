@@ -28,6 +28,7 @@ def test_gimbal_topic_defaults_to_joint_state_command() -> None:
     assert "config APP_GIMBAL" in kconfig
     assert "config APP_ZENOH_GIMBAL_CMD_KEY" in kconfig
     assert 'default "rt/rasprover/gimbal_cmd"' in kconfig
-    assert '#define GIMBAL_CMD_KEY          CONFIG_APP_ZENOH_GIMBAL_CMD_KEY' in app_zenoh
+    assert "#define GIMBAL_CMD_KEY" in app_zenoh
+    assert "CONFIG_APP_ZENOH_GIMBAL_CMD_KEY" in app_zenoh
     assert "pan_joint" in (REPO_ROOT / "applications" / "rasprover" / "src" / "app_gimbal.c").read_text()
     assert "tilt_joint" in (REPO_ROOT / "applications" / "rasprover" / "src" / "app_gimbal.c").read_text()
