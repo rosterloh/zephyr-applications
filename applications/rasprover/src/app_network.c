@@ -558,3 +558,8 @@ void app_net_connect(void)
 	LOG_INF("Waiting to obtain IP address");
 	wait_for_net_event(iface, NET_EVENT_IPV4_ADDR_ADD);
 }
+
+bool app_net_ipv4_ready(void)
+{
+	return (atomic_get(&wifi_manager_data.net_state) & NET_STATE_IPV4_READY) != 0;
+}

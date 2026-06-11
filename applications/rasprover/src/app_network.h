@@ -5,9 +5,15 @@
 
 #if IS_ENABLED(CONFIG_NETWORKING)
 void app_net_connect(void);
+bool app_net_ipv4_ready(void);
 #else
 static inline void app_net_connect(void)
 {
+}
+
+static inline bool app_net_ipv4_ready(void)
+{
+	return false;
 }
 #endif
 

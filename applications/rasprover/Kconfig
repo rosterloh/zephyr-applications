@@ -80,10 +80,11 @@ config APP_ZENOH_KEY_PREFIX
 	string "Zenoh key expression prefix for all published topics"
 	default "rt/rasprover"
 	help
-	  Key prefix for all zenoh publishers. The 'rt/' convention is required
-	  by the zenoh-ros2dds bridge to route topics into ROS2. The full key
-	  for the battery state topic will be <prefix>/battery_state, which
-	  maps to the ROS2 topic /<prefix_without_rt>/battery_state.
+	  Key prefix for Rasprover-local zenoh publishers and subscribers. The
+	  'rt/' convention is required by the zenoh-ros2dds bridge to route
+	  topics into ROS2. The full key for the battery state topic will be
+	  <prefix>/battery_state, which maps to the ROS2 topic
+	  /<prefix_without_rt>/battery_state.
 
 # Numeric tunables consumed by the generated zenoh-pico/config.h (see
 # poe.toml: patch-zenoh). Defaults match the upstream zenoh-pico root
@@ -124,7 +125,56 @@ config APP_ZENOH_TRANSPORT_CONNECT_TIMEOUT_MS
 	int "Zenoh: P2P link connect timeout (ms)"
 	default 10000
 
+config APP_ZENOH_JOINT_STATE_KEY
+	string "Zenoh key expression for JointState"
+	default "rt/joint_states"
+	depends on APP_MOTORS
+	help
+	  Zenoh key used for sensor_msgs/JointState. The default maps through
+	  zenoh-ros2dds to the conventional ROS2 /joint_states topic.
+
+config APP_ZENOH_JOINT_STATE_PUBLISH_HZ
+	int "JointState publish rate in Hz"
+	default 20
+	range 1 100
+	depends on APP_MOTORS
+
 endif # APP_ZENOH
+
+menuconfig APP_TIME_SYNC
+	bool "Enable SNTP time synchronization"
+	default y if APP_ZENOH && NETWORKING
+	depends on NETWORKING
+	depends on NET_SOCKETS
+	depends on DNS_RESOLVER
+	select SNTP
+	select NET_SOCKETS_SERVICE
+	help
+	  Synchronize SYS_CLOCK_REALTIME from an SNTP server. Publishers that
+	  need ROS timestamps can publish immediately with a zero stamp and
+	  switch to realtime stamps after the first successful sync.
+
+if APP_TIME_SYNC
+
+config APP_TIME_SNTP_SERVER
+	string "SNTP server"
+	default "pool.ntp.org"
+
+config APP_TIME_SNTP_TIMEOUT_MS
+	int "SNTP query timeout in milliseconds"
+	default 3000
+
+config APP_TIME_SNTP_RETRY_SEC
+	int "SNTP retry interval after failure, in seconds"
+	default 15
+	range 1 3600
+
+config APP_TIME_SNTP_RESYNC_SEC
+	int "SNTP resync interval after success, in seconds"
+	default 3600
+	range 60 86400
+
+endif # APP_TIME_SYNC
 
 menuconfig APP_MOTORS
 	bool "Enable differential drive motor control"
