@@ -5,112 +5,53 @@ LOG_MODULE_REGISTER(app_zenoh, LOG_LEVEL_INF);
 #include <zenoh-pico.h>
 #include <zephyr/kernel.h>
 
+#include "app_ros_cdr.h"
+#include "app_time.h"
 #include "app_zenoh.h"
 
 #ifdef CONFIG_APP_MOTORS
 #include "app_motors.h"
 #endif
 
-#define BATTERY_STATE_KEY CONFIG_APP_ZENOH_KEY_PREFIX "/battery_state"
-#define CMD_VEL_KEY       CONFIG_APP_ZENOH_KEY_PREFIX "/cmd_vel"
+#define BATTERY_STATE_KEY          CONFIG_APP_ZENOH_KEY_PREFIX "/battery_state"
+#define CDR_BATTERY_STATE_MAX_SIZE 80
 
-/*
- * CDR Little-Endian encoding for sensor_msgs/msg/BatteryState.
- *
- * This is the wire format expected by the zenoh-ros2dds bridge for the ROS2
- * topic that maps to key 'rt/<ns>/battery_state'.
- *
- * Fixed layout (all fields, empty arrays, empty strings):
- *
- *  [0]   CDR LE header          4 B   { 0x00, 0x01, 0x00, 0x00 }
- *  [4]   header.stamp.sec       4 B   u32 LE = 0
- *  [8]   header.stamp.nanosec   4 B   u32 LE = 0
- *  [12]  header.frame_id len    4 B   u32 LE = 1  (empty string: length incl. '\0')
- *  [16]  header.frame_id data   1 B   '\0'
- *  [17]  padding                3 B
- *  [20]  voltage                4 B   f32 LE
- *  [24]  temperature            4 B   f32 LE = NaN
- *  [28]  current                4 B   f32 LE
- *  [32]  charge                 4 B   f32 LE = NaN
- *  [36]  capacity               4 B   f32 LE = NaN
- *  [40]  design_capacity        4 B   f32 LE = NaN
- *  [44]  percentage             4 B   f32 LE = NaN
- *  [48]  power_supply_status    1 B   2 = DISCHARGING
- *  [49]  power_supply_health    1 B   2 = GOOD
- *  [50]  power_supply_technology 1 B  0 = UNKNOWN
- *  [51]  present                1 B   1 = true
- *  [52]  cell_voltage count     4 B   u32 LE = 0
- *  [56]  cell_temperature count 4 B   u32 LE = 0
- *  [60]  location len           4 B   u32 LE = 1
- *  [64]  location data          1 B   '\0'
- *  [65]  padding                3 B
- *  [68]  serial_number len      4 B   u32 LE = 1
- *  [72]  serial_number data     1 B   '\0'
- *  Total: 73 bytes
- */
-#define CDR_BATTERY_STATE_SIZE 73
-
-/* IEEE 754 quiet NaN for float32 (little-endian) */
-static const uint8_t F32_NAN[4] = {0x00, 0x00, 0xC0, 0x7F};
-
-static void write_u32_le(uint8_t *p, uint32_t v)
-{
-	p[0] = (uint8_t)(v);
-	p[1] = (uint8_t)(v >> 8);
-	p[2] = (uint8_t)(v >> 16);
-	p[3] = (uint8_t)(v >> 24);
-}
-
-static size_t encode_battery_state(uint8_t *buf, float voltage, float current)
-{
-	memset(buf, 0, CDR_BATTERY_STATE_SIZE);
-
-	/* CDR LE header */
-	buf[0] = 0x00;
-	buf[1] = 0x01;
-	buf[2] = 0x00;
-	buf[3] = 0x00;
-
-	/* Header.stamp = {0, 0} — already zero */
-
-	/* Header.frame_id = "" */
-	write_u32_le(buf + 12, 1); /* length = 1 (null terminator only) */
-	/* buf[16] = '\0' — already zero; buf[17..19] padding — already zero */
-
-	/* float32 fields */
-	memcpy(buf + 20, &voltage, 4);
-	memcpy(buf + 24, F32_NAN, 4); /* temperature */
-	memcpy(buf + 28, &current, 4);
-	memcpy(buf + 32, F32_NAN, 4); /* charge */
-	memcpy(buf + 36, F32_NAN, 4); /* capacity */
-	memcpy(buf + 40, F32_NAN, 4); /* design_capacity */
-	memcpy(buf + 44, F32_NAN, 4); /* percentage */
-
-	/* status bytes */
-	buf[48] = 2; /* POWER_SUPPLY_STATUS_DISCHARGING */
-	buf[49] = 2; /* POWER_SUPPLY_HEALTH_GOOD */
-	buf[50] = 0; /* POWER_SUPPLY_TECHNOLOGY_UNKNOWN */
-	buf[51] = 1; /* present = true */
-
-	/* cell_voltage / cell_temperature counts = 0 — already zero */
-
-	/* location = "" */
-	write_u32_le(buf + 60, 1);
-	/* buf[64] = '\0'; buf[65..67] padding — already zero */
-
-	/* serial_number = "" */
-	write_u32_le(buf + 68, 1);
-	/* buf[72] = '\0' — already zero */
-
-	return CDR_BATTERY_STATE_SIZE;
-}
+#ifdef CONFIG_APP_MOTORS
+#define CMD_VEL_KEY              CONFIG_APP_ZENOH_KEY_PREFIX "/cmd_vel"
+#define JOINT_STATE_KEY          CONFIG_APP_ZENOH_JOINT_STATE_KEY
+#define CDR_JOINT_STATE_MAX_SIZE 160
+#define JOINT_STATE_INTERVAL_MS  (1000 / CONFIG_APP_ZENOH_JOINT_STATE_PUBLISH_HZ)
+#endif
 
 static z_owned_session_t _session;
 static z_owned_publisher_t _pub_battery;
 #ifdef CONFIG_APP_MOTORS
+static z_owned_publisher_t _pub_joint_state;
 static z_owned_subscriber_t _sub_cmd_vel;
+static struct k_work_delayable _joint_state_work;
+static bool _joint_state_ready;
 #endif
 static bool _ready;
+
+static bool declare_cdr_publisher(z_owned_publisher_t *pub, const char *key)
+{
+	z_view_keyexpr_t ke;
+	z_view_keyexpr_from_str_unchecked(&ke, key);
+
+	z_publisher_options_t pub_opts;
+	z_publisher_options_default(&pub_opts);
+
+	z_owned_encoding_t enc;
+	z_encoding_from_str(&enc, "application/cdr");
+	pub_opts.encoding = z_move(enc);
+
+	if (z_declare_publisher(z_loan(_session), pub, z_loan(ke), &pub_opts) < 0) {
+		LOG_ERR("zenoh publisher declare failed for '%s'", key);
+		return false;
+	}
+
+	return true;
+}
 
 #ifdef CONFIG_APP_MOTORS
 /*
@@ -174,6 +115,44 @@ static bool declare_cmd_vel_subscriber(void)
 	LOG_INF("zenoh subscribed to '%s'", CMD_VEL_KEY);
 	return true;
 }
+
+static void joint_state_work_handler(struct k_work *work)
+{
+	ARG_UNUSED(work);
+
+	if (_ready && _joint_state_ready) {
+		struct app_motors_joint_state motor_joints[APP_MOTORS_JOINT_COUNT];
+
+		if (app_motors_read_joint_state(motor_joints)) {
+			struct app_ros_joint_sample joints[APP_MOTORS_JOINT_COUNT];
+			uint8_t buf[CDR_JOINT_STATE_MAX_SIZE];
+
+			for (size_t i = 0; i < ARRAY_SIZE(joints); i++) {
+				joints[i] = (struct app_ros_joint_sample){
+					.name = motor_joints[i].name,
+					.position = motor_joints[i].position_rad,
+					.velocity = motor_joints[i].velocity_rad_s,
+				};
+			}
+
+			size_t len = app_ros_encode_joint_state(buf, sizeof(buf), app_time_now(),
+								joints, ARRAY_SIZE(joints));
+			if (len == 0) {
+				LOG_WRN("joint_states encode failed");
+			} else {
+				z_owned_bytes_t payload;
+
+				z_bytes_copy_from_buf(&payload, buf, len);
+				if (z_publisher_put(z_loan(_pub_joint_state), z_move(payload),
+						    NULL) < 0) {
+					LOG_WRN("joint_states publish failed");
+				}
+			}
+		}
+	}
+
+	k_work_reschedule(&_joint_state_work, K_MSEC(JOINT_STATE_INTERVAL_MS));
+}
 #endif /* CONFIG_APP_MOTORS */
 
 bool app_zenoh_init(void)
@@ -193,42 +172,53 @@ bool app_zenoh_init(void)
 	zp_start_read_task(z_loan_mut(_session), NULL);
 	zp_start_lease_task(z_loan_mut(_session), NULL);
 
-	/* Declare publisher with CDR encoding for zenoh-ros2dds bridge */
-	z_view_keyexpr_t ke;
-	z_view_keyexpr_from_str_unchecked(&ke, BATTERY_STATE_KEY);
-
-	z_publisher_options_t pub_opts;
-	z_publisher_options_default(&pub_opts);
-
-	z_owned_encoding_t enc;
-	z_encoding_from_str(&enc, "application/cdr");
-	pub_opts.encoding = z_move(enc);
-
-	if (z_declare_publisher(z_loan(_session), &_pub_battery, z_loan(ke), &pub_opts) < 0) {
-		LOG_ERR("zenoh publisher declare failed for '%s'", BATTERY_STATE_KEY);
+	if (!declare_cdr_publisher(&_pub_battery, BATTERY_STATE_KEY)) {
 		z_drop(z_move(_session));
 		return false;
 	}
 
 #ifdef CONFIG_APP_MOTORS
+	if (declare_cdr_publisher(&_pub_joint_state, JOINT_STATE_KEY)) {
+		_joint_state_ready = true;
+		k_work_init_delayable(&_joint_state_work, joint_state_work_handler);
+	} else {
+		LOG_WRN("continuing without joint_states publisher");
+	}
+
 	if (!declare_cmd_vel_subscriber()) {
 		LOG_WRN("continuing without cmd_vel subscription");
 	}
 #endif
 
-	LOG_INF("zenoh ready, publishing sensor_msgs/BatteryState to '%s'", BATTERY_STATE_KEY);
 	_ready = true;
+#ifdef CONFIG_APP_MOTORS
+	if (_joint_state_ready) {
+		k_work_schedule(&_joint_state_work, K_NO_WAIT);
+	}
+	LOG_INF("zenoh ready, publishing BatteryState to '%s' and JointState to '%s'",
+		BATTERY_STATE_KEY, JOINT_STATE_KEY);
+#else
+	LOG_INF("zenoh ready, publishing BatteryState to '%s'", BATTERY_STATE_KEY);
+#endif
 	return true;
 }
 
 void app_zenoh_publish_power(double voltage, double current, double power)
 {
+	ARG_UNUSED(power);
+
 	if (!_ready) {
 		return;
 	}
 
-	uint8_t buf[CDR_BATTERY_STATE_SIZE];
-	size_t len = encode_battery_state(buf, (float)voltage, (float)current);
+	uint8_t buf[CDR_BATTERY_STATE_MAX_SIZE];
+	size_t len = app_ros_encode_battery_state(buf, sizeof(buf), app_time_now(), (float)voltage,
+						  (float)current);
+
+	if (len == 0) {
+		LOG_WRN("battery_state encode failed");
+		return;
+	}
 
 	z_owned_bytes_t payload;
 	z_bytes_copy_from_buf(&payload, buf, len);

@@ -6,6 +6,7 @@ LOG_MODULE_REGISTER(main, LOG_LEVEL_DBG);
 #include "app_network.h"
 #include "app_sensors.h"
 #include "app_settings.h"
+#include "app_time.h"
 #include "app_zenoh.h"
 #include <zephyr/kernel.h>
 
@@ -27,6 +28,7 @@ int main(void)
 	app_motors_init();
 #endif
 	app_net_connect();
+	app_time_start();
 	app_zenoh_init();
 
 #ifdef CONFIG_APP_DISPLAY

@@ -107,11 +107,18 @@ uv run west build -b ros_driver/esp32/procpu -p always --sysbuild \
   -- -DEXTRA_CONF_FILE=debug.conf
 ```
 
-## zenoh-pico sensor publishing
+## zenoh-pico ROS publishing
 
-The firmware publishes INA219 readings to a zenoh router on the host over **WiFi/TCP**. Messages are CDR-encoded `sensor_msgs/msg/BatteryState`, making them directly consumable by the [zenoh-ros2dds bridge](https://github.com/eclipse-zenoh/zenoh-plugin-ros2dds) with no conversion step.
+The firmware publishes INA219 readings and wheel feedback to a zenoh router on the host over **WiFi/TCP**. Messages are CDR-encoded ROS 2 messages, making them directly consumable by the [zenoh-ros2dds bridge](https://github.com/eclipse-zenoh/zenoh-plugin-ros2dds) with no conversion step.
 
-The zenoh key follows the `rt/<topic>` convention the bridge uses for ROS2 topics. With the default prefix the key is `rt/rasprover/battery_state`, which appears in ROS2 as `/rasprover/battery_state`.
+The zenoh key follows the `rt/<topic>` convention the bridge uses for ROS2 topics. With the default prefix the firmware publishes:
+
+| Zenoh key | ROS 2 topic | Message |
+|-----------|-------------|---------|
+| `rt/rasprover/battery_state` | `/rasprover/battery_state` | `sensor_msgs/msg/BatteryState` |
+| `rt/joint_states` | `/joint_states` | `sensor_msgs/msg/JointState` |
+
+Message headers publish immediately with a zero timestamp until SNTP sets `SYS_CLOCK_REALTIME`; after sync, header stamps use realtime.
 
 > Why TCP rather than serial? The upstream `zenoh-pico` west-module Zephyr integration unconditionally accesses `sock->_fd`, a struct field that only exists when at least one socket-based transport is enabled. A serial-only build doesn't compile. See `poe patch-zenoh` for the workspace patches that paper over this.
 
@@ -136,11 +143,12 @@ zenohd -l tcp/0.0.0.0:7447
 # 2. Launch the zenoh-ros2dds bridge on the host ROS2 machine
 ros2 launch zenoh_bridge_ros2dds zenoh_bridge_ros2dds.launch.py
 
-# 3. The topic is now visible in ROS2
+# 3. The topics are now visible in ROS2
 ros2 topic echo /rasprover/battery_state sensor_msgs/msg/BatteryState
+ros2 topic echo /joint_states sensor_msgs/msg/JointState
 ```
 
-Fields populated in each message:
+Fields populated in each BatteryState message:
 
 | Field | Source |
 |-------|--------|
@@ -151,13 +159,28 @@ Fields populated in each message:
 | `present` | `true` |
 | all others | `NaN` / 0 / empty |
 
+Fields populated in each JointState message:
+
+| Field | Source |
+|-------|--------|
+| `name` | `left_wheel_joint`, `right_wheel_joint` |
+| `position` | actuator feedback position (rad) |
+| `velocity` | actuator feedback velocity (rad/s), or 0 before velocity feedback is valid |
+| `effort` | empty |
+
 ### Configuration
 
 | Kconfig | Default | Description |
 |---------|---------|-------------|
 | `APP_ZENOH` | y | Enable the zenoh publisher |
 | `APP_ZENOH_LOCATOR` | `tcp/192.168.1.10:7447` | Locator passed to `z_open()`. Format `<protocol>/<host>:<port>`. |
-| `APP_ZENOH_KEY_PREFIX` | `rt/rasprover` | Key prefix — `rt/` routes topics through the zenoh-ros2dds bridge |
+| `APP_ZENOH_KEY_PREFIX` | `rt/rasprover` | Key prefix for Rasprover-local topics; `rt/` routes topics through the zenoh-ros2dds bridge |
+| `APP_ZENOH_JOINT_STATE_KEY` | `rt/joint_states` | JointState key, mapped to ROS 2 `/joint_states` by default |
+| `APP_ZENOH_JOINT_STATE_PUBLISH_HZ` | `20` | JointState publish rate |
+| `APP_TIME_SYNC` | y | Enable SNTP synchronization for ROS header timestamps |
+| `APP_TIME_SNTP_SERVER` | `pool.ntp.org` | SNTP server used for realtime clock sync |
+| `APP_TIME_SNTP_RETRY_SEC` | `15` | Retry interval after a failed SNTP sync |
+| `APP_TIME_SNTP_RESYNC_SEC` | `3600` | Resync interval after a successful SNTP sync |
 
 #### Advanced tunables
 

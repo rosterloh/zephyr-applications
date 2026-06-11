@@ -12,6 +12,23 @@ static const struct device *const right_motor = DEVICE_DT_GET(DT_ALIAS(right_mot
 static struct k_work_delayable cmd_watchdog;
 static bool ready;
 
+static bool read_joint(const struct device *motor, const char *name,
+		       struct app_motors_joint_state *joint)
+{
+	struct actuator_feedback fb;
+
+	if (actuator_read_feedback(motor, &fb) != 0 || !(fb.valid_mask & ACTUATOR_FB_POSITION)) {
+		return false;
+	}
+
+	*joint = (struct app_motors_joint_state){
+		.name = name,
+		.position_rad = fb.position,
+		.velocity_rad_s = (fb.valid_mask & ACTUATOR_FB_VELOCITY) ? fb.velocity : 0.0,
+	};
+	return true;
+}
+
 static void cmd_watchdog_handler(struct k_work *work)
 {
 	ARG_UNUSED(work);
@@ -63,4 +80,14 @@ void app_motors_cmd_vel(float linear_x, float angular_z)
 	(void)actuator_set_velocity(right_motor, CLAMP(v_right / max_speed_m_s, -1.0f, 1.0f));
 
 	k_work_reschedule(&cmd_watchdog, K_MSEC(CONFIG_APP_MOTORS_CMD_TIMEOUT_MS));
+}
+
+bool app_motors_read_joint_state(struct app_motors_joint_state joints[APP_MOTORS_JOINT_COUNT])
+{
+	if (!ready || joints == NULL) {
+		return false;
+	}
+
+	return read_joint(left_motor, "left_wheel_joint", &joints[0]) &&
+	       read_joint(right_motor, "right_wheel_joint", &joints[1]);
 }
