@@ -27,3 +27,5 @@ __pycache__/
 
 # misc
 *.pdf
+
+.embedder
