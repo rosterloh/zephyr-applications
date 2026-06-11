@@ -32,6 +32,27 @@ def _compile_and_run(tmp_path: Path, source: str) -> bytes:
     return subprocess.check_output([exe])
 
 
+def _joint_state_payload(names: list[str], positions: list[float]) -> bytes:
+    payload = bytearray(b"\x00\x01\x00\x00")
+    payload += struct.pack("<II", 0, 0)
+    payload += struct.pack("<I", 1)
+    payload += b"\x00\x00\x00\x00"
+    payload += struct.pack("<I", len(names))
+    for name in names:
+        encoded = name.encode() + b"\x00"
+        payload += struct.pack("<I", len(encoded))
+        payload += encoded
+        while (len(payload) - 4) % 4:
+            payload += b"\x00"
+    payload += struct.pack("<I", len(positions))
+    while (len(payload) - 4) % 8:
+        payload += b"\x00"
+    payload += struct.pack("<" + "d" * len(positions), *positions)
+    payload += struct.pack("<I", 0)
+    payload += struct.pack("<I", 0)
+    return bytes(payload)
+
+
 def test_joint_state_encoder_publishes_zero_stamp_before_time_sync(tmp_path: Path) -> None:
     payload = _compile_and_run(
         tmp_path,
@@ -86,3 +107,45 @@ def test_joint_state_encoder_publishes_zero_stamp_before_time_sync(tmp_path: Pat
     assert payload[96:100] == b"\x00\x00\x00\x00"
     assert struct.unpack_from("<dd", payload, 100) == (-0.5, 0.75)
     assert struct.unpack_from("<I", payload, 116) == (0,)
+
+
+def test_joint_state_decoder_extracts_named_gimbal_positions(tmp_path: Path) -> None:
+    payload = _joint_state_payload(["tilt_joint", "pan_joint"], [0.25, -0.5])
+    source = f"""
+    #include "app_ros_cdr.h"
+    #include <stdint.h>
+    #include <stdio.h>
+
+    static const uint8_t payload[] = {{{", ".join(str(b) for b in payload)}}};
+
+    int main(void)
+    {{
+        struct app_ros_joint_command cmd;
+        if (!app_ros_decode_joint_command(payload, sizeof(payload), &cmd)) {{
+            return 1;
+        }}
+        printf("%d %.3f %.3f\\n", cmd.has_pan && cmd.has_tilt, cmd.pan_position, cmd.tilt_position);
+        return 0;
+    }}
+    """
+
+    output = _compile_and_run(tmp_path, source)
+    assert output == b"1 -0.500 0.250\n"
+
+
+def test_joint_state_decoder_rejects_missing_tilt(tmp_path: Path) -> None:
+    payload = _joint_state_payload(["pan_joint"], [0.0])
+    source = f"""
+    #include "app_ros_cdr.h"
+    #include <stdint.h>
+
+    static const uint8_t payload[] = {{{", ".join(str(b) for b in payload)}}};
+
+    int main(void)
+    {{
+        struct app_ros_joint_command cmd;
+        return app_ros_decode_joint_command(payload, sizeof(payload), &cmd) ? 1 : 0;
+    }}
+    """
+
+    _compile_and_run(tmp_path, source)
