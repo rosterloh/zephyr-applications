@@ -9,6 +9,7 @@ Firmware for the [Waveshare RaspRover](https://www.waveshare.com/wiki/RaspRover)
 | MCU | ESP32 (Xtensa LX6, 240 MHz) | — |
 | Current/power monitor | INA219 | I2C @ 0x42 |
 | OLED display | SSD1306 128×32 | I2C @ 0x3C |
+| Pan/tilt gimbal | Waveshare bus servos | UART1 @ GPIO19 TX / GPIO18 RX |
 
 Board: `ros_driver/esp32/procpu` (defined in [rosterloh-drivers](https://github.com/rosterloh/zephyr-drivers))
 
@@ -107,9 +108,9 @@ uv run west build -b ros_driver/esp32/procpu -p always --sysbuild \
   -- -DEXTRA_CONF_FILE=debug.conf
 ```
 
-## zenoh-pico ROS publishing
+## zenoh-pico ROS bridge
 
-The firmware publishes INA219 readings and wheel feedback to a zenoh router on the host over **WiFi/TCP**. Messages are CDR-encoded ROS 2 messages, making them directly consumable by the [zenoh-ros2dds bridge](https://github.com/eclipse-zenoh/zenoh-plugin-ros2dds) with no conversion step.
+The firmware publishes INA219 readings and joint feedback to a zenoh router on the host over **WiFi/TCP**. It also subscribes to gimbal position commands. Messages are CDR-encoded ROS 2 messages, making them directly consumable by the [zenoh-ros2dds bridge](https://github.com/eclipse-zenoh/zenoh-plugin-ros2dds) with no conversion step.
 
 The zenoh key follows the `rt/<topic>` convention the bridge uses for ROS2 topics. With the default prefix the firmware publishes:
 
@@ -117,6 +118,7 @@ The zenoh key follows the `rt/<topic>` convention the bridge uses for ROS2 topic
 |-----------|-------------|---------|
 | `rt/rasprover/battery_state` | `/rasprover/battery_state` | `sensor_msgs/msg/BatteryState` |
 | `rt/joint_states` | `/joint_states` | `sensor_msgs/msg/JointState` |
+| `rt/rasprover/gimbal_cmd` | `/rasprover/gimbal_cmd` | `sensor_msgs/msg/JointState` |
 
 Message headers publish immediately with a zero timestamp until SNTP sets `SYS_CLOCK_REALTIME`; after sync, header stamps use realtime.
 
@@ -146,6 +148,9 @@ ros2 launch zenoh_bridge_ros2dds zenoh_bridge_ros2dds.launch.py
 # 3. The topics are now visible in ROS2
 ros2 topic echo /rasprover/battery_state sensor_msgs/msg/BatteryState
 ros2 topic echo /joint_states sensor_msgs/msg/JointState
+
+ros2 topic pub /rasprover/gimbal_cmd sensor_msgs/msg/JointState \
+  "{name: ['pan_joint', 'tilt_joint'], position: [0.0, 0.0]}"
 ```
 
 Fields populated in each BatteryState message:
@@ -163,7 +168,7 @@ Fields populated in each JointState message:
 
 | Field | Source |
 |-------|--------|
-| `name` | `left_wheel_joint`, `right_wheel_joint` |
+| `name` | `left_wheel_joint`, `right_wheel_joint`, `pan_joint`, `tilt_joint` |
 | `position` | actuator feedback position (rad) |
 | `velocity` | actuator feedback velocity (rad/s), or 0 before velocity feedback is valid |
 | `effort` | empty |
@@ -177,6 +182,8 @@ Fields populated in each JointState message:
 | `APP_ZENOH_KEY_PREFIX` | `rt/rasprover` | Key prefix for Rasprover-local topics; `rt/` routes topics through the zenoh-ros2dds bridge |
 | `APP_ZENOH_JOINT_STATE_KEY` | `rt/joint_states` | JointState key, mapped to ROS 2 `/joint_states` by default |
 | `APP_ZENOH_JOINT_STATE_PUBLISH_HZ` | `20` | JointState publish rate |
+| `APP_GIMBAL` | y | Enable pan/tilt gimbal actuator control |
+| `APP_ZENOH_GIMBAL_CMD_KEY` | `rt/rasprover/gimbal_cmd` | JointState command key for pan/tilt position setpoints |
 | `APP_TIME_SYNC` | y | Enable SNTP synchronization for ROS header timestamps |
 | `APP_TIME_SNTP_SERVER` | `pool.ntp.org` | SNTP server used for realtime clock sync |
 | `APP_TIME_SNTP_RETRY_SEC` | `15` | Retry interval after a failed SNTP sync |
