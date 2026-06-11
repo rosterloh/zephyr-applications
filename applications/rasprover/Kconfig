@@ -1,5 +1,15 @@
 mainmenu "Application options"
 
+# Workaround for an upstream regression: mcumgr's img_mgmt.c references
+# CONFIG_FLASH_BASE_ADDRESS, but arch/Kconfig only defines that symbol for
+# ARC/ARM/ARM64/X86/RISCV/RX/OPENRISC/ARCH_POSIX — not Xtensa. ESP32 flash
+# partition addresses are zero-based offsets, so 0 is the correct base.
+# Remove once deps/zephyr carries the upstream fix.
+config FLASH_BASE_ADDRESS
+	hex
+	depends on XTENSA
+	default 0
+
 if DNS_RESOLVER
 
 config DNS_SERVER_IP_ADDRESSES
@@ -52,6 +62,7 @@ menuconfig APP_ZENOH
 	select ZENOH_PICO
 	select ZENOH_PICO_LINK_TCP
 	select ZENOH_PICO_PUBLICATION
+	select ZENOH_PICO_SUBSCRIPTION
 	select ZENOH_PICO_MULTI_THREAD
 	default y
 
@@ -114,5 +125,35 @@ config APP_ZENOH_TRANSPORT_CONNECT_TIMEOUT_MS
 	default 10000
 
 endif # APP_ZENOH
+
+menuconfig APP_MOTORS
+	bool "Enable differential drive motor control"
+	default y
+	depends on ACTUATOR
+	help
+	  Drives the two h-bridge wheel motors from cmd_vel twist commands
+	  with open-loop duty mixing and a stop-on-silence watchdog.
+
+if APP_MOTORS
+
+config APP_MOTORS_WHEEL_SEPARATION_MM
+	int "Wheel separation (track width) in mm"
+	default 125
+	help
+	  Distance between the left and right wheel contact points.
+	  Vendor value for the Waveshare RaspRover is 125 mm.
+
+config APP_MOTORS_MAX_SPEED_MM_S
+	int "Wheel speed mapped to 100% duty, in mm/s"
+	default 500
+	help
+	  Open-loop scaling: a commanded wheel speed of this magnitude
+	  produces full PWM duty. Tune on hardware.
+
+config APP_MOTORS_CMD_TIMEOUT_MS
+	int "Stop motors after this many ms without a cmd_vel"
+	default 500
+
+endif # APP_MOTORS
 
 source "Kconfig.zephyr"

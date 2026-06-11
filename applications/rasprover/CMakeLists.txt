@@ -9,13 +9,15 @@ zephyr_compile_options(-fdiagnostics-color=always)
 
 target_sources(app PRIVATE
   src/main.c
-  src/app_display.c
   src/app_sensors.c
   src/app_settings.c
 )
 
+target_sources_ifdef(CONFIG_APP_DISPLAY app PRIVATE src/app_display.c)
+
 target_sources_ifdef(CONFIG_NETWORKING app PRIVATE src/app_network.c)
 target_sources_ifdef(CONFIG_APP_ZENOH  app PRIVATE src/app_zenoh.c)
+target_sources_ifdef(CONFIG_APP_MOTORS app PRIVATE src/app_motors.c)
 
 # On Debian/Ubuntu, libsdl2-dev uses a multiarch include path that Zephyr's
 # build doesn't pick up automatically. Add it via pkg-config when present.

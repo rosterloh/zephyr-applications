@@ -2,6 +2,7 @@
 LOG_MODULE_REGISTER(main, LOG_LEVEL_DBG);
 
 #include "app_display.h"
+#include "app_motors.h"
 #include "app_network.h"
 #include "app_sensors.h"
 #include "app_settings.h"
@@ -22,6 +23,9 @@ int main(void)
 	_system_thread = k_current_get();
 
 	app_sensors_init();
+#ifdef CONFIG_APP_MOTORS
+	app_motors_init();
+#endif
 	app_net_connect();
 	app_zenoh_init();
 
