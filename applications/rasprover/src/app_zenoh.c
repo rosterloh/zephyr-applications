@@ -9,22 +9,35 @@ LOG_MODULE_REGISTER(app_zenoh, LOG_LEVEL_INF);
 #include "app_time.h"
 #include "app_zenoh.h"
 
+#ifdef CONFIG_APP_GIMBAL
+#include "app_gimbal.h"
+#endif
+
 #ifdef CONFIG_APP_MOTORS
 #include "app_motors.h"
 #endif
 
 #define BATTERY_STATE_KEY          CONFIG_APP_ZENOH_KEY_PREFIX "/battery_state"
+#define GIMBAL_CMD_KEY             CONFIG_APP_ZENOH_GIMBAL_CMD_KEY
 #define CDR_BATTERY_STATE_MAX_SIZE 80
 
 #ifdef CONFIG_APP_MOTORS
 #define CMD_VEL_KEY              CONFIG_APP_ZENOH_KEY_PREFIX "/cmd_vel"
 #define JOINT_STATE_KEY          CONFIG_APP_ZENOH_JOINT_STATE_KEY
-#define CDR_JOINT_STATE_MAX_SIZE 160
+#define CDR_JOINT_STATE_MAX_SIZE 256
 #define JOINT_STATE_INTERVAL_MS  (1000 / CONFIG_APP_ZENOH_JOINT_STATE_PUBLISH_HZ)
+#ifdef CONFIG_APP_GIMBAL
+#define APP_JOINT_STATE_COUNT (APP_MOTORS_JOINT_COUNT + APP_GIMBAL_JOINT_COUNT)
+#else
+#define APP_JOINT_STATE_COUNT APP_MOTORS_JOINT_COUNT
+#endif
 #endif
 
 static z_owned_session_t _session;
 static z_owned_publisher_t _pub_battery;
+#ifdef CONFIG_APP_GIMBAL
+static z_owned_subscriber_t _sub_gimbal_cmd;
+#endif
 #ifdef CONFIG_APP_MOTORS
 static z_owned_publisher_t _pub_joint_state;
 static z_owned_subscriber_t _sub_cmd_vel;
@@ -52,6 +65,50 @@ static bool declare_cdr_publisher(z_owned_publisher_t *pub, const char *key)
 
 	return true;
 }
+
+#ifdef CONFIG_APP_GIMBAL
+static void gimbal_cmd_handler(z_loaned_sample_t *sample, void *arg)
+{
+	ARG_UNUSED(arg);
+
+	z_owned_slice_t slice;
+
+	if (z_bytes_to_slice(z_sample_payload(sample), &slice) < 0) {
+		return;
+	}
+
+	const uint8_t *buf = z_slice_data(z_loan(slice));
+	size_t len = z_slice_len(z_loan(slice));
+	struct app_ros_joint_command cmd;
+
+	if (!app_ros_decode_joint_command(buf, len, &cmd)) {
+		LOG_WRN("gimbal_cmd: bad JointState payload (len %zu)", len);
+		z_drop(z_move(slice));
+		return;
+	}
+	z_drop(z_move(slice));
+
+	app_gimbal_set_positions((float)cmd.pan_position, (float)cmd.tilt_position);
+}
+
+static bool declare_gimbal_cmd_subscriber(void)
+{
+	z_view_keyexpr_t ke;
+	z_view_keyexpr_from_str_unchecked(&ke, GIMBAL_CMD_KEY);
+
+	z_owned_closure_sample_t callback;
+	z_closure(&callback, gimbal_cmd_handler, NULL, NULL);
+
+	if (z_declare_subscriber(z_loan(_session), &_sub_gimbal_cmd, z_loan(ke), z_move(callback),
+				 NULL) < 0) {
+		LOG_ERR("zenoh subscriber declare failed for '%s'", GIMBAL_CMD_KEY);
+		return false;
+	}
+
+	LOG_INF("zenoh subscribed to '%s'", GIMBAL_CMD_KEY);
+	return true;
+}
+#endif /* CONFIG_APP_GIMBAL */
 
 #ifdef CONFIG_APP_MOTORS
 /*
@@ -120,37 +177,58 @@ static void joint_state_work_handler(struct k_work *work)
 {
 	ARG_UNUSED(work);
 
-	if (_ready && _joint_state_ready) {
-		struct app_motors_joint_state motor_joints[APP_MOTORS_JOINT_COUNT];
+	if (!_ready || !_joint_state_ready) {
+		goto reschedule;
+	}
 
-		if (app_motors_read_joint_state(motor_joints)) {
-			struct app_ros_joint_sample joints[APP_MOTORS_JOINT_COUNT];
-			uint8_t buf[CDR_JOINT_STATE_MAX_SIZE];
+	struct app_motors_joint_state motor_joints[APP_MOTORS_JOINT_COUNT];
 
-			for (size_t i = 0; i < ARRAY_SIZE(joints); i++) {
-				joints[i] = (struct app_ros_joint_sample){
-					.name = motor_joints[i].name,
-					.position = motor_joints[i].position_rad,
-					.velocity = motor_joints[i].velocity_rad_s,
-				};
-			}
+	if (!app_motors_read_joint_state(motor_joints)) {
+		goto reschedule;
+	}
 
-			size_t len = app_ros_encode_joint_state(buf, sizeof(buf), app_time_now(),
-								joints, ARRAY_SIZE(joints));
-			if (len == 0) {
-				LOG_WRN("joint_states encode failed");
-			} else {
-				z_owned_bytes_t payload;
+	struct app_ros_joint_sample joints[APP_JOINT_STATE_COUNT];
+	size_t joint_count = 0;
+	uint8_t buf[CDR_JOINT_STATE_MAX_SIZE];
 
-				z_bytes_copy_from_buf(&payload, buf, len);
-				if (z_publisher_put(z_loan(_pub_joint_state), z_move(payload),
-						    NULL) < 0) {
-					LOG_WRN("joint_states publish failed");
-				}
-			}
+	for (size_t i = 0; i < ARRAY_SIZE(motor_joints); i++) {
+		joints[joint_count++] = (struct app_ros_joint_sample){
+			.name = motor_joints[i].name,
+			.position = motor_joints[i].position_rad,
+			.velocity = motor_joints[i].velocity_rad_s,
+		};
+	}
+
+#ifdef CONFIG_APP_GIMBAL
+	struct app_gimbal_joint_state gimbal_joints[APP_GIMBAL_JOINT_COUNT];
+
+	if (!app_gimbal_read_joint_state(gimbal_joints)) {
+		LOG_WRN("gimbal joint feedback unavailable");
+		goto reschedule;
+	}
+	for (size_t i = 0; i < ARRAY_SIZE(gimbal_joints); i++) {
+		joints[joint_count++] = (struct app_ros_joint_sample){
+			.name = gimbal_joints[i].name,
+			.position = gimbal_joints[i].position_rad,
+			.velocity = gimbal_joints[i].velocity_rad_s,
+		};
+	}
+#endif
+
+	size_t len =
+		app_ros_encode_joint_state(buf, sizeof(buf), app_time_now(), joints, joint_count);
+	if (len == 0) {
+		LOG_WRN("joint_states encode failed");
+	} else {
+		z_owned_bytes_t payload;
+
+		z_bytes_copy_from_buf(&payload, buf, len);
+		if (z_publisher_put(z_loan(_pub_joint_state), z_move(payload), NULL) < 0) {
+			LOG_WRN("joint_states publish failed");
 		}
 	}
 
+reschedule:
 	k_work_reschedule(&_joint_state_work, K_MSEC(JOINT_STATE_INTERVAL_MS));
 }
 #endif /* CONFIG_APP_MOTORS */
@@ -187,6 +265,11 @@ bool app_zenoh_init(void)
 
 	if (!declare_cmd_vel_subscriber()) {
 		LOG_WRN("continuing without cmd_vel subscription");
+	}
+#endif
+#ifdef CONFIG_APP_GIMBAL
+	if (!declare_gimbal_cmd_subscriber()) {
+		LOG_WRN("continuing without gimbal command subscription");
 	}
 #endif
 

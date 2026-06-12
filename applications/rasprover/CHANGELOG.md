@@ -15,6 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   stop-on-silence watchdog.
 - Zenoh `/joint_states` publisher (CDR `sensor_msgs/JointState`) from wheel
   actuator feedback.
+- Waveshare gimbal support with bus-servo pan/tilt actuator feedback and
+  `/rasprover/gimbal_cmd` JointState position commands over zenoh.
 - SNTP time synchronization for ROS header timestamps, with zero timestamps
   used until the first successful sync.
 

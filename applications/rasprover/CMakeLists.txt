@@ -18,6 +18,7 @@ target_sources_ifdef(CONFIG_APP_DISPLAY app PRIVATE src/app_display.c)
 target_sources_ifdef(CONFIG_NETWORKING app PRIVATE src/app_network.c)
 target_sources_ifdef(CONFIG_APP_ZENOH  app PRIVATE src/app_zenoh.c)
 target_sources_ifdef(CONFIG_APP_MOTORS app PRIVATE src/app_motors.c)
+target_sources_ifdef(CONFIG_APP_GIMBAL app PRIVATE src/app_gimbal.c)
 target_sources_ifdef(CONFIG_APP_TIME_SYNC app PRIVATE src/app_time.c)
 target_sources(app PRIVATE src/app_ros_cdr.c)
 

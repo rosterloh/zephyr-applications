@@ -2,6 +2,7 @@
 LOG_MODULE_REGISTER(main, LOG_LEVEL_DBG);
 
 #include "app_display.h"
+#include "app_gimbal.h"
 #include "app_motors.h"
 #include "app_network.h"
 #include "app_sensors.h"
@@ -26,6 +27,9 @@ int main(void)
 	app_sensors_init();
 #ifdef CONFIG_APP_MOTORS
 	app_motors_init();
+#endif
+#ifdef CONFIG_APP_GIMBAL
+	app_gimbal_init();
 #endif
 	app_net_connect();
 	app_time_start();
