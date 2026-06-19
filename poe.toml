@@ -3,6 +3,7 @@ envfile = "${POE_ROOT}/.env"
 
 [tool.poe.tasks]
 fmt = "ruff format"
+clean-twister = { shell = "find . \\( -path ./deps -o -path ./.venv \\) -prune -o -type d -name 'twister-out*' -prune -exec rm -rf {} +", help = "Remove all twister-out* directories anywhere in the tree" }
 
 [tool.poe.tasks.setup]
 sequence = ["west-update", "sdk-install", "blobs-fetch", "patch-zenoh"]
