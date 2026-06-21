@@ -32,8 +32,12 @@ int main(void)
 	app_gimbal_init();
 #endif
 	app_net_connect();
-	app_time_start();
-	app_zenoh_init();
+	if (app_net_ipv4_ready()) {
+		app_time_start();
+		app_zenoh_init();
+	} else {
+		LOG_WRN("Network unavailable; skipping time sync and zenoh");
+	}
 
 #ifdef CONFIG_APP_DISPLAY
 	app_display_init();

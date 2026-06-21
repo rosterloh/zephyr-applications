@@ -541,6 +541,11 @@ void app_net_connect(void)
 {
 	struct net_if *iface = net_if_get_default();
 
+	if (iface == NULL) {
+		LOG_WRN("No network interface available; skipping network bring-up");
+		return;
+	}
+
 	if (!net_if_is_up(iface)) {
 		LOG_INF("Bringing up network interface");
 		int ret = net_if_up(iface);
