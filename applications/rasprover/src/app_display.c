@@ -13,7 +13,7 @@ LOG_MODULE_REGISTER(app_display, LOG_LEVEL_DBG);
 
 #include "app_display.h"
 
-static const struct device *display = DEVICE_DT_GET(DT_CHOSEN(zephyr_display));
+static const struct device *display = DEVICE_DT_GET_OR_NULL(DT_CHOSEN(zephyr_display));
 static bool initialised;
 
 static lv_obj_t *power_label;

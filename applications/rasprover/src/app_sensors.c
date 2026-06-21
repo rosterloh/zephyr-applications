@@ -9,7 +9,7 @@ LOG_MODULE_REGISTER(app_sensors, LOG_LEVEL_DBG);
 #include "app_zenoh.h"
 
 #if DT_NODE_EXISTS(DT_NODELABEL(ina219))
-static const struct device *current_sensor = DEVICE_DT_GET(DT_NODELABEL(ina219));
+static const struct device *current_sensor = DEVICE_DT_GET_OR_NULL(DT_NODELABEL(ina219));
 #endif
 
 static void publish(double v, double i, double p)
@@ -26,6 +26,10 @@ void app_sensors_read_and_stream(void)
 {
 #if DT_NODE_EXISTS(DT_NODELABEL(ina219))
 	struct sensor_value v_bus, power, current;
+
+	if (!device_is_ready(current_sensor)) {
+		return;
+	}
 
 	if (sensor_sample_fetch(current_sensor)) {
 		LOG_ERR("INA219 fetch failed");
