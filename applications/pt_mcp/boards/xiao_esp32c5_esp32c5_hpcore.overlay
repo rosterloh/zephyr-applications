@@ -1,0 +1,48 @@
+/ {
+	aliases {
+		pan-servo = &pan_servo;
+		tilt-servo = &tilt_servo;
+	};
+};
+
+/* Pan/tilt bus servos on the XIAO's UART pins (TX GPIO11 / RX GPIO12).
+ * Servo IDs and limits match the Waveshare pan-tilt module as used on
+ * the rasprover gimbal.
+ */
+&uart0 {
+	current-speed = <1000000>;
+
+	servo_bus: bus-servo {
+		compatible = "waveshare,bus-servo";
+		status = "okay";
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		pan_servo: servo@2 {
+			compatible = "rosterloh,actuator-bus-servo";
+			reg = <2>;
+			label = "Pan";
+			default-mode = "position";
+			ticks-per-rev = <4096>;
+			rad-zero-tick = <2047>;
+			position-min-rad-milli = <(-3142)>;
+			position-max-rad-milli = <3142>;
+			speed = <300>;
+			accel = <20>;
+		};
+
+		tilt_servo: servo@1 {
+			compatible = "rosterloh,actuator-bus-servo";
+			reg = <1>;
+			label = "Tilt";
+			default-mode = "position";
+			ticks-per-rev = <4096>;
+			rad-zero-tick = <2047>;
+			position-min-rad-milli = <(-524)>;
+			position-max-rad-milli = <1571>;
+			invert-position;
+			speed = <300>;
+			accel = <20>;
+		};
+	};
+};

@@ -322,6 +322,7 @@ case "${app}" in
     embedded_vision)      ALLOWED="arduino_nicla_vision/stm32h747xx/m7"; DEFAULT="arduino_nicla_vision/stm32h747xx/m7" ;;
     force_sensor)         ALLOWED="adafruit_qt_py_esp32c3"; DEFAULT="adafruit_qt_py_esp32c3" ;;
     pico_fw)              ALLOWED="rpi_pico/rp2040/w"; DEFAULT="rpi_pico/rp2040/w" ;;
+    pt_mcp)               ALLOWED="xiao_esp32c5/esp32c5/hpcore"; DEFAULT="xiao_esp32c5/esp32c5/hpcore" ;;
     rasprover)            ALLOWED="ros_driver/esp32/procpu native_sim/native/64"; DEFAULT="ros_driver/esp32/procpu" ;;
     *) echo "unknown app: ${app}" >&2; exit 2 ;;
 esac
@@ -339,7 +340,7 @@ case "${sysbuild}" in true|True|1|yes) EXTRA="--sysbuild" ;; esac
 west build -b "$BOARD" -p always $EXTRA --build-dir builds/${app} applications/${app}
 """
 args = [
-    { name = "app", positional = true, help = "App name (motor_controller, joystick_controller, embedded_vision, force_sensor, pico_fw, rasprover)" },
+    { name = "app", positional = true, help = "App name (motor_controller, joystick_controller, embedded_vision, force_sensor, pico_fw, pt_mcp, rasprover)" },
     { name = "board", options = ["-b", "--board"], help = "Override target board (must be in app's allowed list)" },
     { name = "sysbuild", type = "boolean", help = "Build with sysbuild (e.g. for MCUboot integration)" },
 ]
