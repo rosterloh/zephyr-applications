@@ -1,5 +1,5 @@
 #include <zephyr/kernel.h>
-#include <app_version.h>
+#include <zephyr/app_version.h>
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(main);

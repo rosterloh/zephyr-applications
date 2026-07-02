@@ -23,6 +23,15 @@ ZENOH_DIR="${POE_ROOT}/deps/modules/lib/zenoh"
 CMAKE="${ZENOH_DIR}/zephyr/CMakeLists.txt"
 CONFIG_H="${ZENOH_DIR}/include/zenoh-pico/config.h"
 
+# 0. Zephyr removed the legacy generated-include path (bare <version.h>);
+# rewrite zenoh-pico's includes to the <zephyr/version.h> form. Idempotent.
+for f in include/zenoh-pico/system/platform/zephyr.h \
+         src/system/zephyr/system.c \
+         src/link/transport/serial/uart_zephyr.c; do
+    sed -i.bak 's|#include <version.h>|#include <zephyr/version.h>|' "${ZENOH_DIR}/${f}"
+    rm -f "${ZENOH_DIR}/${f}.bak"
+done
+
 # 1. Rewrite the Zephyr-module CMakeLists.txt with our patched version.
 # Differences from upstream's zephyr/CMakeLists.txt: glob picks up
 # src/runtime/*.c (omitted upstream though the root CMakeLists globs it -> the
@@ -225,6 +234,10 @@ cat > "$CONFIG_H" <<'EOF'
 #define Z_RUNTIME_MAX_TASKS             CONFIG_APP_ZENOH_RUNTIME_MAX_TASKS
 #define Z_TRANSPORT_ACCEPT_TIMEOUT      CONFIG_APP_ZENOH_TRANSPORT_ACCEPT_TIMEOUT_MS
 #define Z_TRANSPORT_CONNECT_TIMEOUT     CONFIG_APP_ZENOH_TRANSPORT_CONNECT_TIMEOUT_MS
+
+/* Upstream defaults (zenoh-pico CMakeLists.txt); not exposed as Kconfig. */
+#define Z_MAX_KEYEXPR_LENGTH            256
+#define Z_RUNTIME_IDLE_READ_TASK_SLEEP  0
 
 /* Runtime configuration property keys. Copied verbatim from
  * deps/modules/lib/zenoh/include/zenoh-pico/config.h.in (post-ZENOH_GENERIC

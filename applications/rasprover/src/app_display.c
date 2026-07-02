@@ -9,7 +9,7 @@ LOG_MODULE_REGISTER(app_display, LOG_LEVEL_DBG);
 #include <zephyr/kernel.h>
 #include <lvgl.h>
 
-#include <app_version.h>
+#include <zephyr/app_version.h>
 
 #include "app_display.h"
 

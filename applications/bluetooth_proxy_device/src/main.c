@@ -1,7 +1,7 @@
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 
-#include <app_version.h>
+#include <zephyr/app_version.h>
 
 #include "ble_module.h"
 #include "hw_module.h"

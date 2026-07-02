@@ -6,7 +6,7 @@
 #include <zephyr/drivers/adc.h>
 #include <zephyr/drivers/led_strip.h>
 #include <zephyr/drivers/sensor.h>
-#include <app_version.h>
+#include <zephyr/app_version.h>
 #include <lvgl.h>
 
 #include <zephyr/logging/log.h>
