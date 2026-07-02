@@ -126,14 +126,18 @@ Message headers publish immediately with a zero timestamp until SNTP sets `SYS_C
 
 ### WiFi credentials
 
-SSID and PSK are stored at runtime via the Zephyr settings subsystem. Set them once over the shell:
+Credentials are stored via the Zephyr `wifi_credentials` subsystem (backed by
+settings/ZMS) and applied by the connection manager, which auto-connects at
+boot and reconnects on loss. Store them once over the shell:
 
 ```
-settings set wifi/ssid \"my-network\"
-settings set wifi/psk \"my-password\"
-settings save
-reboot
+wifi cred add -s "my-network" -k 1 -p "my-password"
+wifi cred list
 ```
+
+(`-k 1` is WPA2-PSK; see `wifi cred add -h` for other security types.) No
+reboot needed — the connection manager retries every few seconds until
+credentials are available.
 
 ### Host setup
 
