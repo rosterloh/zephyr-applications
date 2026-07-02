@@ -1,5 +1,4 @@
 [tool.poe]
-envfile = "${POE_ROOT}/.env"
 
 [tool.poe.tasks]
 fmt = "ruff format"

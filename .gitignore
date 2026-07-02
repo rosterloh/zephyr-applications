@@ -22,7 +22,7 @@ __pycache__/
 **/build
 /twister-out*
 
-# environment (copy .env.example to .env and customise)
+# environment
 .env
 
 # misc
