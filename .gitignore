@@ -25,6 +25,9 @@ __pycache__/
 # environment
 .env
 
+# claude code local settings (machine-specific)
+.claude/settings.local.json
+
 # misc
 *.pdf
 
