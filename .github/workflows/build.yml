@@ -17,11 +17,9 @@ jobs:
           - app: force_sensor
           - app: joystick_controller
           - app: motor_controller
-          # The following apps require modules not in this workspace:
-          # bluetooth_proxy_device: needs golioth/pouch
-          #   (disabled until pouch fixes board.yml full_name requirement)
-          # pico_fw: needs cyw43 (beechwoods-software) which causes Kconfig
-          #   conflicts on non-Pico targets; use applications/pico_fw/west.yml
+          - app: pico_fw
+          # bluetooth_proxy_device needs golioth/pouch, which are not in this
+          # workspace (disabled until pouch fixes board.yml full_name requirement)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

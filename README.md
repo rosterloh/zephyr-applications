@@ -74,8 +74,7 @@ uv run poe --help
   adds `full_name` to its `board.yml` (required by the current Zephyr board schema).
   Re-enable in `west.yml` to restore Golioth support to `bluetooth_proxy_device`.
   `rasprover` has had Golioth removed and builds cleanly without it.
-- `pico_fw` requires the `cyw43` module (beechwoods-software), which causes Kconfig
-  conflicts on non-Pico targets and cannot be integrated into the shared workspace.
-  Build it using its own manifest: `cd applications/pico_fw && west init -l . && west update`.
+- `pico_fw` uses Zephyr's in-tree AIROC driver for the Pico W's CYW43439;
+  the firmware blobs come from `hal_infineon` (fetched by `poe blobs-fetch`).
 - `deps/` is git-ignored. Run `uv run poe west-update` to refresh after pulling
   changes to `west.yml`.

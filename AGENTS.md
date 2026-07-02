@@ -29,6 +29,7 @@ uv run poe app motor_controller                       # default: robotis_openrb_
 uv run poe app joystick_controller                    # default: adafruit_qt_py_esp32s3/esp32s3/procpu
 uv run poe app embedded_vision                        # default: arduino_nicla_vision
 uv run poe app force_sensor                           # default: adafruit_qt_py_esp32c3
+uv run poe app pico_fw                                # default: rpi_pico/rp2040/w
 uv run poe app rasprover --sysbuild                   # rasprover hw build (ros_driver/esp32 + MCUboot)
 uv run poe app rasprover --board native_sim/native/64 # rasprover native_sim
 uv run poe flash motor_controller                     # flash a previously built app
@@ -47,7 +48,6 @@ uv run poe agent-build motor_controller
 
 If you must call `west build` directly, always pass `--build-dir builds/<app>` so artifacts don't pollute the repo root, and use the bare app name (e.g. `builds/motor_controller`, not `builds/applications/motor_controller`).
 
-`pico_fw` is the exception: it has its own west workspace under `applications/pico_fw/` due to a cyw43 module conflict. Build it from there.
 
 ## Workspace updates
 

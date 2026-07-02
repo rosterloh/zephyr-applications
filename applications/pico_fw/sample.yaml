@@ -3,11 +3,11 @@
 # so that you can easily test all of them locally or in CI.
 sample:
   description: Example application
-  name: example-application 
+  name: example-application
 common:
   build_only: true
   integration_platforms:
-    - rpi_pico_w
+    - rpi_pico/rp2040/w
 tests:
   app.default: {}
   app.debug:

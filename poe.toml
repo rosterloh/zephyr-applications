@@ -13,8 +13,8 @@ cmd = "west update --narrow"
 help = "Fetch/update all west dependencies into deps/"
 
 [tool.poe.tasks.blobs-fetch]
-cmd = "west blobs fetch hal_espressif"
-help = "Fetch required binary blobs for the Espressif HAL (WiFi/BLE firmware)."
+cmd = "west blobs fetch hal_espressif hal_infineon"
+help = "Fetch required binary blobs: Espressif HAL (WiFi/BLE firmware) and Infineon HAL (CYW43439 firmware for pico_fw, Nicla Vision)."
 
 [tool.poe.tasks.patch-zenoh]
 shell = '''
@@ -321,6 +321,7 @@ case "${app}" in
     joystick_controller)  ALLOWED="adafruit_qt_py_esp32s3/esp32s3/procpu"; DEFAULT="adafruit_qt_py_esp32s3/esp32s3/procpu" ;;
     embedded_vision)      ALLOWED="arduino_nicla_vision/stm32h747xx/m7"; DEFAULT="arduino_nicla_vision/stm32h747xx/m7" ;;
     force_sensor)         ALLOWED="adafruit_qt_py_esp32c3"; DEFAULT="adafruit_qt_py_esp32c3" ;;
+    pico_fw)              ALLOWED="rpi_pico/rp2040/w"; DEFAULT="rpi_pico/rp2040/w" ;;
     rasprover)            ALLOWED="ros_driver/esp32/procpu native_sim/native/64"; DEFAULT="ros_driver/esp32/procpu" ;;
     *) echo "unknown app: ${app}" >&2; exit 2 ;;
 esac
@@ -338,7 +339,7 @@ case "${sysbuild}" in true|True|1|yes) EXTRA="--sysbuild" ;; esac
 west build -b "$BOARD" -p always $EXTRA --build-dir builds/${app} applications/${app}
 """
 args = [
-    { name = "app", positional = true, help = "App name (motor_controller, joystick_controller, embedded_vision, force_sensor, rasprover)" },
+    { name = "app", positional = true, help = "App name (motor_controller, joystick_controller, embedded_vision, force_sensor, pico_fw, rasprover)" },
     { name = "board", options = ["-b", "--board"], help = "Override target board (must be in app's allowed list)" },
     { name = "sysbuild", type = "boolean", help = "Build with sysbuild (e.g. for MCUboot integration)" },
 ]
@@ -354,9 +355,6 @@ help = "Flash a previously built application."
 [tool.poe.tasks.run-rasprover-sim]
 cmd = "west build -b native_sim/native/64 --build-dir builds/rasprover -t run applications/rasprover"
 help = "Run an already-built native_sim rasprover image."
-
-# pico_fw requires its own west workspace (see applications/pico_fw/west.yml).
-# It cannot be built from this workspace due to the cyw43 module conflict.
 
 [tool.poe.tasks.agent-build]
 shell = """
