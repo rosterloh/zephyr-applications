@@ -6,6 +6,7 @@
 #include <zephyr/device.h>
 #include <zephyr/devicetree.h>
 #include <zephyr/actuator/actuator.h>
+#include <zephyr/actuator/actuator_group.h>
 #include <zephyr/net/mcp/mcp_server.h>
 #include <zephyr/net/mcp/mcp_server_http.h>
 
@@ -18,6 +19,13 @@ LOG_MODULE_REGISTER(pt_mcp, LOG_LEVEL_INF);
 
 static const struct device *const pan = DEVICE_DT_GET(DT_ALIAS(pan_servo));
 static const struct device *const tilt = DEVICE_DT_GET(DT_ALIAS(tilt_servo));
+
+/* Group so a combined pan+tilt setpoint is issued as one atomic bus write
+ * (native sync-write) rather than two back-to-back single-servo writes, which
+ * the bus servos can drop. Index order: [0]=pan, [1]=tilt.
+ */
+ACTUATOR_GROUP_DEFINE(pan_tilt, DEVICE_DT_GET(DT_ALIAS(pan_servo)),
+		      DEVICE_DT_GET(DT_ALIAS(tilt_servo)));
 
 static mcp_server_ctx_t server;
 static bool motors_ready;
@@ -141,11 +149,13 @@ static int motor_control_tool_callback(enum mcp_tool_event_type event, const cha
 			return -EINVAL;
 		}
 
-		ret = 0;
-		if (have_pan) {
+		if (have_pan && have_tilt) {
+			float pos[2] = {pan_rad, tilt_rad};
+
+			ret = actuator_group_set_position(&pan_tilt, pos);
+		} else if (have_pan) {
 			ret = actuator_set_position(pan, pan_rad);
-		}
-		if ((ret == 0) && have_tilt) {
+		} else {
 			ret = actuator_set_position(tilt, tilt_rad);
 		}
 		if (ret != 0) {
