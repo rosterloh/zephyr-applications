@@ -89,5 +89,10 @@ disallow_incomplete_defs = true
 disallow_untyped_decorators = true
 disallow_any_unimported = false
 
+[tool.pytest.ini_options]
+# Only collect this repo's own tests; keep pytest out of deps/ where upstream
+# module test scripts call sys.exit() at import and abort collection.
+testpaths = ["tests"]
+
 [tool.poe]
 include = "poe.toml"
