@@ -4,8 +4,21 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    groups:
+      github-actions:
+        patterns: ["*"]
 
-  - package-ecosystem: "pip"
+  # uv (not pip): Dependabot re-resolves and commits uv.lock alongside the
+  # pyproject.toml constraint bumps, so no manual `uv lock` is needed.
+  - package-ecosystem: "uv"
     directory: "/"
     schedule:
       interval: "weekly"
+    groups:
+      python:
+        patterns: ["*"]
+    ignore:
+      # pyocd 0.44.1 pins pylink-square>=1.0,<2.0, so the 2.x bump is
+      # unsatisfiable. Suppress it until pyocd gains pylink 2.x support.
+      - dependency-name: "pylink-square"
+        versions: [">=2.0"]
