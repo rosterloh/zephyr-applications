@@ -3,3 +3,19 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
+
+&i2c0 {
+	status = "okay";
+
+	ina3221: ina3221@40 {
+		compatible = "ti,ina3221";
+		reg = <0x40>;
+		/* PowerBread schematic: 50 mOhm shunts on channels 1+2 */
+		shunt-resistors = <50 50 50>;
+		enable-channel = <1 1 0>;
+		/* 140 us conversions, x4 averaging: full 2-ch cycle ~2.24 ms */
+		conv-time-shunt = <0>;
+		conv-time-bus = <0>;
+		avg-mode = <1>;
+	};
+};
