@@ -537,10 +537,14 @@ git commit -m "powerbread: add INA3221 sampler (100 Hz, stats, energy, chart rin
 
 #include <zephyr/shell/shell.h>
 
-/* "12.34" style formatting without float printf: value scaled by 100 */
+/* "12.34" style formatting without float printf: value scaled by 100.
+ * The explicit sign prefix keeps -0.99..-0.01 from printing as positive
+ * (integer division truncates -50/100 to 0).
+ */
 static void fmt_x100(char *buf, size_t len, int32_t x100)
 {
-	snprintf(buf, len, "%d.%02d", x100 / 100, abs(x100 % 100));
+	snprintf(buf, len, "%s%d.%02d", (x100 < 0 && x100 > -100) ? "-" : "",
+		 x100 / 100, abs(x100 % 100));
 }
 
 static int cmd_read(const struct shell *sh, size_t argc, char **argv)
@@ -853,10 +857,14 @@ uint8_t pb_ui_get_channel(void)
 	return (uint8_t)atomic_get(&req_channel);
 }
 
-/* "12.34" style formatting without float printf: value scaled by 100 */
+/* "12.34" style formatting without float printf: value scaled by 100.
+ * The explicit sign prefix keeps -0.99..-0.01 from printing as positive
+ * (integer division truncates -50/100 to 0).
+ */
 static void fmt_x100(char *buf, size_t len, int32_t x100)
 {
-	snprintf(buf, len, "%d.%02d", x100 / 100, abs(x100 % 100));
+	snprintf(buf, len, "%s%d.%02d", (x100 < 0 && x100 > -100) ? "-" : "",
+		 x100 / 100, abs(x100 % 100));
 }
 
 static void create_dash(lv_obj_t *parent)
@@ -1002,7 +1010,7 @@ Replace `applications/powerbread/src/main.c` entirely with:
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 
-#include <app_version.h>
+#include <zephyr/app_version.h>
 
 LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 
