@@ -6,6 +6,8 @@
 
 #include "sampler.h"
 
+#include <stdlib.h>
+
 #include <zephyr/device.h>
 #include <zephyr/drivers/sensor.h>
 #include <zephyr/kernel.h>
@@ -142,8 +144,9 @@ static void stream_csv(uint32_t t_ms, const float *v, const float *ma, const flo
 		int32_t ma_x10 = (int32_t)(ma[i] * 10.0f);
 		int32_t mw_x10 = (int32_t)(mw[i] * 10.0f);
 
-		printk("%u,%d,%d,%d.%d,%d.%d\n", t_ms, i + 1, mv, ma_x10 / 10, abs(ma_x10 % 10),
-		       mw_x10 / 10, abs(mw_x10 % 10));
+		printk("%u,%d,%d,%s%d.%d,%s%d.%d\n", t_ms, i + 1, mv,
+		       (ma_x10 < 0 && ma_x10 > -10) ? "-" : "", ma_x10 / 10, abs(ma_x10 % 10),
+		       (mw_x10 < 0 && mw_x10 > -10) ? "-" : "", mw_x10 / 10, abs(mw_x10 % 10));
 	}
 }
 
