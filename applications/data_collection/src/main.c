@@ -35,7 +35,7 @@ static void on_ipv4_addr_add(struct net_mgmt_event_callback *cb, uint64_t mgmt_e
 
 int main(void)
 {
-	LOG_INF("data_collection starting (SMP/UDP OTA ready)");
+	LOG_INF("data_collection starting (SMP/UDP management ready)");
 
 	net_mgmt_init_event_callback(&ipv4_cb, on_ipv4_addr_add, NET_EVENT_IPV4_ADDR_ADD);
 	net_mgmt_add_event_callback(&ipv4_cb);
