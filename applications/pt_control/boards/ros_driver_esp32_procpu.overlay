@@ -1,0 +1,17 @@
+/* solomon,ssd1306fb was removed; the bus-agnostic successor is solomon,ssd1306 */
+&ssd1306_ssd1306_128x32 {
+	compatible = "solomon,ssd1306";
+};
+
+&i2c0 {
+	/* Run the bus at 400 kHz (Fast-mode), matching the rasprover-rs firmware
+	 * that drives the SSD1306 correctly on this hardware. */
+	clock-frequency = <400000>;
+};
+
+/* The ESP32 SoC dtsi leaves the WiFi node disabled and the ros_driver board
+ * doesn't enable it; without this the WIFI_ESP32 driver never builds and the
+ * WiFi shell reports "No default interface found for type: STA". */
+&wifi {
+	status = "okay";
+};

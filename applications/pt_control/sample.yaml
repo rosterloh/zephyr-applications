@@ -1,0 +1,11 @@
+# This file is provided so that the application can be compiled using Twister,
+# the Zephyr testing tool.
+sample:
+  description: Pan/tilt ros2_control bridge over zenoh-pico
+  name: pt-control
+common:
+  build_only: true
+  integration_platforms:
+    - ros_driver
+tests:
+  app.default: {}

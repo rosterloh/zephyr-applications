@@ -1,0 +1,150 @@
+mainmenu "Application options"
+
+# Workaround for an upstream regression: mcumgr's img_mgmt.c references
+# CONFIG_FLASH_BASE_ADDRESS, but arch/Kconfig only defines that symbol for
+# ARC/ARM/ARM64/X86/RISCV/RX/OPENRISC/ARCH_POSIX — not Xtensa. ESP32 flash
+# partition addresses are zero-based offsets, so 0 is the correct base.
+# Remove once deps/zephyr carries the upstream fix.
+config FLASH_BASE_ADDRESS
+	hex
+	depends on XTENSA
+	default 0
+
+menuconfig APP_DISPLAY
+	bool "Enable status OLED"
+	select DISPLAY
+	select CHARACTER_FRAMEBUFFER
+	default y
+	help
+	  Drives the onboard SSD1306 128x32 OLED (via the Character Frame Buffer)
+	  to show the WiFi connection status / IP address.
+
+if DNS_RESOLVER
+
+config DNS_SERVER_IP_ADDRESSES
+	default y
+
+config DNS_SERVER1
+	default "1.1.1.1"
+
+endif # DNS_RESOLVER
+
+menuconfig APP_ZENOH
+	bool "Enable zenoh-pico publisher"
+	select ZENOH_PICO
+	select ZENOH_PICO_LINK_TCP
+	select ZENOH_PICO_PUBLICATION
+	select ZENOH_PICO_SUBSCRIPTION
+	select ZENOH_PICO_MULTI_THREAD
+	default y
+
+if APP_ZENOH
+
+config APP_ZENOH_LOCATOR
+	string "Zenoh locator for the host router"
+	default "tcp/192.168.1.10:7447"
+	help
+	  Locator string passed to z_open() as the connect endpoint. Format is
+	  '<protocol>/<host>:<port>'. The host typically runs zenohd configured
+	  with a matching listen endpoint, e.g. `zenohd -l tcp/0.0.0.0:7447`.
+
+config APP_ZENOH_JOINT_STATE_KEY
+	string "Zenoh key expression for the published JointState"
+	default "rt/pt_control/joint_states"
+	help
+	  Zenoh key for the sensor_msgs/JointState carrying pan/tilt feedback.
+	  The 'rt/' prefix is required by the zenoh-ros2dds bridge; this maps to
+	  the ROS2 topic /pt_control/joint_states, which the remote host's
+	  ros2_control hardware interface reads as its state source.
+
+config APP_ZENOH_JOINT_CMD_KEY
+	string "Zenoh key expression for the subscribed JointState commands"
+	default "rt/pt_control/joint_commands"
+	help
+	  Zenoh key for the sensor_msgs/JointState position commands. Maps to
+	  the ROS2 topic /pt_control/joint_commands, which the remote host's
+	  ros2_control hardware interface writes with pan/tilt setpoints
+	  (joint names "pan_joint" and "tilt_joint", positions in radians).
+
+config APP_ZENOH_JOINT_STATE_PUBLISH_HZ
+	int "JointState publish rate in Hz"
+	default 50
+	range 1 200
+
+# Numeric tunables consumed by the generated zenoh-pico/config.h (see
+# poe.toml: patch-zenoh). Defaults match the upstream zenoh-pico root
+# CMakeLists.txt so behaviour matches a stock build.
+config APP_ZENOH_FRAG_MAX_SIZE
+	int "Zenoh: maximum size for fragmented messages (bytes)"
+	default 4096
+
+config APP_ZENOH_BATCH_UNICAST_SIZE
+	int "Zenoh: maximum unicast batch size (bytes)"
+	default 2048
+
+config APP_ZENOH_BATCH_MULTICAST_SIZE
+	int "Zenoh: maximum multicast batch size (bytes)"
+	default 2048
+
+config APP_ZENOH_SOCKET_TIMEOUT_MS
+	int "Zenoh: default socket timeout (ms)"
+	default 100
+
+config APP_ZENOH_TRANSPORT_LEASE_MS
+	int "Zenoh: link lease duration announced to peers (ms)"
+	default 10000
+
+config APP_ZENOH_TRANSPORT_LEASE_EXPIRE_FACTOR
+	int "Zenoh: session lease expire factor"
+	default 3
+
+config APP_ZENOH_RUNTIME_MAX_TASKS
+	int "Zenoh: maximum number of runtime tasks"
+	default 64
+
+config APP_ZENOH_TRANSPORT_ACCEPT_TIMEOUT_MS
+	int "Zenoh: P2P link accept timeout (ms)"
+	default 1000
+
+config APP_ZENOH_TRANSPORT_CONNECT_TIMEOUT_MS
+	int "Zenoh: P2P link connect timeout (ms)"
+	default 10000
+
+endif # APP_ZENOH
+
+menuconfig APP_TIME_SYNC
+	bool "Enable SNTP time synchronization"
+	default y if APP_ZENOH && NETWORKING
+	depends on NETWORKING
+	depends on NET_SOCKETS
+	depends on DNS_RESOLVER
+	select SNTP
+	select NET_SOCKETS_SERVICE
+	help
+	  Synchronize SYS_CLOCK_REALTIME from an SNTP server. Publishers that
+	  need ROS timestamps can publish immediately with a zero stamp and
+	  switch to realtime stamps after the first successful sync.
+
+if APP_TIME_SYNC
+
+config APP_TIME_SNTP_SERVER
+	string "SNTP server"
+	default "pool.ntp.org"
+
+config APP_TIME_SNTP_TIMEOUT_MS
+	int "SNTP query timeout in milliseconds"
+	default 3000
+
+config APP_TIME_SNTP_RETRY_SEC
+	int "SNTP retry interval after failure, in seconds"
+	default 15
+	range 1 3600
+
+config APP_TIME_SNTP_RESYNC_SEC
+	int "SNTP resync interval after success, in seconds"
+	default 3600
+	range 60 86400
+
+endif # APP_TIME_SYNC
+
+source "Kconfig.zephyr"
