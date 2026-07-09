@@ -113,10 +113,10 @@ static int cmd_dial(const struct shell *sh, size_t argc, char **argv)
 	ARG_UNUSED(argc);
 	ARG_UNUSED(argv);
 
-	ret = adc_channel_setup_dt(&dial_adc);
-	if (ret == 0) {
-		ret = adc_sequence_init_dt(&dial_adc, &seq);
-	}
+	/* Channel is configured at init by the adc-keys driver;
+	 * re-setup would race its calibration handle.
+	 */
+	ret = adc_sequence_init_dt(&dial_adc, &seq);
 	if (ret == 0) {
 		ret = adc_read_dt(&dial_adc, &seq);
 	}
