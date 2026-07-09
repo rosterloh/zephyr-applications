@@ -4,6 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#include <zephyr/dt-bindings/adc/adc.h>
+#include <zephyr/dt-bindings/input/input-event-codes.h>
+
 &i2c0 {
 	status = "okay";
 
@@ -87,5 +90,57 @@
 			gamctrp1 = [0f 1a 0f 18 2f 28 20 22 1f 1b 23 37 00 07 02 10];
 			gamctrn1 = [0f 1b 0f 17 33 2c 29 2e 30 2e 30 3b 00 07 03 10];
 		};
+	};
+};
+
+/*
+ * PowerBread dial wheel: resistor ladder on D2/A2 = GPIO1 = ADC1 channel 1.
+ * Idle sits near 0 V; press/down/up produce distinct levels. Thresholds
+ * derived from upstream's 10-bit values (XIAO ESP32-C3 build); calibrate
+ * with `powerbread dial` and adjust here if the module differs.
+ */
+
+&adc0 {
+	status = "okay";
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	channel@1 {
+		reg = <1>;
+		zephyr,gain = "ADC_GAIN_1_4";
+		zephyr,reference = "ADC_REF_INTERNAL";
+		zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
+		zephyr,resolution = <12>;
+	};
+};
+
+/ {
+	dial: dial {
+		compatible = "adc-keys";
+		io-channels = <&adc0 1>;
+		keyup-threshold-mv = <0>;
+		sample-period-ms = <20>;
+
+		dial_press {
+			press-thresholds-mv = <510>;
+			zephyr,code = <INPUT_KEY_ENTER>;
+		};
+		dial_down {
+			press-thresholds-mv = <910>;
+			zephyr,code = <INPUT_KEY_DOWN>;
+		};
+		dial_up {
+			press-thresholds-mv = <1580>;
+			zephyr,code = <INPUT_KEY_UP>;
+		};
+	};
+
+	longpress {
+		compatible = "zephyr,input-longpress";
+		input = <&dial>;
+		input-codes = <INPUT_KEY_ENTER>;
+		short-codes = <INPUT_KEY_A>;
+		long-codes = <INPUT_KEY_B>;
+		long-delay-ms = <1000>;
 	};
 };

@@ -5,10 +5,12 @@
  */
 
 #include "sampler.h"
+#include "ui.h"
 
 #include <stdlib.h>
 #include <string.h>
 
+#include <zephyr/drivers/adc.h>
 #include <zephyr/shell/shell.h>
 
 /* "12.34" style formatting without float printf: value scaled by 100.
@@ -68,10 +70,77 @@ static int cmd_stream(const struct shell *sh, size_t argc, char **argv)
 	return 0;
 }
 
+static int cmd_mode(const struct shell *sh, size_t argc, char **argv)
+{
+	if (strcmp(argv[1], "dash") == 0) {
+		pb_ui_set_mode(PB_MODE_DASH);
+	} else if (strcmp(argv[1], "chart") == 0) {
+		pb_ui_set_mode(PB_MODE_CHART);
+	} else if (strcmp(argv[1], "stats") == 0) {
+		pb_ui_set_mode(PB_MODE_STATS);
+	} else {
+		shell_error(sh, "usage: powerbread mode <dash|chart|stats>");
+		return -EINVAL;
+	}
+	shell_print(sh, "mode %s", argv[1]);
+	return 0;
+}
+
+static int cmd_channel(const struct shell *sh, size_t argc, char **argv)
+{
+	int ch = atoi(argv[1]);
+
+	if (ch < 1 || ch > PB_NUM_CH) {
+		shell_error(sh, "usage: powerbread channel <1|2>");
+		return -EINVAL;
+	}
+	pb_ui_set_channel((uint8_t)(ch - 1));
+	shell_print(sh, "channel %d", ch);
+	return 0;
+}
+
+static int cmd_dial(const struct shell *sh, size_t argc, char **argv)
+{
+	static const struct adc_dt_spec dial_adc = ADC_DT_SPEC_GET_BY_IDX(DT_NODELABEL(dial), 0);
+	int16_t raw;
+	struct adc_sequence seq = {
+		.buffer = &raw,
+		.buffer_size = sizeof(raw),
+	};
+	int32_t mv;
+	int ret;
+
+	ARG_UNUSED(argc);
+	ARG_UNUSED(argv);
+
+	ret = adc_channel_setup_dt(&dial_adc);
+	if (ret == 0) {
+		ret = adc_sequence_init_dt(&dial_adc, &seq);
+	}
+	if (ret == 0) {
+		ret = adc_read_dt(&dial_adc, &seq);
+	}
+	if (ret != 0) {
+		shell_error(sh, "adc read failed: %d", ret);
+		return ret;
+	}
+	mv = raw;
+	ret = adc_raw_to_millivolts_dt(&dial_adc, &mv);
+	if (ret != 0) {
+		shell_error(sh, "mv conversion failed: %d", ret);
+		return ret;
+	}
+	shell_print(sh, "dial: %d mV (raw %d)", mv, raw);
+	return 0;
+}
+
 SHELL_STATIC_SUBCMD_SET_CREATE(
 	sub_powerbread, SHELL_CMD(read, NULL, "One-shot readings for both channels", cmd_read),
 	SHELL_CMD(reset, NULL, "Reset stats and energy counters", cmd_reset),
 	SHELL_CMD_ARG(stream, NULL, "CSV streaming: stream <on|off>", cmd_stream, 2, 0),
+	SHELL_CMD_ARG(mode, NULL, "Set UI mode: mode <dash|chart|stats>", cmd_mode, 2, 0),
+	SHELL_CMD_ARG(channel, NULL, "Set focused channel: channel <1|2>", cmd_channel, 2, 0),
+	SHELL_CMD(dial, NULL, "Read dial ADC level (calibration aid)", cmd_dial),
 	SHELL_SUBCMD_SET_END);
 
 SHELL_CMD_REGISTER(powerbread, &sub_powerbread, "PowerBread power monitor", NULL);

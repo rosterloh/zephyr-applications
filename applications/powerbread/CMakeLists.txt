@@ -8,4 +8,5 @@ target_sources(app PRIVATE
   src/sampler.c
   src/shell.c
   src/ui.c
+  src/input.c
 )
