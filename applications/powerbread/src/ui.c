@@ -29,6 +29,12 @@ static lv_obj_t *dash_label[PB_NUM_CH];
 static enum pb_mode shown_mode = PB_MODE_COUNT; /* force first update */
 static struct pb_snapshot snap;
 
+static lv_obj_t *chart;
+static lv_chart_series_t *chart_ser;
+static lv_obj_t *chart_label;
+static int32_t chart_buf[PB_CHART_POINTS];
+static lv_obj_t *stats_label;
+
 static const char *const mode_names[PB_MODE_COUNT] = {"dash", "chart", "stats"};
 
 void pb_ui_set_mode(enum pb_mode mode)
@@ -93,15 +99,28 @@ static void create_dash(lv_obj_t *parent)
 	}
 }
 
-/* Filled in by the chart/stats task */
 static void create_chart(lv_obj_t *parent)
 {
-	ARG_UNUSED(parent);
+	chart = lv_chart_create(parent);
+	lv_obj_set_size(chart, lv_pct(100), 110);
+	lv_obj_align(chart, LV_ALIGN_TOP_MID, 0, 0);
+	lv_chart_set_type(chart, LV_CHART_TYPE_LINE);
+	lv_chart_set_point_count(chart, PB_CHART_POINTS);
+	lv_chart_set_div_line_count(chart, 4, 4);
+	chart_ser = lv_chart_add_series(chart, lv_palette_main(LV_PALETTE_YELLOW),
+					LV_CHART_AXIS_PRIMARY_Y);
+	lv_chart_set_series_ext_y_array(chart, chart_ser, chart_buf);
+
+	chart_label = lv_label_create(parent);
+	lv_obj_align(chart_label, LV_ALIGN_BOTTOM_MID, 0, 0);
+	lv_label_set_text(chart_label, "--");
 }
 
 static void create_stats(lv_obj_t *parent)
 {
-	ARG_UNUSED(parent);
+	stats_label = lv_label_create(parent);
+	lv_obj_align(stats_label, LV_ALIGN_TOP_LEFT, 0, 0);
+	lv_label_set_text(stats_label, "--");
 }
 
 static void update_dash(void)
@@ -118,10 +137,40 @@ static void update_dash(void)
 
 static void update_chart(void)
 {
+	uint8_t ch = pb_ui_get_channel();
+	const struct pb_channel_stats *c = &snap.ch[ch];
+	int32_t lo = INT32_MAX, hi = INT32_MIN;
+	char ma[16];
+
+	for (int p = 0; p < PB_CHART_POINTS; p++) {
+		chart_buf[p] = c->chart[p];
+		lo = MIN(lo, chart_buf[p]);
+		hi = MAX(hi, chart_buf[p]);
+	}
+	/* pad the range so a flat line is not glued to an edge */
+	if (hi - lo < 10) {
+		hi = lo + 10;
+	}
+	lv_chart_set_axis_range(chart, LV_CHART_AXIS_PRIMARY_Y, lo, hi);
+	lv_chart_refresh(chart);
+
+	fmt_x100(ma, sizeof(ma), (int32_t)(c->ma * 100.0f));
+	lv_label_set_text_fmt(chart_label, "%s mA", ma);
 }
 
 static void update_stats(void)
 {
+	const struct pb_channel_stats *c = &snap.ch[pb_ui_get_channel()];
+	char lo[16], hi[16], avg[16], v[16], mah[16], mwh[16];
+
+	fmt_x100(lo, sizeof(lo), (int32_t)(c->ma_min * 100.0f));
+	fmt_x100(hi, sizeof(hi), (int32_t)(c->ma_max * 100.0f));
+	fmt_x100(avg, sizeof(avg), (int32_t)(c->ma_avg * 100.0f));
+	fmt_x100(v, sizeof(v), (int32_t)(c->v * 100.0f));
+	fmt_x100(mah, sizeof(mah), (int32_t)(c->mah * 100.0f));
+	fmt_x100(mwh, sizeof(mwh), (int32_t)(c->mwh * 100.0f));
+	lv_label_set_text_fmt(stats_label, "V %s\nmin %s\nmax %s\navg %s\nmAh %s\nmWh %s", v, lo,
+			      hi, avg, mah, mwh);
 }
 
 static void refresh_cb(lv_timer_t *timer)
