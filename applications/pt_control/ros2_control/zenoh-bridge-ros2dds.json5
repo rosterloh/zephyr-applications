@@ -1,0 +1,23 @@
+{
+  // Act as a zenoh router the firmware's zenoh-pico *client* connects to.
+  // Point the firmware at this host: set CONFIG_APP_ZENOH_LOCATOR to
+  // tcp/<this-host-ip>:7447 (prj.conf), or override at runtime.
+  mode: "router",
+  listen: {
+    endpoints: ["tcp/0.0.0.0:7447"],
+  },
+
+  plugins: {
+    ros2dds: {
+      // With no allow/deny the bridge maps every ROS 2 topic. To restrict it
+      // to just the pan/tilt traffic, uncomment:
+      //
+      // allow: {
+      //   // ROS publishers bridged out to zenoh (host -> firmware commands):
+      //   publishers: ["/robot_joint_commands"],
+      //   // ROS subscribers fed from zenoh (firmware state -> host):
+      //   subscribers: ["/robot_joint_states"],
+      // },
+    },
+  },
+}

@@ -50,20 +50,21 @@ config APP_ZENOH_LOCATOR
 
 config APP_ZENOH_JOINT_STATE_KEY
 	string "Zenoh key expression for the published JointState"
-	default "rt/pt_control/joint_states"
+	default "rt/robot_joint_states"
 	help
 	  Zenoh key for the sensor_msgs/JointState carrying pan/tilt feedback.
 	  The 'rt/' prefix is required by the zenoh-ros2dds bridge; this maps to
-	  the ROS2 topic /pt_control/joint_states, which the remote host's
-	  ros2_control hardware interface reads as its state source.
+	  the ROS2 topic /robot_joint_states. Default matches the
+	  topic_based_ros2_control TopicBasedSystem 'joint_states_topic' default,
+	  so the host reads it as its state source with no param override.
 
 config APP_ZENOH_JOINT_CMD_KEY
 	string "Zenoh key expression for the subscribed JointState commands"
-	default "rt/pt_control/joint_commands"
+	default "rt/robot_joint_commands"
 	help
-	  Zenoh key for the sensor_msgs/JointState position commands. Maps to
-	  the ROS2 topic /pt_control/joint_commands, which the remote host's
-	  ros2_control hardware interface writes with pan/tilt setpoints
+	  Zenoh key for the sensor_msgs/JointState position commands. Maps to the
+	  ROS2 topic /robot_joint_commands, matching the topic_based_ros2_control
+	  'joint_commands_topic' default. The host writes pan/tilt setpoints
 	  (joint names "pan_joint" and "tilt_joint", positions in radians).
 
 config APP_ZENOH_JOINT_STATE_PUBLISH_HZ

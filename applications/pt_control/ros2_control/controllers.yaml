@@ -1,0 +1,29 @@
+controller_manager:
+  ros__parameters:
+    # Match the firmware: JointState publish is capped at 50 Hz and the shared
+    # UART servo bus is the real rate ceiling. Going much higher just floods
+    # the bus/bridge with no benefit.
+    update_rate: 50  # Hz
+
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+
+    pan_tilt_controller:
+      type: joint_trajectory_controller/JointTrajectoryController
+
+pan_tilt_controller:
+  ros__parameters:
+    joints:
+      - pan_joint
+      - tilt_joint
+    command_interfaces:
+      - position
+    state_interfaces:
+      - position
+      - velocity
+    # The gimbal has no closed-loop feedback timing guarantees over WiFi, so
+    # keep tolerances loose / disabled for a first bringup.
+    allow_nonzero_velocity_at_trajectory_end: true
+    constraints:
+      stopped_velocity_tolerance: 0.0
+      goal_time: 0.0

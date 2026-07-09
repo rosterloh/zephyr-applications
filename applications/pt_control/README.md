@@ -5,9 +5,15 @@ exposes the two bus-servo joints to a remote host running `ros2_control` by
 bridging `sensor_msgs/JointState` over zenoh-pico / WiFi:
 
 - **publishes** joint feedback (position + velocity) as `sensor_msgs/JointState`
-  on `rt/pt_control/joint_states` → ROS 2 `/pt_control/joint_states`
+  on `rt/robot_joint_states` → ROS 2 `/robot_joint_states`
 - **subscribes** to position commands as `sensor_msgs/JointState` on
-  `rt/pt_control/joint_commands` → ROS 2 `/pt_control/joint_commands`
+  `rt/robot_joint_commands` → ROS 2 `/robot_joint_commands`
+
+These key defaults match the
+[`topic_based_ros2_control`](https://github.com/PickNikRobotics/topic_based_ros2_control)
+`TopicBasedSystem` topic defaults, so the host pairs with no param overrides.
+A ready-to-run host example (URDF, controllers, bridge config) lives in
+[`ros2_control/`](ros2_control/).
 
 Joint names are `pan_joint` and `tilt_joint`; positions are in radians.
 Pan+tilt setpoints are issued as a single atomic bus sync-write.
@@ -62,17 +68,17 @@ Point the firmware at your zenoh router by setting `CONFIG_APP_ZENOH_LOCATOR`
 
 ## Remote host (ros2_control)
 
-Run a zenoh router and the ROS 2 <-> zenoh bridge, then a controller_manager
-with a topic-based hardware interface bound to the two topics above:
+The host runs `topic_based_ros2_control/TopicBasedSystem` behind a
+`zenoh-bridge-ros2dds` that the firmware's zenoh-pico client connects to. A
+complete, copy-paste example is in [`ros2_control/`](ros2_control/):
 
-```bash
-zenohd -l tcp/0.0.0.0:7447
-ros2 run zenoh_bridge_ros2dds zenoh_bridge_ros2dds -e tcp/localhost:7447
-```
+- `pt_control.urdf.xacro` — pan/tilt description + the `TopicBasedSystem`
+  hardware block (position command, position+velocity state).
+- `controllers.yaml` — `joint_state_broadcaster` + a `pan_tilt_controller`
+  (`JointTrajectoryController`).
+- `zenoh-bridge-ros2dds.json5` — bridge listening on `tcp/0.0.0.0:7447` for the
+  firmware to connect to.
 
-Configure a `topic_based_ros2_control/TopicBasedSystem` hardware component with
-`joint_states_topic: /pt_control/joint_states` and
-`joint_commands_topic: /pt_control/joint_commands`, and joints `pan_joint` /
-`tilt_joint`. A `JointStateBroadcaster` plus a
-`JointGroupPositionController` (or `JointTrajectoryController`) then drive the
-gimbal from the host.
+See `ros2_control/README.md` for the run steps. Because the firmware key
+defaults map to `/robot_joint_states` and `/robot_joint_commands`, the
+`TopicBasedSystem` defaults line up with no topic params.

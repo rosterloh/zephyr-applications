@@ -1,0 +1,55 @@
+<?xml version="1.0"?>
+<!--
+  Minimal pan/tilt description for driving the pt_control firmware through
+  topic_based_ros2_control. The <ros2_control> block is the important part;
+  the links are just enough to make a valid robot_description.
+
+  Build:  xacro pt_control.urdf.xacro > pt_control.urdf
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="pt_control">
+
+  <link name="base_link"/>
+
+  <link name="pan_link"/>
+  <joint name="pan_joint" type="revolute">
+    <parent link="base_link"/>
+    <child link="pan_link"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-1.5708" upper="1.5708" effort="1.0" velocity="3.0"/>
+  </joint>
+
+  <link name="tilt_link"/>
+  <joint name="tilt_joint" type="revolute">
+    <parent link="pan_link"/>
+    <child link="tilt_link"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="-1.5708" upper="1.5708" effort="1.0" velocity="3.0"/>
+  </joint>
+
+  <ros2_control name="pt_control" type="system">
+    <hardware>
+      <plugin>topic_based_ros2_control/TopicBasedSystem</plugin>
+      <!--
+        Firmware key defaults map to these ROS topics via zenoh-ros2dds, and
+        they are also the TopicBasedSystem defaults, so these params are
+        optional. Left explicit for clarity / easy retargeting.
+      -->
+      <param name="joint_commands_topic">/robot_joint_commands</param>
+      <param name="joint_states_topic">/robot_joint_states</param>
+      <!-- Only publish a command when a joint moves past this many radians. -->
+      <param name="trigger_joint_command_threshold">0.001</param>
+    </hardware>
+
+    <joint name="pan_joint">
+      <command_interface name="position"/>
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+    </joint>
+    <joint name="tilt_joint">
+      <command_interface name="position"/>
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+    </joint>
+  </ros2_control>
+
+</robot>
