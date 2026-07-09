@@ -44,11 +44,6 @@ void pb_ui_set_mode(enum pb_mode mode)
 	}
 }
 
-enum pb_mode pb_ui_get_mode(void)
-{
-	return (enum pb_mode)atomic_get(&req_mode);
-}
-
 void pb_ui_step_mode(int dir)
 {
 	int m = ((int)atomic_get(&req_mode) + dir + PB_MODE_COUNT) % PB_MODE_COUNT;

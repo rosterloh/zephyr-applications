@@ -18,7 +18,6 @@ enum pb_mode {
 
 int pb_ui_init(void);
 void pb_ui_set_mode(enum pb_mode mode);
-enum pb_mode pb_ui_get_mode(void);
 void pb_ui_step_mode(int dir);
 void pb_ui_set_channel(uint8_t ch);
 uint8_t pb_ui_get_channel(void);
