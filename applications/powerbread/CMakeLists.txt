@@ -7,4 +7,5 @@ target_sources(app PRIVATE
   src/main.c
   src/sampler.c
   src/shell.c
+  src/ui.c
 )

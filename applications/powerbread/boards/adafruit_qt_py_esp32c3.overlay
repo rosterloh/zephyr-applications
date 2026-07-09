@@ -19,3 +19,73 @@
 		avg-mode = <1>;
 	};
 };
+
+/*
+ * ST7735 0.96" 80x160 LCD, wired per the XIAO PowerBread schematic:
+ * DIN=GPIO7 (SPI2 MOSI), CLK=GPIO10 (SPI2 SCLK), DC=GPIO8, RST=GPIO0,
+ * CS tied low on the module (no CS GPIO), backlight hardwired on.
+ * GPIO8 is SPIM2_MISO on the base board; re-pinmux SPI2 without MISO so
+ * GPIO8 is free to drive the DC line (display is write-only).
+ */
+
+&pinctrl {
+	spim2_lcd: spim2_lcd {
+		group1 {
+			pinmux = <SPIM2_SCLK_GPIO10>;
+		};
+		group2 {
+			pinmux = <SPIM2_MOSI_GPIO7>;
+			output-low;
+		};
+	};
+};
+
+&spi2 {
+	pinctrl-0 = <&spim2_lcd>;
+	pinctrl-names = "default";
+};
+
+/ {
+	chosen {
+		zephyr,display = &st7735r;
+	};
+
+	mipi_dbi {
+		compatible = "zephyr,mipi-dbi-spi";
+		spi-dev = <&spi2>;
+		dc-gpios = <&gpio0 8 GPIO_ACTIVE_HIGH>;
+		reset-gpios = <&gpio0 0 GPIO_ACTIVE_LOW>;
+		write-only;
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		/* Panel init values from the in-tree heltec_wireless_tracker
+		 * (same 0.96" 160x80 ST7735 panel), rotated to portrait.
+		 */
+		st7735r: st7735r@0 {
+			compatible = "sitronix,st7735r";
+			reg = <0>;
+			mipi-max-frequency = <20000000>;
+			mipi-mode = "MIPI_DBI_MODE_SPI_4WIRE";
+			width = <80>;
+			height = <160>;
+			inversion-on;
+			x-offset = <26>;
+			y-offset = <1>;
+			madctl = <0xc8>;
+			colmod = <0x05>;
+			invctr = <7>;
+			vmctr1 = <0x0e>;
+			pwctr1 = [a2 02 84];
+			pwctr2 = [c1];
+			pwctr3 = [0a 00];
+			pwctr4 = [8a 2a];
+			pwctr5 = [8a ee];
+			frmctr1 = [01 26 2e];
+			frmctr2 = [01 26 2e];
+			frmctr3 = [01 26 2e 01 26 2e];
+			gamctrp1 = [0f 1a 0f 18 2f 28 20 22 1f 1b 23 37 00 07 02 10];
+			gamctrn1 = [0f 1b 0f 17 33 2c 29 2e 30 2e 30 3b 00 07 03 10];
+		};
+	};
+};
