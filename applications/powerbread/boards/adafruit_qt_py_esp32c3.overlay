@@ -72,10 +72,12 @@
 			mipi-mode = "MIPI_DBI_MODE_SPI_4WIRE";
 			width = <80>;
 			height = <160>;
-			inversion-on;
-			x-offset = <26>;
-			y-offset = <1>;
-			madctl = <0xc8>;
+			/* Match upstream LGFX_096_XPB: invert=false, offset 24/0,
+			 * rotation 0 (no MX/MY), BGR color order.
+			 */
+			x-offset = <24>;
+			y-offset = <0>;
+			madctl = <0x00>;
 			colmod = <0x05>;
 			invctr = <7>;
 			vmctr1 = <0x0e>;

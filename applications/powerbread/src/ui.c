@@ -23,9 +23,9 @@ LOG_MODULE_REGISTER(ui, LOG_LEVEL_INF);
 static atomic_t req_mode = ATOMIC_INIT(PB_MODE_DASH);
 static atomic_t req_channel = ATOMIC_INIT(0);
 
-static lv_obj_t *header;
 static lv_obj_t *pages[PB_MODE_COUNT];
-static lv_obj_t *dash_label[PB_NUM_CH];
+static lv_obj_t *dash_val[PB_NUM_CH][3];        /* V / mA / mW value labels */
+static lv_obj_t *dash_unit[PB_NUM_CH][3];       /* unit labels; power flips mW<->W */
 static enum pb_mode shown_mode = PB_MODE_COUNT; /* force first update */
 static struct pb_snapshot snap;
 
@@ -34,8 +34,6 @@ static lv_chart_series_t *chart_ser;
 static lv_obj_t *chart_label;
 static int32_t chart_buf[PB_CHART_POINTS];
 static lv_obj_t *stats_label;
-
-static const char *const mode_names[PB_MODE_COUNT] = {"dash", "chart", "stats"};
 
 void pb_ui_set_mode(enum pb_mode mode)
 {
@@ -73,37 +71,62 @@ static void fmt_x100(char *buf, size_t len, int32_t x100)
 		 abs(x100 % 100));
 }
 
+/* one decimal place variant, value scaled by 10 */
+static void fmt_x10(char *buf, size_t len, int32_t x10)
+{
+	snprintf(buf, len, "%s%d.%d", (x10 < 0 && x10 > -10) ? "-" : "", x10 / 10, abs(x10 % 10));
+}
+
+/* upstream PowerBread channel accents: cyan for A, pink for B */
+static lv_color_t ch_color(uint8_t ch)
+{
+	return (ch == 0) ? lv_color_hex(0x00b8d4) : lv_color_hex(0xf0308c);
+}
+
 static void create_dash(lv_obj_t *parent)
 {
+	static const char *const units[3] = {"V", "mA", "mW"};
+
 	for (int i = 0; i < PB_NUM_CH; i++) {
-		lv_obj_t *panel = lv_obj_create(parent);
+		int y0 = (i == 0) ? 2 : 82;
+		lv_obj_t *chip = lv_label_create(parent);
 
-		/* page is 144 px tall: two 68 px panels with a 8 px gap */
-		lv_obj_set_size(panel, lv_pct(100), 68);
-		lv_obj_align(panel, LV_ALIGN_TOP_MID, 0, (i == 0) ? 0 : 76);
-		lv_obj_set_style_pad_all(panel, 2, 0);
+		lv_label_set_text_fmt(chip, "Channel %c", 'A' + i);
+		lv_obj_set_style_bg_color(chip, ch_color(i), 0);
+		lv_obj_set_style_bg_opa(chip, LV_OPA_COVER, 0);
+		lv_obj_set_style_radius(chip, 2, 0);
+		lv_obj_set_style_pad_hor(chip, 3, 0);
+		lv_obj_set_style_pad_ver(chip, 1, 0);
+		lv_obj_align(chip, LV_ALIGN_TOP_LEFT, 0, y0);
 
-		lv_obj_t *title = lv_label_create(panel);
+		for (int r = 0; r < 3; r++) {
+			int ry = y0 + 16 + r * 17;
 
-		lv_label_set_text_fmt(title, "CH%d", i + 1);
-		lv_obj_align(title, LV_ALIGN_TOP_LEFT, 0, 0);
+			dash_val[i][r] = lv_label_create(parent);
+			lv_obj_set_style_text_font(dash_val[i][r], &lv_font_montserrat_16, 0);
+			lv_label_set_text(dash_val[i][r], "--");
+			lv_obj_align(dash_val[i][r], LV_ALIGN_TOP_LEFT, 0, ry);
 
-		dash_label[i] = lv_label_create(panel);
-		lv_label_set_text(dash_label[i], "--");
-		lv_obj_align(dash_label[i], LV_ALIGN_LEFT_MID, 0, 6);
+			dash_unit[i][r] = lv_label_create(parent);
+			lv_label_set_text(dash_unit[i][r], units[r]);
+			lv_obj_set_style_text_color(dash_unit[i][r], lv_color_hex(0x9e9e9e), 0);
+			lv_obj_align(dash_unit[i][r], LV_ALIGN_TOP_RIGHT, 0, ry + 4);
+		}
 	}
 }
 
 static void create_chart(lv_obj_t *parent)
 {
 	chart = lv_chart_create(parent);
-	lv_obj_set_size(chart, lv_pct(100), 110);
+	lv_obj_set_size(chart, lv_pct(100), 135);
 	lv_obj_align(chart, LV_ALIGN_TOP_MID, 0, 0);
+	lv_obj_set_style_bg_color(chart, lv_color_black(), 0);
+	lv_obj_set_style_border_width(chart, 0, 0);
+	lv_obj_set_style_line_color(chart, lv_color_hex(0x303030), LV_PART_MAIN);
 	lv_chart_set_type(chart, LV_CHART_TYPE_LINE);
 	lv_chart_set_point_count(chart, PB_CHART_POINTS);
 	lv_chart_set_div_line_count(chart, 4, 4);
-	chart_ser = lv_chart_add_series(chart, lv_palette_main(LV_PALETTE_YELLOW),
-					LV_CHART_AXIS_PRIMARY_Y);
+	chart_ser = lv_chart_add_series(chart, ch_color(0), LV_CHART_AXIS_PRIMARY_Y);
 	lv_chart_set_series_ext_y_array(chart, chart_ser, chart_buf);
 
 	chart_label = lv_label_create(parent);
@@ -124,9 +147,18 @@ static void update_dash(void)
 		char v[16], ma[16], mw[16];
 
 		fmt_x100(v, sizeof(v), (int32_t)(snap.ch[i].v * 100.0f));
-		fmt_x100(ma, sizeof(ma), (int32_t)(snap.ch[i].ma * 100.0f));
-		fmt_x100(mw, sizeof(mw), (int32_t)(snap.ch[i].mw * 100.0f));
-		lv_label_set_text_fmt(dash_label[i], "%sV\n%smA\n%smW", v, ma, mw);
+		fmt_x10(ma, sizeof(ma), (int32_t)(snap.ch[i].ma * 10.0f));
+		if (snap.ch[i].mw >= 1000.0f) {
+			/* upstream shows watts once past 1 W (e.g. "1.62 W") */
+			fmt_x100(mw, sizeof(mw), (int32_t)(snap.ch[i].mw / 10.0f));
+			lv_label_set_text(dash_unit[i][2], "W");
+		} else {
+			fmt_x10(mw, sizeof(mw), (int32_t)(snap.ch[i].mw * 10.0f));
+			lv_label_set_text(dash_unit[i][2], "mW");
+		}
+		lv_label_set_text(dash_val[i][0], v);
+		lv_label_set_text(dash_val[i][1], ma);
+		lv_label_set_text(dash_val[i][2], mw);
 	}
 }
 
@@ -146,6 +178,7 @@ static void update_chart(void)
 	if (hi - lo < 10) {
 		hi = lo + 10;
 	}
+	lv_chart_set_series_color(chart, chart_ser, ch_color(ch));
 	lv_chart_set_axis_range(chart, LV_CHART_AXIS_PRIMARY_Y, lo, hi);
 	lv_chart_refresh(chart);
 
@@ -171,7 +204,6 @@ static void update_stats(void)
 static void refresh_cb(lv_timer_t *timer)
 {
 	enum pb_mode mode = (enum pb_mode)atomic_get(&req_mode);
-	uint8_t ch = (uint8_t)atomic_get(&req_channel);
 
 	ARG_UNUSED(timer);
 
@@ -187,9 +219,6 @@ static void refresh_cb(lv_timer_t *timer)
 		}
 		shown_mode = mode;
 	}
-
-	lv_label_set_text_fmt(header, "CH%d %s%s", ch + 1, mode_names[mode],
-			      snap.sensor_ok ? "" : " !SNS");
 
 	switch (mode) {
 	case PB_MODE_DASH:
@@ -217,18 +246,23 @@ int pb_ui_init(void)
 
 	lv_obj_t *scr = lv_screen_active();
 
+	/* dark theme matching upstream PowerBread */
+	lv_obj_set_style_bg_color(scr, lv_color_black(), 0);
+	lv_obj_set_style_text_color(scr, lv_color_white(), 0);
 	lv_obj_set_style_pad_all(scr, 0, 0);
-
-	header = lv_label_create(scr);
-	lv_obj_align(header, LV_ALIGN_TOP_MID, 0, 1);
-	lv_label_set_text(header, "");
+	lv_obj_remove_flag(scr, LV_OBJ_FLAG_SCROLLABLE);
 
 	for (int i = 0; i < PB_MODE_COUNT; i++) {
 		pages[i] = lv_obj_create(scr);
-		lv_obj_set_size(pages[i], lv_pct(100), 144);
+		lv_obj_set_size(pages[i], lv_pct(100), lv_pct(100));
 		lv_obj_align(pages[i], LV_ALIGN_BOTTOM_MID, 0, 0);
-		lv_obj_set_style_pad_all(pages[i], 1, 0);
+		lv_obj_set_style_bg_opa(pages[i], LV_OPA_TRANSP, 0);
+		lv_obj_set_style_text_color(pages[i], lv_color_white(), 0);
+		lv_obj_set_style_pad_all(pages[i], 2, 0);
 		lv_obj_set_style_border_width(pages[i], 0, 0);
+		lv_obj_set_style_radius(pages[i], 0, 0);
+		lv_obj_set_scrollbar_mode(pages[i], LV_SCROLLBAR_MODE_OFF);
+		lv_obj_remove_flag(pages[i], LV_OBJ_FLAG_SCROLLABLE);
 		lv_obj_add_flag(pages[i], LV_OBJ_FLAG_HIDDEN);
 	}
 

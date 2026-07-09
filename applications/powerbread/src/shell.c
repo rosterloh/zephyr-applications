@@ -8,6 +8,7 @@
 #include "ui.h"
 
 #include <errno.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -100,6 +101,7 @@ static int cmd_channel(const struct shell *sh, size_t argc, char **argv)
 	return 0;
 }
 
+#if DT_NODE_EXISTS(DT_NODELABEL(dial))
 static int cmd_dial(const struct shell *sh, size_t argc, char **argv)
 {
 	static const struct adc_dt_spec dial_adc = ADC_DT_SPEC_GET_BY_IDX(DT_NODELABEL(dial), 0);
@@ -134,6 +136,16 @@ static int cmd_dial(const struct shell *sh, size_t argc, char **argv)
 	shell_print(sh, "dial: %d mV (raw %d)", mv, raw);
 	return 0;
 }
+#else
+static int cmd_dial(const struct shell *sh, size_t argc, char **argv)
+{
+	ARG_UNUSED(argc);
+	ARG_UNUSED(argv);
+
+	shell_error(sh, "no dial on this board");
+	return -ENOTSUP;
+}
+#endif
 
 SHELL_STATIC_SUBCMD_SET_CREATE(
 	sub_powerbread, SHELL_CMD(read, NULL, "One-shot readings for both channels", cmd_read),

@@ -33,3 +33,11 @@ calibrating the `adc-keys` thresholds in the board overlay).
 
     uv run poe app powerbread
     uv run poe flash powerbread
+
+## Simulator
+
+The UI runs on the host with synthetic sensor data (SDL window, no
+hardware needed) — useful for iterating on screens:
+
+    uv run poe app powerbread --board native_sim/native/64
+    ./builds/powerbread/zephyr/zephyr.exe -rt

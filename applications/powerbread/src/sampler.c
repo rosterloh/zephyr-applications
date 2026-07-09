@@ -6,6 +6,7 @@
 
 #include "sampler.h"
 
+#include <math.h>
 #include <stdlib.h>
 
 #include <zephyr/device.h>
@@ -37,7 +38,9 @@ struct channel_acc {
 	uint16_t head; /* next write index == oldest sample */
 };
 
+#if DT_HAS_COMPAT_STATUS_OKAY(ti_ina3221)
 static const struct device *const ina = DEVICE_DT_GET_ONE(ti_ina3221);
+#endif
 static struct channel_acc acc[PB_NUM_CH];
 static bool sensor_ok;
 static bool stream_on;
@@ -100,6 +103,7 @@ void sampler_get(struct pb_snapshot *out)
 	k_mutex_unlock(&lock);
 }
 
+#if DT_HAS_COMPAT_STATUS_OKAY(ti_ina3221)
 static int read_channels(float *v, float *ma, float *mw)
 {
 	struct sensor_value val;
@@ -136,6 +140,24 @@ static int read_channels(float *v, float *ma, float *mw)
 	}
 	return 0;
 }
+#else
+/* No sensor hardware (native_sim): synthesize plausible waveforms so the
+ * UI and stats paths can be exercised on the host.
+ */
+static int read_channels(float *v, float *ma, float *mw)
+{
+	float phase = (float)(k_uptime_get_32() % 8000U) * (2.0f * 3.14159265f / 8000.0f);
+
+	v[0] = 5.02f;
+	ma[0] = 320.0f + 250.0f * sinf(phase);
+	v[1] = 3.31f;
+	ma[1] = 116.0f + 60.0f * sinf(phase * 1.7f);
+	for (int i = 0; i < PB_NUM_CH; i++) {
+		mw[i] = v[i] * ma[i];
+	}
+	return 0;
+}
+#endif
 
 static void stream_csv(uint32_t t_ms, const float *v, const float *ma, const float *mw)
 {
@@ -163,10 +185,14 @@ static void sampler_thread(void *a, void *b, void *c)
 
 	sampler_reset_stats();
 
+#if DT_HAS_COMPAT_STATUS_OKAY(ti_ina3221)
 	if (!device_is_ready(ina)) {
 		LOG_ERR("INA3221 not ready");
 		return;
 	}
+#else
+	LOG_WRN("no INA3221 on this board; using synthetic data");
+#endif
 
 	last_t = k_uptime_get();
 
@@ -231,4 +257,7 @@ static void sampler_thread(void *a, void *b, void *c)
 	}
 }
 
-K_THREAD_DEFINE(pb_sampler, 2048, sampler_thread, NULL, NULL, NULL, 5, 0, 0);
+/* 4 KiB: printk CSV formatting stacks on top of the sensor read path, and
+ * the ESP32-C3 has no HW stack guard — 2 KiB was intermittently overflowing.
+ */
+K_THREAD_DEFINE(pb_sampler, 4096, sampler_thread, NULL, NULL, NULL, 5, 0, 0);
