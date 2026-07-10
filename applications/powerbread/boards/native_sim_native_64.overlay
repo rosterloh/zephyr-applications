@@ -1,0 +1,13 @@
+/*
+ * Copyright (c) 2026 Richard Osterloh
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * native_sim: SDL window stands in for the ST7735 (80x160); no INA3221 or
+ * dial hardware — the sampler falls back to synthetic data.
+ */
+
+&sdl_dc {
+	width = <80>;
+	height = <160>;
+};
