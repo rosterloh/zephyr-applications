@@ -2,14 +2,14 @@
 # the Zephyr testing tool. In this file, multiple combinations can be specified,
 # so that you can easily test all of them locally or in CI.
 sample:
-  description: ROS Driver application
-  name: ros-driver 
+  description: Pico firmware application
+  name: pico-fw
 common:
   build_only: true
   integration_platforms:
-    - ros_driver
+    - rpi_pico/rp2040/w
 tests:
-  app.default: {}
-  app.debug:
+  app.pico_fw.default: {}
+  app.pico_fw.debug:
     extra_overlay_confs:
       - debug.conf

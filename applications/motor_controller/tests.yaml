@@ -2,14 +2,14 @@
 # the Zephyr testing tool. In this file, multiple combinations can be specified,
 # so that you can easily test all of them locally or in CI.
 sample:
-  description: Joystick controller application
-  name: joystick-controller 
+  description: Motor Controller application
+  name: motor-controller-application
 common:
   build_only: true
   integration_platforms:
-    - adafruit_qt_py_esp32s3/esp32s3/procpu
+    - robotis_openrb_150
 tests:
-  app.default: {}
-#  app.debug:
-#    extra_overlay_confs:
-#      - debug.conf
+  app.motor_controller.default: {}
+  app.motor_controller.debug:
+    extra_overlay_confs:
+      - debug.conf
