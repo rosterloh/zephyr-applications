@@ -52,6 +52,8 @@ jobs:
 
       - name: Setup workspace
         run: uv run poe setup
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build firmware
         run: uv run poe app ${{ matrix.app }} ${{ matrix.flags }}

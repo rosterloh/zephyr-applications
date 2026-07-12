@@ -260,6 +260,7 @@ shell = """
 set -e
 SDK_VER=$(cat "${POE_ROOT}/deps/zephyr/SDK_VERSION")
 west sdk install --version "$SDK_VER" \
+  ${GITHUB_TOKEN:+--personal-access-token "$GITHUB_TOKEN"} \
   -t arm-zephyr-eabi \
      riscv64-zephyr-elf \
      xtensa-espressif_esp32_zephyr-elf \
