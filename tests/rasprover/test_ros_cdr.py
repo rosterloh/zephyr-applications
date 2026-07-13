@@ -3,12 +3,23 @@ import subprocess
 import textwrap
 from pathlib import Path
 
+import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 RASPROVER_SRC = REPO_ROOT / "applications" / "rasprover" / "src"
 
+# app_ros_cdr.c pulls in the CDR codec from the out-of-tree rosterloh-drivers
+# module (west-managed, under deps/). Both the header and its implementation are
+# plain C with only libc dependencies, so they host-compile with gcc.
+DRIVERS_ROOT = REPO_ROOT / "deps" / "modules" / "lib" / "rosterloh-drivers"
+CDR_INCLUDE = DRIVERS_ROOT / "include"
+CDR_SRC = DRIVERS_ROOT / "lib" / "cdr" / "cdr.c"
+
 
 def _compile_and_run(tmp_path: Path, source: str) -> bytes:
+    if not CDR_SRC.exists():
+        pytest.skip(f"CDR driver source not found at {CDR_SRC}; run `uv run poe setup`")
+
     test_c = tmp_path / "test_ros_cdr.c"
     test_c.write_text(textwrap.dedent(source))
     exe = tmp_path / "test_ros_cdr"
@@ -22,8 +33,11 @@ def _compile_and_run(tmp_path: Path, source: str) -> bytes:
             "-Werror",
             "-I",
             str(RASPROVER_SRC),
+            "-I",
+            str(CDR_INCLUDE),
             str(test_c),
             str(RASPROVER_SRC / "app_ros_cdr.c"),
+            str(CDR_SRC),
             "-o",
             str(exe),
         ],

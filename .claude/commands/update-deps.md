@@ -28,9 +28,18 @@ Steps:
 
 3. **Sync + verify.**
    - `uv sync`
-   - `uv run pytest` (scoped to `tests/` via `testpaths`; expect the repo's own
-     suite to pass).
+   - `uv run pytest` (scoped to `tests/` via `testpaths`). Some tests require a
+     toolchain or Zephyr headers not present outside a west build and may fail for
+     reasons unrelated to the bump — do not assume a fully green suite.
    Capture the pass/fail counts — do not paraphrase from memory.
+
+3b. **Judge on regression, not absolute pass.** A raw pass/fail count is only
+   meaningful against a baseline. If any test fails, re-run that same test on `main`
+   (`git stash -u` or `uv run --frozen pytest <test>` after `git checkout main`) and
+   compare. Only failures the bump *introduced* block the merge; pre-existing or
+   environmental failures are noted and ignored. The baseline run mutates the env
+   (a frozen run on `main` can downgrade packages), so `git checkout` back to the PR
+   branch and re-run `uv sync` before merging.
 
 4. **Handle a bad member.** If `uv sync`/`uv lock` reports a resolution conflict, or
    a specific bump breaks the tests, identify the offending dependency and back it
@@ -46,10 +55,17 @@ Steps:
    - Otherwise, only if verification is green: merge with
      `gh pr merge <number> --squash --auto` so required CI checks still gate the
      merge (fall back to reporting if auto-merge is not enabled and checks are
-     pending — do not force a merge past red/pending checks).
+     pending — do not force a merge past red/pending checks). With clean checks this
+     often merges immediately rather than queuing. Confirm the actual outcome with
+     `gh pr view <number> --json state,autoMergeRequest,mergeStateStatus` — report
+     merged-vs-queued from that result, not from which command path you took.
    - If verification failed and nothing could be safely backed out, do **not** merge;
      report what failed with the captured output.
 
-6. **Report.** State: which PR, resolved-version changes (from `uv.lock`), test
-   result with counts, anything excluded and why, and the merge outcome (merged /
-   queued for auto-merge / left open).
+6. **Clean up.** If merged, return to `main`, `git pull --ff-only`, and delete the
+   local PR branch.
+
+7. **Report.** State: which PR, resolved-version changes (from `uv.lock`), test
+   result with counts (noting any pre-existing failures confirmed against the `main`
+   baseline), anything excluded and why, and the merge outcome (merged / queued for
+   auto-merge / left open).
