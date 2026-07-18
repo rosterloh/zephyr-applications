@@ -128,7 +128,7 @@ zephyr_i2c: &i2c0 {
 
 &twai {
 	/* requires external CAN transceiver or jumper on RX and TX pins for loopback testing */
-	status = "disabled";
+	status = "okay";
 	pinctrl-0 = <&twai_default>;
 	pinctrl-names = "default";
 };
