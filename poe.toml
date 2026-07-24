@@ -276,7 +276,7 @@ case "${app}" in
     joystick_controller)  ALLOWED="adafruit_qt_py_esp32s3/esp32s3/procpu"; DEFAULT="adafruit_qt_py_esp32s3/esp32s3/procpu" ;;
     embedded_vision)      ALLOWED="arduino_nicla_vision/stm32h747xx/m7"; DEFAULT="arduino_nicla_vision/stm32h747xx/m7" ;;
     force_sensor)         ALLOWED="adafruit_qt_py_esp32c3"; DEFAULT="adafruit_qt_py_esp32c3" ;;
-    bt_keys)              ALLOWED="adafruit_qt_py_esp32c3"; DEFAULT="adafruit_qt_py_esp32c3" ;;
+    bt_keys)              ALLOWED="adafruit_qt_py_esp32c3 adafruit_qt_py_esp32s3@psram/esp32s3/procpu"; DEFAULT="adafruit_qt_py_esp32c3" ;;
     powerbread)           ALLOWED="adafruit_qt_py_esp32c3 native_sim/native/64"; DEFAULT="adafruit_qt_py_esp32c3" ;;
     pico_fw)              ALLOWED="rpi_pico/rp2040/w"; DEFAULT="rpi_pico/rp2040/w" ;;
     pt_mcp)               ALLOWED="xiao_esp32c5/esp32c5/hpcore"; DEFAULT="xiao_esp32c5/esp32c5/hpcore" ;;
