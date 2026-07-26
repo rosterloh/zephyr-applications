@@ -31,8 +31,8 @@ Expert guidance on Zephyr's Kconfig system for build-time configuration, symbol 
 - **string**: Quoted text
 
 #### Key Files After Build
-- `build/zephyr/.config` — Final resolved configuration
-- `build/zephyr/kconfig/Kconfig.modules` — Auto-generated module Kconfigs
+- `builds/zephyr/.config` — Final resolved configuration
+- `builds/zephyr/kconfig/Kconfig.modules` — Auto-generated module Kconfigs
 
 ---
 
@@ -123,6 +123,45 @@ For common errors and debugging techniques:
 | Symbol not visible | `depends on` condition false | Check what it depends on |
 | Unknown symbol "X" | Typo or Kconfig not sourced | Verify spelling, check module.yml |
 | warning: Y selected by X but not visible | `select` bypassing `depends on` | Use `imply` or fix dependencies |
+| `<version.h>` / `<app_version.h>` not found | Legacy generated-include path removed | Prefix with `zephyr/` (see below) |
+
+#### Generated includes now need the `zephyr/` prefix
+
+`CONFIG_LEGACY_GENERATED_INCLUDE_PATH` is deprecated and defaults to `n`, so
+generated headers must be included as `<zephyr/version.h>` and
+`<zephyr/app_version.h>` — the bare `<version.h>` / `<app_version.h>` forms no
+longer resolve. This bites vendored third-party code more than application code;
+re-enabling the legacy symbol is a stopgap, not a fix.
+
+#### A silently-ignored symbol is not a Kconfig error
+
+Kconfig does not fail on an unknown symbol in `prj.conf` — it is simply dropped.
+So a renamed or removed `CONFIG_*` produces a **successful build with the
+feature off**, not a diagnostic. When a feature seems not to take effect, grep
+the merged config rather than trusting `prj.conf`:
+
+```bash
+grep FOO builds/<app>/zephyr/.config
+```
+
+For the skill references in this repo, `uv run poe check-skills` validates every
+cited `CONFIG_*` against the current tree for exactly this reason.
+
+#### `CONFIG_*` in `prj.conf` never configures another image
+
+Under sysbuild, `prj.conf` configures your application only. MCUboot and other
+images need `sysbuild/<image>.conf` or `-D<image>_CONFIG_*`. Symbols placed in
+the wrong file are ignored with no warning — see `./sysbuild-mcuboot.md`.
+
+#### Architecture-conditional symbols
+
+Some symbols only exist for certain architectures, so a config that works on one
+SoC silently does nothing (or fails to link) on another. Concrete example hit in
+this workspace: `CONFIG_FLASH_BASE_ADDRESS` is defined in `arch/Kconfig` for
+ARM/ARC/X86/RISCV/RX/OpenRISC/POSIX but **not xtensa**, so an xtensa build with
+`CONFIG_MCUMGR_GRP_IMG=y` that is neither MCUboot-based nor using mapped
+partitions fails to compile in `img_mgmt.c`. The fix there was to build with
+`--sysbuild` so MCUboot supplies the address.
 
 ---
 
@@ -493,7 +532,7 @@ west build -t menuconfig
 
 **Fix:**
 1. Trace `depends on` chain — enable all required dependencies
-2. Check `build/zephyr/Kconfig.modules` for module inclusion
+2. Check `builds/zephyr/Kconfig.modules` for module inclusion
 3. Verify `zephyr/module.yml` points to correct Kconfig path
 
 #### 3. Unknown Symbol Warning
@@ -570,7 +609,7 @@ FOO -> BAR -> BAZ -> FOO
 **Debug:**
 ```bash
 # Check final resolved value
-grep CONFIG_FOO build/zephyr/.config
+grep CONFIG_FOO builds/zephyr/.config
 
 # Check where it's set
 grep -r "CONFIG_FOO" boards/ soc/
@@ -592,14 +631,14 @@ west build -t menuconfig
 
 ```bash
 # View resolved .config
-cat build/zephyr/.config | grep FOO
+cat builds/zephyr/.config | grep FOO
 ```
 
 #### 3. Trace Module Inclusion
 
 ```bash
 # Check if module Kconfig is sourced
-cat build/zephyr/Kconfig.modules
+cat builds/zephyr/Kconfig.modules
 ```
 
 #### 4. Verbose Build Output
@@ -612,13 +651,13 @@ west build -v 2>&1 | grep -i kconfig
 
 ```bash
 # Save current config
-cp build/zephyr/.config config_before
+cp builds/zephyr/.config config_before
 
 # Make changes, rebuild
 west build
 
 # Compare
-diff config_before build/zephyr/.config
+diff config_before builds/zephyr/.config
 ```
 
 ---
@@ -633,7 +672,7 @@ Lower entries override higher ones:
 4. Application `prj.conf`
 5. Board-specific overlay (`boards/<board>.conf`)
 6. CMake `-DCONFIG_*` flags
-7. `menuconfig` changes (saved to `build/zephyr/.config`)
+7. `menuconfig` changes (saved to `builds/zephyr/.config`)
 
 ---
 
@@ -1118,7 +1157,7 @@ Functions are evaluated during CMake configuration. To see results:
 
 ```bash
 # Check generated Kconfig.modules
-cat build/zephyr/Kconfig.modules
+cat builds/zephyr/Kconfig.modules
 
 # Run menuconfig and search for symbol
 west build -t menuconfig
@@ -1210,11 +1249,11 @@ Prompt: Logging
 
 1. Press `Esc` twice to exit
 2. Select "Yes" to save when prompted
-3. Changes saved to `build/zephyr/.config`
+3. Changes saved to `builds/zephyr/.config`
 
 **Note:** Changes are lost on clean rebuild. Copy to `prj.conf` for persistence:
 ```bash
-grep CONFIG_MY_SETTING build/zephyr/.config >> prj.conf
+grep CONFIG_MY_SETTING builds/zephyr/.config >> prj.conf
 ```
 
 ---

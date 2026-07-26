@@ -37,10 +37,10 @@ uv run python $ZEPHYR_BASE/scripts/coredump/coredump_serial_log_parser.py \
 
 # 2. start a gdbserver that speaks the coredump
 uv run python $ZEPHYR_BASE/scripts/coredump/coredump_gdbserver.py \
-    build/<app>/zephyr/zephyr.elf coredump.bin
+    builds/<app>/zephyr/zephyr.elf coredump.bin
 
 # 3. connect normal gdb to it
-arm-none-eabi-gdb build/<app>/zephyr/zephyr.elf
+arm-none-eabi-gdb builds/<app>/zephyr/zephyr.elf
 (gdb) target remote localhost:1234
 (gdb) bt
 (gdb) info registers

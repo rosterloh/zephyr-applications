@@ -303,17 +303,22 @@ void zcbor_new_decode_state(zcbor_state_t *state_array, size_t n_states,
 
 All return `bool` — `true` on success.
 
+Only 32- and 64-bit integer widths have dedicated functions. For 8- and
+16-bit values use the generic size-taking variants (or just widen to 32-bit —
+CBOR encodes the smallest wire representation either way).
+
 ```c
 /* _put takes a value; _encode takes a pointer (for zcbor_multi_encode) */
-bool zcbor_int8_put(zcbor_state_t *s, int8_t v);
-bool zcbor_int16_put(zcbor_state_t *s, int16_t v);
 bool zcbor_int32_put(zcbor_state_t *s, int32_t v);
 bool zcbor_int64_put(zcbor_state_t *s, int64_t v);
-bool zcbor_uint8_put(zcbor_state_t *s, uint8_t v);
-bool zcbor_uint16_put(zcbor_state_t *s, uint16_t v);
 bool zcbor_uint32_put(zcbor_state_t *s, uint32_t v);
 bool zcbor_uint64_put(zcbor_state_t *s, uint64_t v);
 bool zcbor_size_put(zcbor_state_t *s, size_t v);
+
+/* Any width, passed by pointer + sizeof — this is how you do int8/int16 */
+bool zcbor_int_encode(zcbor_state_t *s, const void *input_int, size_t int_size);
+bool zcbor_uint_encode(zcbor_state_t *s, const void *input_uint, size_t uint_size);
+
 bool zcbor_bool_put(zcbor_state_t *s, bool v);
 bool zcbor_nil_put(zcbor_state_t *s, const void *unused);
 bool zcbor_undefined_put(zcbor_state_t *s, const void *unused);
@@ -375,16 +380,19 @@ unused. Use `ZCBOR_CAST_FP(fn)` to cast function pointers for
 
 ### Decoding Primitives
 
+Same width rule as encoding: 32/64-bit only, plus generic size-taking forms.
+
 ```c
-bool zcbor_int8_decode(zcbor_state_t *s, int8_t *r);
-bool zcbor_int16_decode(zcbor_state_t *s, int16_t *r);
 bool zcbor_int32_decode(zcbor_state_t *s, int32_t *r);
 bool zcbor_int64_decode(zcbor_state_t *s, int64_t *r);
-bool zcbor_uint8_decode(zcbor_state_t *s, uint8_t *r);
-bool zcbor_uint16_decode(zcbor_state_t *s, uint16_t *r);
 bool zcbor_uint32_decode(zcbor_state_t *s, uint32_t *r);
 bool zcbor_uint64_decode(zcbor_state_t *s, uint64_t *r);
 bool zcbor_size_decode(zcbor_state_t *s, size_t *r);
+
+/* Any width — errors if the decoded value doesn't fit in result_size */
+bool zcbor_int_decode(zcbor_state_t *s, void *result, size_t result_size);
+bool zcbor_uint_decode(zcbor_state_t *s, void *result, size_t result_size);
+
 bool zcbor_bool_decode(zcbor_state_t *s, bool *r);
 bool zcbor_float16_decode(zcbor_state_t *s, float *r);
 bool zcbor_float32_decode(zcbor_state_t *s, float *r);
@@ -489,19 +497,25 @@ Enables the zcbor library — pulls in the zcbor west module.
 # Uses memmove() to rewrite headers — bigger code/RAM.
 CONFIG_ZCBOR_CANONICAL=y
 
-# Stop on first error (slightly smaller code, easier debugging)
+# Make stop-on-error *available* — you must ALSO set
+# state->constant_state->stop_on_error at runtime for it to take effect.
 CONFIG_ZCBOR_STOP_ON_ERROR=y
 
-# Smarter unordered-map search using per-element flags
-# Allows re-searching the same key; safer for optional fields.
-CONFIG_ZCBOR_MAP_SMART_SEARCH=y
-
-# Verbose error logging (LOG_ERR)
+# Verbose messages via printf()
 CONFIG_ZCBOR_VERBOSE=y
 
-# Validation level: 0=none, 1=assert, 2=full
-CONFIG_ZCBOR_VALIDATE=0
+# Default max length for zcbor_tstr_put_term() (discouraged; pass a length)
+CONFIG_ZCBOR_MAX_STR_LEN=256
 ```
+
+`CONFIG_ZCBOR_ASSERT` and `CONFIG_ZCBOR_BIG_ENDIAN` exist but are
+`def_bool` — they track `CONFIG_ASSERT` / `CONFIG_BIG_ENDIAN` and are not
+meant to be set directly.
+
+There is no `CONFIG_ZCBOR_VALIDATE`. `ZCBOR_MAP_SMART_SEARCH` is a raw
+compile define in `zcbor_common.h`, not a Kconfig — to enable it, add
+`zephyr_compile_definitions(ZCBOR_MAP_SMART_SEARCH)` in your
+`CMakeLists.txt`.
 
 ### Minimal prj.conf
 
@@ -514,7 +528,7 @@ CONFIG_ZCBOR_STOP_ON_ERROR=y
 
 - `CONFIG_ZCBOR_CANONICAL` is required for encoders that must conform
   to RFC 8949 canonical form (e.g. SUIT manifests).
-- `CONFIG_ZCBOR_MAP_SMART_SEARCH` is only needed for
+- The `ZCBOR_MAP_SMART_SEARCH` compile define is only needed for
   `zcbor_unordered_map_search` when keys may appear multiple times.
 - Default (non-canonical) mode encodes maps/lists with the
   indefinite-length terminator `0xFF`.
@@ -591,8 +605,9 @@ zcbor_search_key_tstr_lit(zsd, "unit") && zcbor_tstr_decode(zsd, &unit);
 zcbor_unordered_map_end_decode(zsd);
 ```
 
-Enable `CONFIG_ZCBOR_MAP_SMART_SEARCH=y` if keys may appear multiple
-times, or for optional fields.
+Add `zephyr_compile_definitions(ZCBOR_MAP_SMART_SEARCH)` if keys may appear
+multiple times, or for optional fields. (It is a zcbor compile define, not a
+Kconfig option.)
 
 ### Byte String (bstr)
 

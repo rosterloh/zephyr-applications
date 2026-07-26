@@ -125,7 +125,7 @@ static int temp_channel_get(const struct device *dev,
 }
 
 /* Driver API structure */
-static const struct sensor_driver_api temp_sensor_api = {
+static DEVICE_API(sensor, temp_sensor_api) = {
     .sample_fetch = temp_sample_fetch,
     .channel_get = temp_channel_get,
 };
@@ -425,7 +425,7 @@ static int my_sensor_trigger_init(const struct device *dev)
 #endif /* CONFIG_MY_SENSOR_TRIGGER */
 
 /* Add to sensor_driver_api */
-static const struct sensor_driver_api my_sensor_api = {
+static DEVICE_API(sensor, my_sensor_api) = {
     .sample_fetch = my_sensor_sample_fetch,
     .channel_get = my_sensor_channel_get,
 #ifdef CONFIG_MY_SENSOR_TRIGGER
@@ -497,7 +497,7 @@ static int my_sensor_attr_get(const struct device *dev,
 }
 
 /* Add to driver API */
-static const struct sensor_driver_api my_sensor_api = {
+static DEVICE_API(sensor, my_sensor_api) = {
     .sample_fetch = my_sensor_sample_fetch,
     .channel_get = my_sensor_channel_get,
     .attr_set = my_sensor_attr_set,

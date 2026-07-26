@@ -492,8 +492,13 @@ int k_work_poll_cancel(struct k_work_poll *work);
 | Option | Description |
 | :--- | :--- |
 | `CONFIG_SMP` | Symmetric multiprocessing |
-| `CONFIG_MP_NUM_CPUS` | Number of CPUs |
-| `CONFIG_SCHED_CPU_MASK` | Per-thread CPU affinity |
+| `CONFIG_MP_MAX_NUM_CPUS` | Number of CPUs |
+| `CONFIG_SCHED_CPU_MASK` | Per-thread CPU affinity (any scheduler backend since 4.5) |
+| `CONFIG_SCHED_CPU_MASK_PIN_ONLY` | Restrict affinity to pinning a thread to one CPU |
+
+Under `CONFIG_SCHED_CPU_MASK_PIN_ONLY`, `k_thread_cpu_mask_clear()`,
+`k_thread_cpu_mask_enable_all()` and `k_thread_cpu_mask_disable()` assert as
+of 4.5 — use `k_thread_cpu_pin()` instead.
 
 ### Header Files
 

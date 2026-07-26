@@ -15,6 +15,8 @@ description: >
 
 # Zephyr Serialization
 
+Validated against: Zephyr 4.4.99 (b3e7c445b343, 2026-07-26). Re-check with `uv run poe check-skills`.
+
 ## Scope
 
 Zephyr's `doc/services/serialization/` groups three first-class
@@ -35,7 +37,13 @@ carry these payloads (CoAP/HTTP/MQTT/SMP) — see `zephyr-connectivity`.
 |----------------------------------------------------------------------|------------------------------|
 | `json_obj_descr[]`, `json_obj_parse`, `JSON_TOK_*`, FP support       | `references/json.md`         |
 | `zcbor_*` manual API, `ZCBOR_STATE_*`, CDDL schemas, zcbor code-gen  | `references/cbor.md`         |
-| `.proto` files, `pb_encode`/`pb_decode`, `zephyr_nanopb_sources()`   | `references/protobuf.md`     |
+| `.proto` files, `pb_encode`/`pb_decode`, `zephyr_nanopb_sources()`   | `references/protobuf.md` ⚠️   |
+
+⚠️ **nanopb is not in this workspace's `west.yml` allowlist**, so
+`deps/modules/lib/nanopb` does not exist and no app here uses protobuf. Adding
+the module is a one-line `west.yml` change plus `poe west-update` — see the note
+at the top of `references/protobuf.md`. Its `CONFIG_NANOPB*` symbols are
+consequently unverified.
 
 ## Choosing a format
 
@@ -44,7 +52,7 @@ carry these payloads (CoAP/HTTP/MQTT/SMP) — see `zephyr-connectivity`.
 | Human-readable wire format, REST/web interop           | JSON                          |
 | Smallest binary, schema in version-controlled `.cddl`  | CBOR + CDDL codegen           |
 | Existing IoT protocol payload (CoAP/LwM2M/SUIT/SMP)    | CBOR — schemas already exist  |
-| Cross-language RPC with proto3 ecosystem               | Protobuf (nanopb)             |
+| Cross-language RPC with proto3 ecosystem               | Protobuf (nanopb) — needs the module added first |
 | No codegen toolchain available at build time           | JSON or manual zcbor          |
 | Fixed-size, predictable RAM footprint                  | Protobuf (sized via options)  |
 

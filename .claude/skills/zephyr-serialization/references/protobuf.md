@@ -1,5 +1,36 @@
 # Protocol Buffers (nanopb)
 
+> **Prerequisite: nanopb is not cloned in this workspace.**
+>
+> `west.yml` uses a `name-allowlist` and does not include `nanopb`, so
+> `deps/modules/lib/nanopb` does not exist and nothing here will build as
+> written. No application in this repo currently uses protobuf.
+>
+> To use it, add the module to the allowlist in `west.yml` (keep the list
+> alphabetical), then re-sync:
+>
+> ```yaml
+>         name-allowlist:
+>           ...
+>           - mcuboot
+>           - nanopb
+>           - open-amp
+> ```
+>
+> ```bash
+> uv run poe west-update
+> ```
+>
+> You also need the host `protoc` compiler available — nanopb's CMake
+> integration invokes it at build time.
+>
+> Because the module is absent, the `CONFIG_NANOPB*` symbols below are
+> **unverified against the tree** — `uv run poe check-skills` allowlists them
+> for that reason rather than confirming them. Re-check them once the module is
+> actually cloned. Everything in `./cbor.md` and `./json.md` *is* verified;
+> prefer CBOR unless you specifically need protobuf schema compatibility with
+> another system.
+
 ## Overview
 
 Zephyr integrates [nanopb](https://jpa.kapsi.fi/nanopb/) — a small-footprint

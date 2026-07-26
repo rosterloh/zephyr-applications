@@ -289,11 +289,32 @@ static int sensor_channel_get(const struct device *dev,
     return 0;
 }
 
-static const struct sensor_driver_api sensor_api = {
+static DEVICE_API(sensor, sensor_api) = {
     .sample_fetch = sensor_sample_fetch,
     .channel_get = sensor_channel_get,
 };
 ```
+
+> **Always declare API instances with `DEVICE_API(class, name)`.** As of
+> Zephyr 4.5 this is **mandatory** for every upstream driver class, including
+> out-of-tree drivers. The macro places the struct in the class's iterable
+> section, and `DEVICE_API_GET()` now asserts that the API actually belongs to
+> the requested class. The old form —
+> `static const struct sensor_driver_api foo = {...}` — still compiles but the
+> device fails that assert at runtime.
+>
+> If your out-of-tree class *extends* an upstream one (embeds the upstream API
+> struct as its **first member**), also register the relationship so
+> `DEVICE_API_GET()` for the parent class succeeds:
+>
+> ```c
+> struct my_sensor_driver_api {
+>     struct sensor_driver_api sensor;   /* must be first */
+>     int (*my_extra_op)(const struct device *dev);
+> };
+>
+> DEVICE_API_EXTENDS(my_sensor, sensor, sensor);
+> ```
 
 For triggers, emulators, and more: See [sensor-drivers.md](#sensor-drivers)
 
@@ -340,9 +361,9 @@ For test fixtures, fakes, and more: See [driver-testing.md](#driver-testing)
 
 #### Debugging Checklist
 
-1. **Check devicetree**: `build/zephyr/zephyr.dts`
-2. **Check generated macros**: `build/zephyr/include/generated/devicetree_generated.h`
-3. **Check Kconfig**: `build/zephyr/.config`
+1. **Check devicetree**: `builds/zephyr/zephyr.dts`
+2. **Check generated macros**: `builds/zephyr/include/generated/devicetree_generated.h`
+3. **Check Kconfig**: `builds/zephyr/.config`
 4. **Check init order**: Add printk in init function
 5. **Check bus parent**: Ensure parent device initializes first
 
@@ -706,9 +727,7 @@ static volatile size_t rx_count = 0;
 
 void uart_isr(const struct device *dev, void *user_data)
 {
-    if (!uart_irq_update(dev)) {
-        return;
-    }
+    uart_irq_update(dev);
 
     if (uart_irq_rx_ready(dev)) {
         uint8_t c;
@@ -1187,13 +1206,15 @@ static int mydriver_write(const struct device *dev, uint8_t value)
     return ret;
 }
 
-/* Define API structure (optional, for subsystem integration) */
-struct mydriver_api {
+/* Define API structure (optional, for subsystem integration).
+ * Name it `<class>_driver_api` so DEVICE_API() works.
+ */
+struct mydriver_driver_api {
     int (*read)(const struct device *dev, uint8_t *value);
     int (*write)(const struct device *dev, uint8_t value);
 };
 
-static const struct mydriver_api mydriver_api_funcs = {
+static DEVICE_API(mydriver, mydriver_api_funcs) = {
     .read = mydriver_read,
     .write = mydriver_write,
 };
@@ -1485,7 +1506,7 @@ static int temp_sensor_channel_get(const struct device *dev,
     return 0;
 }
 
-static const struct sensor_driver_api temp_sensor_api = {
+static DEVICE_API(sensor, temp_sensor_api) = {
     .sample_fetch = temp_sensor_sample_fetch,
     .channel_get = temp_sensor_channel_get,
 };
@@ -2204,7 +2225,7 @@ static int fake_channel_get(const struct device *dev,
     return 0;
 }
 
-static const struct sensor_driver_api fake_sensor_api = {
+static DEVICE_API(sensor, fake_sensor_api) = {
     .sample_fetch = fake_sample_fetch,
     .channel_get = fake_channel_get,
 };
@@ -2354,7 +2375,6 @@ target_sources(app PRIVATE src/main.c)
 
 ```ini
 CONFIG_ZTEST=y
-CONFIG_ZTEST_NEW_API=y
 CONFIG_LOG=y
 
 # For native_sim
@@ -2554,7 +2574,7 @@ static int led_set_brightness(const struct device *dev, uint8_t brightness)
 }
 
 /* Standard LED driver API */
-static const struct led_driver_api led_api = {
+static DEVICE_API(led, led_api) = {
     .on = led_on,
     .off = led_off,
     .set_brightness = led_set_brightness,
@@ -2794,7 +2814,7 @@ static int tmp101_channel_get(const struct device *dev,
     return 0;
 }
 
-static const struct sensor_driver_api tmp101_api = {
+static DEVICE_API(sensor, tmp101_api) = {
     .sample_fetch = tmp101_sample_fetch,
     .channel_get = tmp101_channel_get,
 };
@@ -3179,7 +3199,7 @@ static const struct flash_parameters *flash_get_parameters(
     return &params;
 }
 
-static const struct flash_driver_api flash_api = {
+static DEVICE_API(flash, flash_api) = {
     .read = flash_read,
     .write = flash_write,
     .erase = flash_erase,
@@ -3358,9 +3378,7 @@ static void gps_uart_isr(const struct device *uart, void *user_data)
     const struct device *dev = user_data;
     struct gps_data *data = dev->data;
 
-    if (!uart_irq_update(uart)) {
-        return;
-    }
+    uart_irq_update(uart);
 
     while (uart_irq_rx_ready(uart)) {
         uint8_t c;
@@ -3474,7 +3492,10 @@ struct gps_driver_api {
     int (*send_command)(const struct device *dev, const char *cmd);
 };
 
-static const struct gps_driver_api gps_api = {
+/* DEVICE_API(gps, ...) expands the class name to `gps_driver_api`, so a
+ * custom class works as long as you follow the `<class>_driver_api` naming.
+ */
+static DEVICE_API(gps, gps_api) = {
     .enable = gps_enable,
     .disable = gps_disable,
     .reset = gps_reset,

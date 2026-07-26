@@ -1119,8 +1119,8 @@ gpio blink <device> <pin>         # Toggle pin
 #### Nordic nRF
 
 ```kconfig
-CONFIG_GPIO_NRF=y           # Nordic GPIO driver
-CONFIG_NRF_GPIO_MISC=y      # Extra GPIO features
+CONFIG_GPIO_NRFX=y            # Nordic GPIO driver
+CONFIG_GPIO_NRFX_INTERRUPT=y  # GPIOTE-backed interrupt support
 ```
 
 #### STM32
@@ -1149,8 +1149,10 @@ CONFIG_GPIO_MCUX_IGPIO=y    # NXP i.MX GPIO
 
 ```kconfig
 CONFIG_GPIO_PCA95XX=y       # NXP PCA95xx series (PCA9535, PCA9555, etc.)
-CONFIG_GPIO_PCAL6524=y      # NXP PCAL6524
-CONFIG_GPIO_MCP23S17=y      # Microchip MCP23017/MCP23S17
+CONFIG_GPIO_PCAL64XXA=y     # NXP PCAL64xxA (PCAL6408A/6416A/6524 family)
+CONFIG_GPIO_PCAL9722=y      # NXP PCAL9722
+CONFIG_GPIO_MCP230XX=y      # Microchip MCP230xx (I2C variants, e.g. MCP23017)
+CONFIG_GPIO_MCP23SXX=y      # Microchip MCP23Sxx (SPI variants, e.g. MCP23S17)
 CONFIG_GPIO_SX1509B=y       # Semtech SX1509B
 ```
 
@@ -1191,7 +1193,7 @@ Allows devicetree to specify GPIOs that should be configured at boot:
 
 #### CONFIG_GPIO_GET_DIRECTION
 
-Enable `gpio_pin_get_direction()` API.
+Enable the `gpio_port_get_direction()` family.
 
 ```kconfig
 CONFIG_GPIO_GET_DIRECTION=y
@@ -1200,10 +1202,20 @@ CONFIG_GPIO_GET_DIRECTION=y
 **Type:** bool
 **Default:** n
 
-Enables querying pin direction at runtime:
+There is no `gpio_pin_get_direction()`. Query direction either per-port with
+a pin mask, or per-pin with the boolean helpers:
+
 ```c
-int dir = gpio_pin_get_direction(port, pin);
-/* Returns GPIO_INPUT, GPIO_OUTPUT, or 0 */
+/* Per port: fills bitmasks of input and/or output pins. Pass NULL to skip. */
+gpio_port_pins_t inputs, outputs;
+int ret = gpio_port_get_direction(port, GPIO_PORT_PINS_MASK, &inputs, &outputs);
+
+/* Per pin: 1 = yes, 0 = no, negative errno on failure */
+int is_in  = gpio_pin_is_input(port, pin);
+int is_out = gpio_pin_is_output(port, pin);
+
+/* _dt variants take a gpio_dt_spec */
+int is_in_dt = gpio_pin_is_input_dt(&spec);
 ```
 
 #### CONFIG_GPIO_GET_CONFIG

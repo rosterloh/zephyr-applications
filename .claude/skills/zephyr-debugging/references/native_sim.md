@@ -16,7 +16,7 @@ simulates those. Use it for the firmware's logic, not its hardware coupling.
 ## Build & run
 
 ```
-uv run west build -b native_sim -p always -d build/<app> applications/<app>
+uv run west build -b native_sim -p always -d builds/<app> applications/<app>
 ./build/<app>/zephyr/zephyr.exe            # runs as a normal process
 ./build/<app>/zephyr/zephyr.exe --help     # native_sim runtime options
 ```
@@ -41,7 +41,7 @@ watchpoints on a Cortex-M.
 ## Sanitizers — the reason to bother
 
 ```
-uv run west build -b native_sim -d build/<app> applications/<app> -- \
+uv run west build -b native_sim -d builds/<app> applications/<app> -- \
     -DCONFIG_ASAN=y -DCONFIG_UBSAN=y
 ./build/<app>/zephyr/zephyr.exe
 ```
@@ -70,6 +70,14 @@ failing run once, then step *backwards* from the symptom to the cause.
 
 ## Traps
 
+- **native_sim does not build on macOS.** Zephyr's `arch/posix` hard-errors
+  ("The POSIX architecture only works on Linux"). The Kconfig/configure stage
+  still runs, so config-level changes can be partially validated locally, but
+  any compile/link verification has to happen on Linux or in CI. Note that this
+  workspace's CI matrix does **not** build native_sim either — it only builds
+  `rasprover --sysbuild` — so a native_sim target here is effectively unverified
+  unless you build it on a Linux box yourself. Don't promise a native_sim build
+  works from a macOS session.
 - **It's not your target.** A bug that only repros on native_sim (or only
   on hardware) is itself a clue — usually an `#ifdef`, a timing assumption,
   or uninitialised memory the host happens to zero. Don't "fix" a

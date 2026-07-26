@@ -1662,13 +1662,24 @@ config I2C_GPIO_CLOCK_STRETCHING_TIMEOUT_US
 
 #### Timeout Options
 
+Prefer the **generic** per-controller devicetree property — it works across
+drivers and is where new drivers (and, since 4.5, the ITE controllers) get
+their timeout:
+
+```dts
+&i2c1 {
+    zephyr,transfer-timeout-ms = <500>;
+};
+```
+
+When absent it falls back to `CONFIG_I2C_TRANSFER_TIMEOUT_MS`. The remaining
+driver-specific Kconfigs:
+
 | Option | Driver | Default | Description |
 |--------|--------|---------|-------------|
 | `CONFIG_I2C_DW_RW_TIMEOUT_MS` | DesignWare | 100 | Read/write timeout |
 | `CONFIG_I2C_SILABS_TIMEOUT` | Silabs | 1000 | Transfer timeout (ms) |
-| `CONFIG_I2C_STM32_TRANSFER_TIMEOUT_MSEC` | STM32 | 500 | Transfer timeout |
 | `CONFIG_I2C_SAM0_TRANSFER_TIMEOUT` | SAM0 | 500 | Transfer timeout |
-| `CONFIG_I2C_NRFX_TRANSFER_TIMEOUT` | Nordic | 500 | Transfer timeout (0=forever) |
 | `CONFIG_I2C_NXP_TRANSFER_TIMEOUT` | NXP FlexComm | 0 | Transfer timeout (0=forever) |
 | `CONFIG_I2C_WCH_XFER_TIMEOUT_MS` | WCH | 500 | Transfer timeout |
 

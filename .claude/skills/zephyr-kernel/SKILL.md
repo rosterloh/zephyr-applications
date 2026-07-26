@@ -16,6 +16,8 @@ description: >
 
 # Zephyr Kernel
 
+Validated against: Zephyr 4.4.99 (b3e7c445b343, 2026-07-26). Re-check with `uv run poe check-skills`.
+
 ## Scope
 
 Core kernel primitives — anything that runs in thread or ISR context

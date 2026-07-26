@@ -87,13 +87,16 @@ static bool gpio_relay_is_on(const struct device *dev)
     return data->is_on;
 }
 
-struct gpio_relay_api {
+/* Name a custom API class `<class>_driver_api` so DEVICE_API() can be used —
+ * DEVICE_API(gpio_relay, ...) expands the type to `gpio_relay_driver_api`.
+ */
+struct gpio_relay_driver_api {
     int (*on)(const struct device *dev);
     int (*off)(const struct device *dev);
     bool (*is_on)(const struct device *dev);
 };
 
-static const struct gpio_relay_api relay_api = {
+static DEVICE_API(gpio_relay, relay_api) = {
     .on = gpio_relay_on,
     .off = gpio_relay_off,
     .is_on = gpio_relay_is_on,
@@ -269,7 +272,7 @@ static int sensor_channel_get(const struct device *dev,
     return 0;
 }
 
-static const struct sensor_driver_api sensor_api = {
+static DEVICE_API(sensor, sensor_api) = {
     .sample_fetch = sensor_sample_fetch,
     .channel_get = sensor_channel_get,
 };
@@ -623,9 +626,7 @@ static void uart_gps_isr(const struct device *uart, void *user_data)
     const struct device *dev = user_data;
     struct uart_gps_data *data = dev->data;
 
-    if (!uart_irq_update(uart)) {
-        return;
-    }
+    uart_irq_update(uart);
 
     if (uart_irq_rx_ready(uart)) {
         uint8_t c;
@@ -711,7 +712,7 @@ struct gps_driver_api {
     int (*reset)(const struct device *dev);
 };
 
-static const struct gps_driver_api gps_api = {
+static DEVICE_API(gps, gps_api) = {
     .start = gps_start,
     .stop = gps_stop,
     .send_command = gps_send_command,

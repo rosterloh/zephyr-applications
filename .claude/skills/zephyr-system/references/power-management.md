@@ -43,15 +43,37 @@ Start with the minimum configuration in `prj.conf`:
 CONFIG_PM=y
 CONFIG_PM_DEVICE=y
 CONFIG_PM_DEVICE_RUNTIME=y
-CONFIG_PM_DEVICE_RUNTIME_AUTO_INIT=y
+CONFIG_PM_DEVICE_RUNTIME_DEFAULT_ENABLE=y
 ```
 
-Then enable the sleep-state support your SoC and board actually provide. Common examples:
+`CONFIG_PM_DEVICE_RUNTIME_DEFAULT_ENABLE` opts *every* device into runtime PM
+at init — equivalent to adding the `zephyr,pm-device-runtime-auto` property to
+every devicetree node. Prefer setting that property on the specific nodes you
+care about instead, unless you really want it board-wide.
 
-```ini
-CONFIG_PM_STATE_SLEEP_SUPPORTED=y
-CONFIG_PM_STATE_DEEP_SLEEP_SUPPORTED=y
+**Sleep states are not Kconfig.** There is no `CONFIG_PM_STATE_*_SUPPORTED`
+symbol. The states a board can enter come from devicetree `power-states` nodes
+that the SoC defines and the CPU node references:
+
+```dts
+/* usually already in the SoC dtsi — check before writing your own */
+&cpu0 {
+    cpu-power-states = <&idle &suspend_to_ram>;
+};
+
+power-states {
+    idle: idle {
+        compatible = "zephyr,power-state";
+        power-state-name = "suspend-to-idle";
+        min-residency-us = <1000>;
+        exit-latency-us = <100>;
+    };
+};
 ```
+
+Grep the SoC dtsi for `zephyr,power-state` to see what your target actually
+supports — if there are no such nodes, system PM has nothing to select and
+will do nothing regardless of `CONFIG_PM`.
 
 Also check policy-related options when the default behavior is not enough:
 

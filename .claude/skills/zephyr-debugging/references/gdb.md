@@ -16,9 +16,9 @@ backtrace. gdb attaches through the same debug probe as RTT.
 
 west wraps the probe + gdb for you:
 ```
-uv run west debug   -d build/<app>     # flash, reset, attach, halt at main
-uv run west attach  -d build/<app>     # attach to a *running* target, no reset
-uv run west debugserver -d build/<app> # just the gdbserver; connect gdb yourself
+uv run west debug   -d builds/<app>     # flash, reset, attach, halt at main
+uv run west attach  -d builds/<app>     # attach to a *running* target, no reset
+uv run west debugserver -d builds/<app> # just the gdbserver; connect gdb yourself
 ```
 `west attach` is the one you usually want when chasing a live hang — it
 doesn't reset, so you catch the system in the bad state.
@@ -26,10 +26,10 @@ doesn't reset, so you catch the system in the bad state.
 Manual path (when west's runner doesn't fit, e.g. a custom openocd cfg):
 ```
 openocd -f <board.cfg>                          # terminal 1, gdbserver on :3333
-arm-none-eabi-gdb build/<app>/zephyr/zephyr.elf # terminal 2
+arm-none-eabi-gdb builds/<app>/zephyr/zephyr.elf # terminal 2
 (gdb) target extended-remote localhost:3333
 ```
-The ELF is `build/<app>/zephyr/zephyr.elf` — load it so gdb has symbols.
+The ELF is `builds/<app>/zephyr/zephyr.elf` — load it so gdb has symbols.
 
 > **ESP32-S3** uses `openocd-esp32` + `xtensa-esp32s3-elf-gdb`; `west debug`
 > selects the right pair automatically. The Zephyr-awareness and fault
@@ -61,7 +61,7 @@ CONFIG_DEBUG=y                 # -g, keeps symbols
 The dump prints faulting PC/LR and the CFSR/HFSR fault-status bits. To turn
 an address into a line without a live target:
 ```
-arm-none-eabi-addr2line -e build/<app>/zephyr/zephyr.elf 0x<PC>
+arm-none-eabi-addr2line -e builds/<app>/zephyr/zephyr.elf 0x<PC>
 ```
 Live, halted at the fault, read the System Control Block fault registers:
 ```

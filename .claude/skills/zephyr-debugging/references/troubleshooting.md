@@ -52,7 +52,7 @@ first. The number tells you which branch:
 ### 10–500 ms per read — the peripheral is frozen
 
 - Peripheral clock not enabled. Inspect the controller's `clocks`
-  property in `build/<app>/zephyr/zephyr.dts` and confirm it's on the
+  property in `builds/<app>/zephyr/zephyr.dts` and confirm it's on the
   bus you expect. STM32H7: offset `0xf4` = APB4 (where I2C4 lives), so
   the gate must be APB4ENR, not APB1.
 - Missing or wrong `timings`/`clock-frequency` DTS property. Without a
@@ -63,7 +63,7 @@ first. The number tells you which branch:
 ## Driver shows READY but no events
 
 - Kconfig: is the interrupt source enabled?
-  `CONFIG_INPUT_FT5336_INTERRUPT=y`, `CONFIG_GPIO_KEYS=y`, etc. Polling
+  `CONFIG_INPUT_FT5336_INTERRUPT=y`, `CONFIG_INPUT_GPIO_KEYS=y`, etc. Polling
   variants need their own symbol.
 - DTS: is the INT GPIO pulled up correctly? Open-drain INTs need
   `GPIO_PULL_UP` and the edge type must match (active-low INT →

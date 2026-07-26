@@ -2482,7 +2482,10 @@ void test_main(void)
 }
 ```
 
-**Note**: Requires `CONFIG_ZTEST_CUSTOM_TEST_MAIN=y`
+**Note**: No Kconfig needed. `test_main()` is declared `__weak` in
+`subsys/testsuite/ztest/src/ztest.c`, so simply defining your own
+`void test_main(void)` overrides the default implementation. (There is no
+`CONFIG_ZTEST_CUSTOM_TEST_MAIN`.)
 
 ---
 

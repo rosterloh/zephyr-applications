@@ -197,7 +197,7 @@ net_mgmt(NET_REQUEST_WIFI_PS, iface, &ps_params, sizeof(ps_params));
 
 - **zephyr-kconfig**: Configure `CONFIG_WIFI_*` and `CONFIG_NET_*` options
 - **zephyr-devicetree**: WiFi driver device tree bindings
-- **zephyr-shell-commands**: WiFi shell for debugging (`CONFIG_NET_SHELL=y`, `CONFIG_WIFI_SHELL=y`)
+- **zephyr-shell-commands**: WiFi shell for debugging (`CONFIG_NET_SHELL=y`, `CONFIG_NET_L2_WIFI_SHELL=y`)
 
 ## Ap Mode
 
@@ -497,10 +497,9 @@ CONFIG_WIFI_AIROC=y          # Infineon AIROC
 #### WiFi Usage Mode
 
 ```
-# Select primary usage mode (affects buffer allocation)
-CONFIG_WIFI_NM_WPA_SUPPLICANT_STA_MODE_ONLY=y  # Station only
-CONFIG_WIFI_NM_WPA_SUPPLICANT_AP_MODE_ONLY=y   # AP only
-# If neither set, both modes supported
+# STA is the default. Enable AP support explicitly when you need it;
+# there are no *_STA_MODE_ONLY / *_AP_MODE_ONLY symbols.
+CONFIG_WIFI_NM_WPA_SUPPLICANT_AP=y
 ```
 
 ### Management API
@@ -518,13 +517,15 @@ CONFIG_WIFI_MGMT_SCAN_CHAN_MAX_MANUAL=8 # Max channels for manual scan
 
 ### Power Save Options
 
-```
-# Power save support
-CONFIG_WIFI_MGMT_PS=y
+The power-save and TWT management APIs are unconditional — there is no
+`CONFIG_WIFI_MGMT_PS` or `CONFIG_WIFI_MGMT_TWT` to enable. `net_mgmt`
+requests like `NET_REQUEST_WIFI_PS` and `NET_REQUEST_WIFI_TWT` are always
+compiled in with `CONFIG_NET_L2_WIFI_MGMT=y`; whether they *work* depends on
+the driver implementing the corresponding `wifi_mgmt_ops` callback.
 
-# Target Wake Time (WiFi 6)
-CONFIG_WIFI_MGMT_TWT=y
-CONFIG_WIFI_MGMT_TWT_CHECK_IP=y   # Verify IP before TWT setup
+```
+# Verify IP is acquired before allowing TWT setup
+CONFIG_WIFI_MGMT_TWT_CHECK_IP=y
 ```
 
 ### Access Point Mode
@@ -549,18 +550,20 @@ CONFIG_WIFI_NM_WPA_SUPPLICANT=y
 # WPA3 support
 CONFIG_WIFI_NM_WPA_SUPPLICANT_WPA3=y
 
-# Enterprise authentication
-CONFIG_WIFI_NM_WPA_SUPPLICANT_ENTERPRISE=y
+# Enterprise (EAP) authentication
+CONFIG_WIFI_NM_WPA_SUPPLICANT_CRYPTO_ENTERPRISE=y
+CONFIG_WIFI_NM_WPA_SUPPLICANT_EAPOL=y
 
-# 802.11r Fast Transition
-CONFIG_WIFI_NM_WPA_SUPPLICANT_FAST_TRANSITION=y
+# Roaming — implies 802.11r Fast Transition (IEEE80211R)
+CONFIG_WIFI_NM_WPA_SUPPLICANT_ROAMING=y
+CONFIG_WIFI_NM_WPA_SUPPLICANT_ROAMING_RETRY=y
+CONFIG_WIFI_NM_WPA_SUPPLICANT_SKIP_DHCP_ON_ROAMING=y
 
 # 802.11k Radio Resource Management
 CONFIG_WIFI_NM_WPA_SUPPLICANT_RRM=y
-CONFIG_WIFI_NM_WPA_SUPPLICANT_11K=y
 
-# 802.11v BSS Transition Management
-CONFIG_WIFI_NM_WPA_SUPPLICANT_BTM=y
+# 802.11v BSS Transition Management pre-scan check
+CONFIG_WIFI_NM_WPA_SUPPLICANT_BTM_PRE_SCAN_CHECK=y
 
 # Thread stack size for hostap
 CONFIG_WIFI_NM_WPA_SUPPLICANT_THREAD_STACK_SIZE=16384
@@ -627,7 +630,7 @@ CONFIG_NET_BUF_DATA_SIZE=1500
 ```
 # WiFi shell commands
 CONFIG_NET_SHELL=y
-CONFIG_WIFI_SHELL=y
+CONFIG_NET_L2_WIFI_SHELL=y
 
 # Verbose logging
 CONFIG_WIFI_LOG_LEVEL_DBG=y
@@ -656,7 +659,7 @@ CONFIG_NRF70_MAX_TX_AGGREGATION=4
 ```
 CONFIG_WIFI_ESP32=y
 CONFIG_ESP32_WIFI_STA_RECONNECT=y
-CONFIG_ESP32_WIFI_STA_AUTO_DHCPV4=y
+CONFIG_WIFI_STA_AUTO_DHCPV4=y   # generic; ESP32-specific option removed in 4.5
 ```
 
 #### ESP-AT Module
@@ -707,8 +710,6 @@ CONFIG_WIFI_NM_WPA_SUPPLICANT=y
 CONFIG_WIFI_NM_WPA_SUPPLICANT_WPA3=y
 CONFIG_WIFI_CREDENTIALS=y
 CONFIG_WIFI_CREDENTIALS_BACKEND_SETTINGS=y
-CONFIG_WIFI_MGMT_PS=y
-CONFIG_WIFI_MGMT_TWT=y
 CONFIG_NETWORKING=y
 CONFIG_NET_L2_ETHERNET=y
 CONFIG_NET_IPV4=y
@@ -1028,7 +1029,8 @@ TWT allows the device to negotiate specific wake times with the AP, providing pr
 #### TWT Requirements
 - WiFi 6 (802.11ax) capable hardware
 - WiFi 6 AP with TWT support
-- `CONFIG_WIFI_MGMT_TWT=y`
+- `CONFIG_NET_L2_WIFI_MGMT=y` (the TWT request itself needs no extra Kconfig)
+- a driver that implements the `set_twt` `wifi_mgmt_ops` callback
 
 #### TWT Setup
 
@@ -1167,13 +1169,10 @@ struct wifi_twt_params {
 
 ### Power Save Kconfig
 
+Power save and TWT need no dedicated Kconfig — the `net_mgmt` requests ship
+with `CONFIG_NET_L2_WIFI_MGMT`. Only the IP-check guard is configurable:
+
 ```
-# Basic power save
-CONFIG_WIFI_MGMT_PS=y
-
-# TWT support (WiFi 6)
-CONFIG_WIFI_MGMT_TWT=y
-
 # TWT IP address check before setup
 CONFIG_WIFI_MGMT_TWT_CHECK_IP=y
 ```
@@ -1533,3 +1532,73 @@ DISCONNECTED
 - Ensure WiFi is enabled and interface is up
 - Check regulatory domain settings
 - Try both active and passive scan types
+
+### ESP32 traps (verified on hardware)
+
+These cost real debugging time on ESP32 targets in this workspace. All three
+present as "WiFi just doesn't work" with the management stack apparently
+configured correctly.
+
+#### `No default interface found for type: STA` — the driver is off
+
+The WiFi *management* stack (`NET_L2_WIFI_MGMT`, `WIFI_CREDENTIALS`, conn_mgr)
+can all be enabled while the *driver* is not, so nothing registers an STA netif.
+On ESP32 there are two independent gaps:
+
+1. `CONFIG_WIFI=y` is not set by most ESP32 board defconfigs.
+2. The `wifi` DT node is `status = "disabled"` in
+   `dts/xtensa/espressif/esp32/esp32_common.dtsi`, so `WIFI_ESP32` (which
+   depends on `DT_HAS_ESPRESSIF_ESP32_WIFI_ENABLED`) stays off.
+
+```kconfig
+CONFIG_WIFI=y
+```
+
+```dts
+&wifi { status = "okay"; };
+```
+
+Verify `CONFIG_WIFI_ESP32=y` actually appears in `builds/<app>/zephyr/.config`,
+then check `wifi status` on the shell. Enabling WiFi costs a lot of RAM — on
+ros_driver the libc heap dropped from ~105 kB to ~26 kB from the driver's
+reservation alone.
+
+#### `Interface N is not a nm wifi iface` — drop `CONFIG_WIFI_NM`
+
+`CONFIG_WIFI_NM=y` makes the WiFi shell route through the Network Manager
+(`wifi_shell.c` → `wifi_nm_get_instance_iface`). The *offloaded* ESP32 driver
+only NM-registers its STA iface inside
+`#if defined(CONFIG_ESP32_WIFI_AP_STA_MODE)`, so in STA-only builds the iface is
+never registered and every `wifi` shell command is rejected.
+
+Fix: **remove `CONFIG_WIFI_NM`**. The offloaded driver exposes `wifi_mgmt` ops
+directly via `net_if`, and neither conn_mgr's
+`NET_CONNECTION_MANAGER_CONNECTIVITY_WIFI_MGMT` nor a `wifi_credentials`-based
+connectivity module needs NM. The driver does not `select WIFI_NM`, so it is
+genuinely optional. (Heavier alternative:
+`CONFIG_ESP32_WIFI_AP_STA_MODE=y`.)
+
+#### A stored credential can wedge the next boot
+
+On `xiao_esp32c5`, after `wifi cred add` the device came up on the *next* boot
+with endless `uart:~$` prompts and a dead shell. It reproduces with a bogus
+credential too, so it is not about connecting successfully — only about a
+credential being present at boot.
+
+Cause: conn_mgr issues `NET_REQUEST_WIFI_CONNECT_STORED` very early when a
+stored credential exists, and the offloaded ESP32 driver **livelocks** if asked
+to associate before its stack has finished coming up. A connect issued later at
+runtime works fine. It is a livelock, not a crash — no fault dump, USB stays
+enumerated, and the shell thread is simply starved.
+
+Fix: set `CONN_MGR_IF_NO_AUTO_CONNECT` on the iface so conn_mgr does not connect
+on iface-up, and drive the first connect from your own delayed work (~5 s).
+Don't gate that deferred attempt on `admin_up` — `conn_mgr_if_connect()` brings
+the iface admin-up itself, and with
+`CONFIG_NET_CONNECTION_MANAGER_AUTO_IF_DOWN=y` conn_mgr holds it down until
+then, so an `admin_up` early-return deadlocks the retry.
+
+Recovery for an already-wedged board: a full chip erase clears the stored
+credential (`uv run esptool --port <port> erase-flash`, then reflash) — a plain
+`poe flash` does not, because it only erases the app region. See
+`../../zephyr-system/references/storage.md`.

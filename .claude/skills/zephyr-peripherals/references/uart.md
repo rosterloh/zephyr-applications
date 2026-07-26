@@ -108,7 +108,7 @@ static int rx_pos;
 
 void uart_isr(const struct device *dev, void *user_data)
 {
-    if (!uart_irq_update(dev)) return;
+    uart_irq_update(dev);
     if (!uart_irq_rx_ready(dev)) return;
 
     uint8_t c;
@@ -1038,7 +1038,7 @@ typedef void (*uart_irq_callback_user_data_t)(const struct device *dev, void *us
 
 | Function | Purpose | Returns |
 |----------|---------|---------|
-| `uart_irq_update(dev)` | Refresh IRQ status cache | 1 on success |
+| `uart_irq_update(dev)` | Refresh IRQ status cache | `void` (was `int` before 4.5) |
 | `uart_irq_rx_ready(dev)` | Check if RX data available | 1 if data ready |
 | `uart_irq_tx_ready(dev)` | Check if TX FIFO can accept data | >0 if ready |
 | `uart_irq_tx_complete(dev)` | Check if TX fully done | 1 if idle |
@@ -1065,9 +1065,7 @@ int uart_fifo_fill(const struct device *dev, const uint8_t *tx_data, int size);
 void uart_isr_handler(const struct device *dev, void *user_data)
 {
     /* Step 1: Update IRQ status (REQUIRED first) */
-    if (!uart_irq_update(dev)) {
-        return;
-    }
+    uart_irq_update(dev);
 
     /* Step 2: Handle RX if data available */
     if (uart_irq_rx_ready(dev)) {
@@ -1096,7 +1094,9 @@ void uart_isr_handler(const struct device *dev, void *user_data)
 
 #### Key Rules
 
-1. **Always call `uart_irq_update()` first** - required before checking rx/tx ready
+1. **Always call `uart_irq_update()` first** - required before checking rx/tx
+   ready. It returns `void` as of Zephyr 4.5 (it was `int` before), so do not
+   test its result — `if (!uart_irq_update(dev))` no longer compiles.
 2. **Drain RX FIFO completely** - some hardware auto-clears IRQ only when FIFO empty
 3. **Disable TX IRQ when done** - TX IRQ fires continuously when FIFO empty
 4. **Keep ISR short** - defer processing to thread context
@@ -1118,7 +1118,7 @@ static int rx_pos;
 
 void uart_rx_isr(const struct device *dev, void *user_data)
 {
-    if (!uart_irq_update(dev)) return;
+    uart_irq_update(dev);
     if (!uart_irq_rx_ready(dev)) return;
 
     uint8_t c;
@@ -1154,7 +1154,7 @@ RING_BUF_DECLARE(uart_rx_ring, 256);
 
 void uart_rx_isr(const struct device *dev, void *user_data)
 {
-    if (!uart_irq_update(dev)) return;
+    uart_irq_update(dev);
     if (!uart_irq_rx_ready(dev)) return;
 
     uint8_t buf[32];
@@ -1260,7 +1260,7 @@ static int rx_pos;
 
 void serial_cb(const struct device *dev, void *user_data)
 {
-    if (!uart_irq_update(dev)) return;
+    uart_irq_update(dev);
     if (!uart_irq_rx_ready(dev)) return;
 
     uint8_t c;

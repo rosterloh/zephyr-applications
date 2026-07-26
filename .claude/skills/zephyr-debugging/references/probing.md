@@ -30,7 +30,7 @@ i2c recover i2c@<addr>                    # 9 SCL pulses to unstick SDA
 ```
 
 Find the controller name from `device list` (look for `i2c@<address>`) or
-from the generated DTS at `build/<app>/zephyr/zephyr.dts`.
+from the generated DTS at `builds/<app>/zephyr/zephyr.dts`.
 
 ### Measuring an I2C transaction
 

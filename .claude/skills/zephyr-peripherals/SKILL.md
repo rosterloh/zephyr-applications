@@ -3,18 +3,23 @@ name: zephyr-peripherals
 description: >
   Hardware peripheral drivers and devicetree configuration in Zephyr
   OS: I2C, SPI, UART, GPIO, plus the underlying device-driver model,
-  devicetree bindings/overlays, and LVGL display integration. Use when
-  configuring peripherals via devicetree or Kconfig, calling driver
-  APIs (i2c_transfer, spi_transceive, uart_poll_in, gpio_pin_*),
-  writing custom device drivers with DEVICE_DT_DEFINE, debugging bus
-  issues (NACK, CS timing, baud-rate mismatch), or wiring up an LVGL
-  display. Triggers on phrases like "talk to this sensor over I2C",
+  devicetree bindings/overlays, LVGL display integration, the USB
+  device stack, and video/camera capture. Use when configuring
+  peripherals via devicetree or Kconfig, calling driver APIs
+  (i2c_transfer, spi_transceive, uart_poll_in, gpio_pin_*), writing
+  custom device drivers with DEVICE_DT_DEFINE, debugging bus issues
+  (NACK, CS timing, baud-rate mismatch), wiring up an LVGL display,
+  adding a USB CDC-ACM/HID/MSC device, or capturing frames from a
+  camera. Triggers on phrases like "talk to this sensor over I2C",
   "configure SPI flash", "set up a GPIO interrupt", "add a UART
-  overlay", "write a driver for", "DT_INST_*", "pinctrl", or any
-  *.overlay/*.dts edit.
+  overlay", "write a driver for", "DT_INST_*", "pinctrl", "USB
+  device", "CDC ACM", "usbd_*", "enumeration fails", "capture a
+  frame", "CSI camera", "video_*", or any *.overlay/*.dts edit.
 ---
 
 # Zephyr Peripherals
+
+Validated against: Zephyr 4.4.99 (b3e7c445b343, 2026-07-26). Re-check with `uv run poe check-skills`.
 
 ## Scope
 
@@ -37,6 +42,8 @@ interfaces (see `zephyr-connectivity`), filesystem drivers (see
 | Writing a sensor driver (sensor subsystem, fetch/get, channels)       | `references/device-drivers-sensors.md`        |
 | Writing a bus driver (controller-side I2C/SPI/UART)                   | `references/device-drivers-bus.md`            |
 | LVGL display setup, devicetree bindings, frame buffers                | `references/lvgl.md`                          |
+| USB device stack (usbd): CDC-ACM/HID/MSC, descriptors, enumeration    | `references/usb-device.md`                    |
+| Video/camera capture, formats, buffer queues, CSI/DVP wiring          | `references/video.md`                         |
 
 ## Universal traps
 

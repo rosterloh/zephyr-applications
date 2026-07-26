@@ -25,8 +25,8 @@ Devicetree is a tree of nodes and properties. Zephyr uses **bindings** to valida
 
 #### Key Files in a Build
 After building, check these for debugging:
-- `build/zephyr/zephyr.dts` — Final merged devicetree
-- `build/zephyr/include/generated/devicetree_generated.h` — Generated macros
+- `builds/zephyr/zephyr.dts` — Final merged devicetree
+- `builds/zephyr/include/generated/devicetree_generated.h` — Generated macros
 
 ---
 
@@ -380,7 +380,7 @@ DT_REG_SIZE_BY_NAME(node_id, name)
 1. **Check parent's cells** — `reg` format depends on parent's `#address-cells` and `#size-cells`
 2. **Empty ranges** — Use `ranges;` for identity mapping (most common in Zephyr)
 3. **Bus nodes** — Buses like I2C/SPI use `#size-cells = <0>`
-4. **Final addresses** — Check `build/zephyr/zephyr.dts` to see resolved addresses
+4. **Final addresses** — Check `builds/zephyr/zephyr.dts` to see resolved addresses
 5. **64-bit systems** — Use `#address-cells = <2>` for addresses > 4GB
 
 ## Advanced Bindings
@@ -1076,6 +1076,24 @@ gpio-cells:
 - `path`: Path to a node (string or phandle reference)
 - `compound`: Complex types (no macros generated)
 
+#### Negative int/array literals are signed (changed in 4.5)
+
+A DTS negative literal like `<(-1)>` in an `int` or `array` property now
+expands to a **negative** value. Before Zephyr 4.5 it expanded to the
+two's-complement unsigned value (`4294967295`). Code that relied on the old
+behaviour must switch to signed types and signed-aware checks:
+
+```c
+/* Broken: DT_PROP is now negative, so this assert fires */
+BUILD_ASSERT(DT_PROP(node, my_offset) > 0, "...");
+
+/* Also broken: unsigned comparison of a now-negative value */
+uint32_t off = DT_PROP(node, my_offset);
+
+/* Correct */
+int32_t off = DT_PROP(node, my_offset);
+```
+
 ### Key Concepts
 
 - **required**: If `true`, the build fails if the property is missing in the DTS.
@@ -1273,10 +1291,10 @@ After building, examine these files:
 
 | File | Purpose |
 |------|---------|
-| `build/zephyr/zephyr.dts` | Final merged devicetree (overlays applied) |
-| `build/zephyr/zephyr.dts.pre` | Pre-processed DTS (includes resolved) |
-| `build/zephyr/include/generated/devicetree_generated.h` | Generated C macros |
-| `build/zephyr/dts.cmake` | CMake devicetree variables |
+| `builds/zephyr/zephyr.dts` | Final merged devicetree (overlays applied) |
+| `builds/zephyr/zephyr.dts.pre` | Pre-processed DTS (includes resolved) |
+| `builds/zephyr/include/generated/devicetree_generated.h` | Generated C macros |
+| `builds/zephyr/dts.cmake` | CMake devicetree variables |
 
 ### Common Errors and Fixes
 
@@ -1446,7 +1464,7 @@ gpios = <&gpio0 0 5 GPIO_ACTIVE_LOW>;  /* 3 cells after phandle */
 
 ```bash
 # After build, view merged DTS
-cat build/zephyr/zephyr.dts
+cat builds/zephyr/zephyr.dts
 
 # Or use west
 west build -t zephyr.dts
@@ -1456,14 +1474,14 @@ west build -t zephyr.dts
 
 ```bash
 # Search for your node's macros
-grep -r "my_device" build/zephyr/include/generated/devicetree_generated.h
+grep -r "my_device" builds/zephyr/include/generated/devicetree_generated.h
 ```
 
 #### Validate Devicetree Manually
 
 ```bash
 # Run dtc directly for detailed errors
-dtc -I dts -O dtb -o /dev/null build/zephyr/zephyr.dts.pre 2>&1
+dtc -I dts -O dtb -o /dev/null builds/zephyr/zephyr.dts.pre 2>&1
 ```
 
 #### CMake Devicetree Info
@@ -1478,7 +1496,7 @@ west build -t devicetree_info
 #### Verify Overlay Applied
 
 1. Build with overlay
-2. Check `build/zephyr/zephyr.dts` for your changes
+2. Check `builds/zephyr/zephyr.dts` for your changes
 3. If changes missing, verify overlay path:
 
 ```bash
@@ -1486,7 +1504,7 @@ west build -t devicetree_info
 west build -b my_board -- -DDTC_OVERLAY_FILE=my.overlay
 
 # Check what overlays were used
-grep DTC_OVERLAY build/CMakeCache.txt
+grep DTC_OVERLAY builds/<app>/CMakeCache.txt
 ```
 
 #### Overlay Search Order
@@ -1589,7 +1607,7 @@ The compatible must match both:
 
 ```bash
 # See if driver object exists
-ls build/zephyr/drivers/*/my_driver.c.obj
+ls builds/zephyr/drivers/*/my_driver.c.obj
 ```
 
 ### Tips
