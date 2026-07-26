@@ -208,19 +208,26 @@ static const struct bt_data sd[] = {
             sizeof(CONFIG_BT_DEVICE_NAME) - 1),
 };
 
-/* Start connectable advertising */
-err = bt_le_adv_start(BT_LE_ADV_CONN, ad, ARRAY_SIZE(ad), sd, ARRAY_SIZE(sd));
+/* Start connectable advertising. There is no BT_LE_ADV_CONN — use the
+ * GAP-recommended fast parameters.
+ */
+err = bt_le_adv_start(BT_LE_ADV_CONN_FAST_1, ad, ARRAY_SIZE(ad), sd, ARRAY_SIZE(sd));
 ```
 
 #### Advertising Parameters
 
 | Macro | Description |
 |-------|-------------|
-| `BT_LE_ADV_CONN` | Connectable, scannable |
-| `BT_LE_ADV_CONN_FAST_1` | Fast connectable (30-60ms interval) |
-| `BT_LE_ADV_CONN_FAST_2` | Fast connectable (100-150ms interval) |
-| `BT_LE_ADV_NCONN` | Non-connectable, non-scannable |
-| `BT_LE_ADV_NCONN_NAME` | Non-connectable with name in ad data |
+| `BT_LE_ADV_CONN_FAST_1` | Connectable, GAP fast interval 1 (30-60 ms) |
+| `BT_LE_ADV_CONN_FAST_2` | Connectable, GAP fast interval 2 (100-150 ms) |
+| `BT_LE_ADV_CONN_DIR_LOW_DUTY(peer)` | Directed connectable, low duty cycle |
+| `BT_LE_ADV_NCONN` | Non-connectable, private address |
+| `BT_LE_ADV_NCONN_IDENTITY` | Non-connectable, identity address |
+
+`BT_LE_ADV_CONN` and `BT_LE_ADV_NCONN_NAME` do **not** exist. To advertise the
+device name, put it in the ad or scan-response data explicitly with
+`BT_DATA(BT_DATA_NAME_COMPLETE, CONFIG_BT_DEVICE_NAME, sizeof(CONFIG_BT_DEVICE_NAME) - 1)`
+as shown above.
 
 #### Advertising Data Types
 
@@ -240,13 +247,32 @@ err = bt_le_adv_start(BT_LE_ADV_CONN, ad, ARRAY_SIZE(ad), sd, ARRAY_SIZE(sd));
 ```c
 struct bt_le_adv_param param = {
     .id = BT_ID_DEFAULT,
-    .options = BT_LE_ADV_OPT_CONNECTABLE | BT_LE_ADV_OPT_USE_NAME,
+    .options = BT_LE_ADV_OPT_CONN,              /* not ..._OPT_CONNECTABLE */
     .interval_min = BT_GAP_ADV_FAST_INT_MIN_1,  /* 30ms */
     .interval_max = BT_GAP_ADV_FAST_INT_MAX_1,  /* 60ms */
 };
 
 err = bt_le_adv_start(&param, ad, ARRAY_SIZE(ad), sd, ARRAY_SIZE(sd));
 ```
+
+Or build the same thing with the helper macro, which is less error-prone:
+
+```c
+err = bt_le_adv_start(BT_LE_ADV_PARAM(BT_LE_ADV_OPT_CONN,
+                                      BT_GAP_ADV_FAST_INT_MIN_1,
+                                      BT_GAP_ADV_FAST_INT_MAX_1,
+                                      NULL),
+                      ad, ARRAY_SIZE(ad), sd, ARRAY_SIZE(sd));
+```
+
+Current flag names are `BT_LE_ADV_OPT_CONN`, `BT_LE_ADV_OPT_SCANNABLE`,
+`BT_LE_ADV_OPT_EXT_ADV`, `BT_LE_ADV_OPT_USE_IDENTITY`, `BT_LE_ADV_OPT_USE_NRPA`,
+`BT_LE_ADV_OPT_ANONYMOUS`, `BT_LE_ADV_OPT_CODED`, `BT_LE_ADV_OPT_NO_2M`,
+`BT_LE_ADV_OPT_TX_POWER`, `BT_LE_ADV_OPT_FILTER_CONN`,
+`BT_LE_ADV_OPT_FILTER_SCAN_REQ`, `BT_LE_ADV_OPT_NOTIFY_SCAN_REQ`,
+`BT_LE_ADV_OPT_NONE`. **`BT_LE_ADV_OPT_CONNECTABLE` and
+`BT_LE_ADV_OPT_USE_NAME` were removed** — older samples and blog posts still
+show them.
 
 #### Stopping Advertising
 
@@ -368,6 +394,41 @@ err = bt_conn_le_create(addr, BT_CONN_LE_CREATE_CONN, &conn_param, &conn);
 
 ```c
 err = bt_conn_le_param_update(conn, BT_LE_CONN_PARAM_DEFAULT);
+```
+
+`err == 0` only means the request was *sent*. Success is reported via the
+`le_param_updated` callback:
+
+```c
+static void le_param_updated(struct bt_conn *conn, uint16_t interval,
+                             uint16_t latency, uint16_t timeout)
+{
+    printk("params updated: interval %u latency %u timeout %u\n",
+           interval, latency, timeout);
+}
+```
+
+**Since Zephyr 4.5, `le_param_updated` is NOT called when the update fails.**
+Previously it fired unconditionally with the unchanged parameters, which was
+indistinguishable from success. To learn about rejections, opt in:
+
+```kconfig
+CONFIG_BT_USER_CONN_PARAM_REJECTED=y
+```
+
+```c
+static void le_param_update_rejected(struct bt_conn *conn, uint8_t hci_err)
+{
+    /* hci_err is a BT_HCI_ERR_*, or BT_CONN_PARAM_REJECT_ERR_L2CAP_CPUP
+     * when the peer lacks CPR support and the L2CAP fallback was rejected.
+     */
+    printk("param update rejected: 0x%02x\n", hci_err);
+}
+
+BT_CONN_CB_DEFINE(param_callbacks) = {
+    .le_param_updated = le_param_updated,
+    .le_param_update_rejected = le_param_update_rejected,
+};
 ```
 
 #### Disconnecting
@@ -957,11 +1018,34 @@ CONFIG_BT_PRIVACY=y                  # Enable RPA (Resolvable Private Address)
 CONFIG_BT_RPA_TIMEOUT=900            # RPA rotation interval (seconds)
 ```
 
-#### Fixed Passkey
+#### Fixed / application-provided Passkey
+
+There is no `CONFIG_BT_PASSKEY` — the passkey is set at runtime, not in
+Kconfig. `CONFIG_BT_FIXED_PASSKEY` is **deprecated**; use
+`CONFIG_BT_APP_PASSKEY` (the two are mutually exclusive).
 
 ```
-CONFIG_BT_FIXED_PASSKEY=y
-CONFIG_BT_PASSKEY=123456             # 6-digit passkey
+CONFIG_BT_APP_PASSKEY=y
+```
+
+```c
+/* Deprecated path: one fixed passkey for all pairings */
+bt_passkey_set(123456);   /* needs CONFIG_BT_FIXED_PASSKEY */
+
+/* Preferred: supply a passkey per pairing via the app_passkey callback.
+ * Return BT_PASSKEY_RAND to have the Host generate a random one.
+ * If you return your own, you are responsible for it being random and unique.
+ */
+static uint32_t app_passkey(struct bt_conn *conn)
+{
+    return BT_PASSKEY_RAND;
+}
+
+static struct bt_conn_auth_cb auth_cb = {
+    .app_passkey = app_passkey,
+    .passkey_display = auth_passkey_display,
+    .cancel = auth_cancel,
+};
 ```
 
 #### OOB Pairing
@@ -1007,8 +1091,12 @@ CONFIG_BT_CTLR_DATA_LENGTH_MAX=251   # Maximum data length
 CONFIG_BT_BUF_ACL_TX_SIZE=251        # TX buffer size
 CONFIG_BT_BUF_ACL_TX_COUNT=7         # Number of TX buffers
 CONFIG_BT_BUF_ACL_RX_SIZE=251        # RX buffer size
-CONFIG_BT_BUF_ACL_RX_COUNT=6         # Number of RX buffers
+CONFIG_BT_BUF_ACL_RX_COUNT_EXTRA=6   # *Extra* RX buffers (default = BT_MAX_CONN)
 ```
+
+`BT_BUF_ACL_RX_COUNT` no longer exists — the RX side is now expressed as
+*extra* buffers on top of the per-connection baseline, hence
+`BT_BUF_ACL_RX_COUNT_EXTRA`.
 
 #### ATT MTU
 
@@ -1036,8 +1124,7 @@ CONFIG_BT_PER_ADV_SYNC_MAX=1         # Maximum syncs
 ### Logging Options
 
 ```
-CONFIG_BT_DEBUG_LOG=y                # General BT logging
-CONFIG_BT_LOG_LEVEL_DBG=y            # Debug level
+CONFIG_BT_LOG_LEVEL_DBG=y            # Debug level (BT_DEBUG_LOG was removed)
 
 # Subsystem-specific logging
 CONFIG_BT_HCI_CORE_LOG_LEVEL_DBG=y   # HCI logging
@@ -1055,8 +1142,12 @@ For boards with Zephyr's BLE controller:
 ```
 CONFIG_BT_LL_SW_SPLIT=y              # Use Zephyr's LL implementation
 CONFIG_BT_CTLR_TX_PWR_PLUS_8=y       # Set TX power (+8 dBm example)
-CONFIG_BT_CTLR_TX_BUFFER_SIZE=251    # Controller TX buffer
+CONFIG_BT_CTLR_DATA_LENGTH_MAX=251   # Max LL PDU payload (LE Data Length Ext)
 ```
+
+There is no `CONFIG_BT_CTLR_TX_BUFFER_SIZE`. For throughput tuning the knobs
+are `BT_CTLR_DATA_LENGTH_MAX` (controller side) together with
+`BT_BUF_ACL_TX_SIZE` / `BT_L2CAP_TX_MTU` (host side).
 
 ### Common Configurations
 
@@ -1088,8 +1179,12 @@ CONFIG_SETTINGS=y
 CONFIG_BT=y
 CONFIG_BT_CENTRAL=y
 CONFIG_BT_GATT_CLIENT=y
-CONFIG_BT_SCAN_NAME_MAX_LEN=32
 ```
+
+There is no `CONFIG_BT_SCAN_NAME_MAX_LEN` — the scanner hands you raw AD data
+and you extract the peer's name yourself with `bt_data_parse()` into a buffer
+you size. (`CONFIG_BT_DEVICE_NAME_MAX` bounds the *local* device name, not
+scanned ones.)
 
 #### High-Throughput Configuration
 
@@ -1393,37 +1488,47 @@ Provides UART-like data transfer over BLE. Not a Bluetooth SIG service, but wide
 #### Kconfig
 
 ```
-CONFIG_BT_NUS=y
+CONFIG_BT_ZEPHYR_NUS=y
+CONFIG_BT_ZEPHYR_NUS_DEFAULT_INSTANCE=y   # default y; needed for bt_nus_send()
 ```
+
+> Note the symbol is `BT_ZEPHYR_NUS`, not `BT_NUS` — the latter is the
+> nRF Connect SDK spelling and does not exist upstream. The callback and
+> registration API differ from NCS too; don't copy NCS samples verbatim.
 
 #### API
 
 ```c
 #include <zephyr/bluetooth/services/nus.h>
 
-/* Receive callback */
-static void nus_received(struct bt_conn *conn, const uint8_t *data, uint16_t len)
+/* Receive callback — note the void *data and trailing void *ctx */
+static void nus_received(struct bt_conn *conn, const void *data, uint16_t len,
+                         void *ctx)
 {
     printk("Received %d bytes\n", len);
 }
 
-/* Send enabled callback */
-static void nus_sent(struct bt_conn *conn)
+/* Notification subscription changed */
+static void nus_notif_enabled(bool enabled, void *ctx)
 {
-    printk("Data sent\n");
+    printk("Notifications %s\n", enabled ? "enabled" : "disabled");
 }
 
 static struct bt_nus_cb nus_cb = {
+    .notif_enabled = nus_notif_enabled,
     .received = nus_received,
-    .sent = nus_sent,
 };
 
-/* Initialize */
-err = bt_nus_init(&nus_cb);
+/* Register against the default instance (NULL) */
+err = bt_nus_cb_register(&nus_cb, NULL);
 
-/* Send data */
+/* Send data on the default instance */
 err = bt_nus_send(conn, data, len);
 ```
+
+There is no `bt_nus_init()`. For multiple NUS instances, declare them with
+`BT_NUS_INST_DEFINE(name)` and use the explicit-instance forms
+`bt_nus_inst_cb_register(&inst, &cb, ctx)` / `bt_nus_inst_send(conn, &inst, data, len)`.
 
 #### Custom UUIDs (Nordic UART)
 
@@ -1513,22 +1618,55 @@ Exposes current date/time.
 
 ```
 CONFIG_BT_CTS=y
+CONFIG_BT_CTS_HELPER_API=y   # optional: unix-ms <-> bt_cts_time_format helpers
 ```
 
 #### API
 
+CTS is **pull-based**: you don't push a time value into the service. You
+register callbacks and the stack asks you for the current time whenever a peer
+reads the characteristic.
+
 ```c
 #include <zephyr/bluetooth/services/cts.h>
 
-/* Server: Set current time */
-struct bt_cts_current_time ct = {
-    .exact_time_256.year = 2024,
-    .exact_time_256.month = 12,
-    .exact_time_256.day = 25,
-    /* ... */
+/* The stack calls this to fill in the current time on a read */
+static int fill_current_cts_time(struct bt_cts_time_format *cts_time)
+{
+    cts_time->year = 2026;
+    cts_time->mon  = 12;   /* 1-12 */
+    cts_time->mday = 25;   /* 1-31 */
+    cts_time->hours = 9;
+    cts_time->min = 30;
+    cts_time->sec = 0;
+    cts_time->wday = 5;    /* 1 = Monday .. 7 = Sunday */
+    cts_time->fractions256 = 0;
+    cts_time->reason = BT_CTS_UPDATE_REASON_MANUAL;
+    return 0;
+}
+
+/* Optional: peer wrote a new time */
+static int cts_time_write(struct bt_cts_time_format *cts_time)
+{
+    /* apply cts_time to your RTC */
+    return 0;
+}
+
+static const struct bt_cts_cb cts_cb = {
+    .fill_current_cts_time = fill_current_cts_time,
+    .cts_time_write = cts_time_write,
 };
-bt_cts_set_current_time(&ct);
+
+err = bt_cts_init(&cts_cb);
+
+/* Tell subscribers the time changed */
+err = bt_cts_send_notification(BT_CTS_UPDATE_REASON_EXTERNAL_REF);
 ```
+
+With `CONFIG_BT_CTS_HELPER_API=y` you also get
+`bt_cts_time_to_unix_ms()` / `bt_cts_time_from_unix_ms()` to avoid filling the
+fields by hand. There is no `struct bt_cts_current_time` and no
+`bt_cts_set_current_time()`.
 
 ### TX Power Service (TPS)
 
@@ -1549,8 +1687,63 @@ Service is automatically available; no additional API needed.
 | BAS | 0x180F | `CONFIG_BT_BAS=y` | Battery level |
 | DIS | 0x180A | `CONFIG_BT_DIS=y` | Device info |
 | HRS | 0x180D | `CONFIG_BT_HRS=y` | Heart rate |
-| NUS | Custom | `CONFIG_BT_NUS=y` | UART over BLE |
+| NUS | Custom | `CONFIG_BT_ZEPHYR_NUS=y` | UART over BLE |
 | OTS | 0x1825 | `CONFIG_BT_OTS=y` | File transfer |
 | IAS | 0x1802 | `CONFIG_BT_IAS=y` | Find me alerts |
 | CTS | 0x1805 | `CONFIG_BT_CTS=y` | Current time |
 | TPS | 0x1804 | `CONFIG_BT_TPS=y` | TX power |
+
+---
+
+## Traps (verified on hardware)
+
+### ESP32: pairing crashes or hangs → raise `CONFIG_BT_RX_STACK_SIZE`
+
+On both `adafruit_qt_py_esp32c3` and `adafruit_qt_py_esp32s3`, BLE pairing
+crashed the instant SMP completed. The default BT RX thread stack (**1200
+bytes**) is too small on ESP32, and the overflow corrupts control flow rather
+than producing a clean stack-overflow report — so it presents as a flash or HAL
+bug, not a stack bug:
+
+- C3: illegal instruction with `mepc=0` or `0x4200`, `ra` inside `esp_flash_read`
+- S3: silent spin in `_DoubleExceptionVector`, no dump at all, logger starved
+
+One line fixes both:
+
+```kconfig
+CONFIG_BT_RX_STACK_SIZE=2048
+```
+
+Upstream: zephyr#114394 and #114487 are both this, not silicon or HAL defects.
+Corroboration: Zephyr's own `nus-console` snippet sets the same value.
+
+**Generalise the lesson:** a corrupted-control-flow crash on ESP32 (jump to 0,
+`_DoubleExceptionVector`, garbage `EPC1`) that appears at a specific protocol
+milestone is far more often a too-small thread stack than the exotic
+cache/IRAM/HAL bug it resembles. Check stacks before bisecting HAL revisions.
+
+Two related stack limits hit while tracing the same bug:
+
+- Verbose BT debug logging with `CONFIG_LOG_MODE_IMMEDIATE=y` overflows the
+  1400-byte `CONFIG_BT_LONG_WQ_STACK_SIZE` and crashes at boot in
+  `xtensa_restore_high_regs`. Bump that stack and prefer deferred logging when
+  tracing SMP.
+- The pairing burst drops messages unless `CONFIG_LOG_BUFFER_SIZE` (and
+  `SEGGER_RTT_BUFFER_SIZE_UP` when using RTT) are raised.
+
+### A stale bond partition makes the first fresh pairing fail
+
+On the C3, leftover ZMS content produced `Security failed: level 1 err 4` on a
+first pairing attempt. `poe flash` does not erase the storage partition — do a
+full `esptool erase-flash` and reflash, then pairing succeeds. See
+`../../zephyr-system/references/storage.md`.
+
+### Telling a fresh pairing from a restored bond
+
+Judge by timing rather than logs: Connected → `Security changed: level 2` in
+~3.7 s is real SMP pairing; ~0.7 s is the LTK being restored from flash. Useful
+when verifying that bonds actually persist across reboot.
+
+When testing from macOS with `bleak`, note that CoreBluetooth **hides the HID
+service (0x1812)** from applications — seeing only BAS/DIS/SMP in the service
+list is normal and not a GATT bug.

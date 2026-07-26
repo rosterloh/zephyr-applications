@@ -439,7 +439,7 @@ device that LVGL flushes into.)
 
 ```bash
 uv run west build -b native_sim/native/64 -p always \
-                  -d build/<app>_sim applications/<app>
+                  -d builds/<app>_sim applications/<app>
 ./build/<app>_sim/zephyr/zephyr.exe
 ```
 
@@ -452,7 +452,7 @@ hardware build:
 
 ```toml
 [tasks.build-sim]
-cmd  = "west build -b native_sim/native/64 -p always -d build/${proj}_sim applications/${proj}"
+cmd  = "west build -b native_sim/native/64 -p always -d builds/${proj}_sim applications/${proj}"
 [tasks.build-sim.args]
 proj = { default = "beta_hri" }
 ```
@@ -502,7 +502,7 @@ For pure UI work the loop is:
 
 ```bash
 # Edit ui_screen_foo.c
-uv run west build -d build/foo_sim
+uv run west build -d builds/foo_sim
 ./build/foo_sim/zephyr/zephyr.exe
 ```
 
@@ -591,7 +591,7 @@ Check, in this order:
 3. Are there competing publishers on the screen-command channel? Grep
    for `zbus_chan_pub(&ui_cmd_chan` — should be exactly one place
    under normal operation.
-4. Did the binary actually flash? `nm build/<app>/zephyr/zephyr.elf
+4. Did the binary actually flash? `nm builds/<app>/zephyr/zephyr.elf
    | grep ui_screen_foo` should show all four functions and the
    `static` screen handle.
 
@@ -660,3 +660,40 @@ clickable widgets out of the top-left corner during bring-up.
 - `zephyr-kernel-datapassing` — zbus, msgq, fifo for getting data
   from worker threads to the UI thread without crossing the
   LVGL-thread boundary.
+
+---
+
+## Trap: LVGL's monochrome path hangs boot on SSD1306 (verified)
+
+On an ESP32 + SSD1306 128x32 mono OLED (the Waveshare `ros_driver` board),
+driving the panel through LVGL **hangs during early init** — at POST_KERNEL,
+*before* the Zephyr boot banner prints. The serial signature is: MCUboot output,
+then two ANSI colour codes (the shell prompt starting), then silence. It is not a
+reset loop, so it doesn't look like a crash.
+
+Things that do **not** fix it:
+
+- `CONFIG_LV_COLOR_DEPTH_1=y` is *required* for any mono attempt (without it the
+  Zephyr glue leaves `mono_conv_buf` NULL and faults in `lvgl_display_mono.c`),
+  but it is not sufficient.
+- Matching the in-tree `ssd1306_128x32` shield defconfig
+  (`CONFIG_LV_Z_COLOR_MONO_HW_INVERSION=y`, `CONFIG_LV_Z_VDB_SIZE=64`) still
+  hangs. The hang is inside LVGL's own mono init/render path.
+
+**Use the Character Frame Buffer instead of LVGL for this panel:**
+
+```kconfig
+CONFIG_DISPLAY=y
+CONFIG_CHARACTER_FRAMEBUFFER=y
+# no LVGL
+```
+
+CFB has no render loop or work queue — just draw and
+`cfb_framebuffer_finalize()` — and allocates a single 512-byte buffer. Built-in
+fonts are 10x16 / 15x24 / 20x32, so on 128x32 the 10x16 font gives 2 rows of
+about 12 characters. (Practical consequence: split a dotted-quad IP address after
+the second dot to make it fit.)
+
+The SSD1306 *driver* itself is fine; only the LVGL layer hangs. Two projects in
+this workspace hit this — `pt_control` ships the CFB path and boots reliably,
+`rasprover` ships with the OLED disabled.

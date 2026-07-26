@@ -174,18 +174,25 @@ void k_mbox_data_get(struct k_mbox_msg *rx_msg, void *buffer);
 #### Pipe
 
 ```c
-void k_pipe_init(struct k_pipe *pipe, unsigned char *buffer, size_t size);
-int k_pipe_put(struct k_pipe *pipe, const void *data, size_t bytes_to_write,
-               size_t *bytes_written, size_t min_xfer, k_timeout_t timeout);
-int k_pipe_get(struct k_pipe *pipe, void *data, size_t bytes_to_read,
-               size_t *bytes_read, size_t min_xfer, k_timeout_t timeout);
-int k_pipe_alloc_init(struct k_pipe *pipe, size_t size);
-int k_pipe_cleanup(struct k_pipe *pipe);
-size_t k_pipe_read_avail(struct k_pipe *pipe);
-size_t k_pipe_write_avail(struct k_pipe *pipe);
-void k_pipe_flush(struct k_pipe *pipe);
-void k_pipe_buffer_flush(struct k_pipe *pipe);
+void k_pipe_init(struct k_pipe *pipe, uint8_t *buffer, size_t buffer_size);
+int  k_pipe_write(struct k_pipe *pipe, const uint8_t *data, size_t len,
+                  k_timeout_t timeout);
+int  k_pipe_read(struct k_pipe *pipe, uint8_t *data, size_t len,
+                 k_timeout_t timeout);
+void k_pipe_reset(struct k_pipe *pipe);
+void k_pipe_close(struct k_pipe *pipe);
 ```
+
+`k_pipe_write()` / `k_pipe_read()` return **the number of bytes transferred**
+(>= 0), or `-EAGAIN` on timeout, `-ECANCELED` if interrupted by
+`k_pipe_reset()`, `-EPIPE` if the pipe was closed. A short transfer is normal
+— always loop on the returned count.
+
+The pre-4.0 API (`k_pipe_put`, `k_pipe_get`, `k_pipe_alloc_init`,
+`k_pipe_cleanup`, `k_pipe_read_avail`, `k_pipe_write_avail`, `k_pipe_flush`,
+`k_pipe_buffer_flush`, and the `min_xfer`/`bytes_written` out-parameters) has
+been **removed**. There is no replacement for the "avail" queries — read with
+`K_NO_WAIT` and check the returned count instead.
 
 **Macros:**
 - `K_PIPE_DEFINE(name, pipe_buffer_size, pipe_align)` - Static definition
@@ -537,30 +544,43 @@ A Pipe allows a byte stream (chunks of data) to be sent between threads.
 
 #### Key Concepts
 *   **Stream**: Data is treated as a stream of bytes, not discrete messages.
-*   **Partial Access**: Can read/write fewer bytes than requested if buffer full/empty.
-*   **Ring Buffer**: Optional internal buffer. If 0 size, pipe is purely synchronous (direct copy from sender to receiver).
+*   **Partial Access**: Can read/write fewer bytes than requested if buffer full/empty. The byte count is the *return value*.
+*   **Ring Buffer**: The pipe always owns a caller-supplied ring buffer.
+*   **Closable**: `k_pipe_close()` makes all further and pending operations return `-EPIPE`; `k_pipe_reset()` discards buffered data and unblocks waiters with `-ECANCELED`.
 
 #### Implementation
 
 **Definition**:
 ```c
-unsigned char my_ring_buffer[100];
+uint8_t my_ring_buffer[100];
 struct k_pipe my_pipe;
 k_pipe_init(&my_pipe, my_ring_buffer, sizeof(my_ring_buffer));
 // OR
-K_PIPE_DEFINE(my_pipe, 100, 4);
+K_PIPE_DEFINE(my_pipe, 100, 4);   /* name, buffer size, alignment */
 ```
 
-**Writing**:
+**Writing** — loop, because a partial write is normal:
 ```c
-size_t bytes_written;
-int ret = k_pipe_write(&my_pipe, data, total_size, &bytes_written, min_xfer, K_NO_WAIT);
+size_t off = 0;
+
+while (off < total_size) {
+    int ret = k_pipe_write(&my_pipe, &data[off], total_size - off, K_FOREVER);
+
+    if (ret < 0) {
+        /* -EAGAIN timeout, -ECANCELED reset, -EPIPE closed */
+        return ret;
+    }
+    off += ret;
+}
 ```
 
 **Reading**:
 ```c
-size_t bytes_read;
-int ret = k_pipe_read(&my_pipe, buffer, bytes_to_read, &bytes_read, min_xfer, K_FOREVER);
+int ret = k_pipe_read(&my_pipe, buffer, sizeof(buffer), K_FOREVER);
+if (ret < 0) {
+    return ret;
+}
+/* ret bytes are valid in buffer — may be fewer than requested */
 ```
 
 ---
@@ -625,6 +645,42 @@ A Ring Buffer (circular buffer) is a lower-level data structure for efficient by
 -   **Protocol parsing**: Accumulate incoming bytes until a complete frame.
 -   **Performance-critical paths**: Lower overhead than kernel message queues.
 -   **ISR-to-thread**: Buffer data in ISR, process in thread (with separate signaling).
+
+### Fixed-size items? Use `sys_ringq` instead
+
+`ring_buf` has two modes: **byte** mode (`ring_buf_put`/`ring_buf_get`, shown
+below) and a legacy **item** mode (`ring_buf_item_put`/`ring_buf_item_get`,
+32-bit words + type/value metadata). As of Zephyr 4.5 the **item API is
+deprecated** in favour of `sys_ringq` in `<zephyr/sys/ringq.h>`:
+
+```c
+#include <zephyr/sys/ringq.h>
+
+struct my_event { uint8_t id; uint32_t ts; };
+
+SYS_RINGQ_DEFINE(evt_q, sizeof(struct my_event), 16);   /* item size, count */
+
+struct my_event ev = { .id = 1, .ts = k_uptime_get_32() };
+
+if (sys_ringq_put(&evt_q, &ev) != 0) {
+    /* -ENOMEM: queue full */
+}
+
+struct my_event out;
+if (sys_ringq_get(&evt_q, &out) == 0) {
+    /* got one */
+}
+```
+
+Also available: `sys_ringq_peek()`, `sys_ringq_empty()`, `sys_ringq_full()`,
+`sys_ringq_size()`, `sys_ringq_space()`, `sys_ringq_capacity()`,
+`sys_ringq_reset()`. Choose:
+
+| Need | Use |
+|------|-----|
+| Raw byte stream (UART, protocol bytes) | `ring_buf` byte mode |
+| Queue of fixed-size structs, no blocking | `sys_ringq` |
+| Queue of fixed-size structs, *with* blocking | `k_msgq` |
 
 ### Kconfig
 

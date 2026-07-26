@@ -59,6 +59,40 @@ _SEGGER_RTT`).
 pyocd rtt -t <target>
 ```
 
+### ESP32 over the built-in USB-JTAG — use probe-rs (verified on macOS)
+
+ESP32-C3/S3 boards expose a USB-JTAG probe (VID:PID `303a:1001`) with no
+external hardware needed. `probe-rs list` should show `ESP JTAG`.
+
+Getting RTT out of them needs two non-obvious steps:
+
+1. **Force `HAS_SEGGER_RTT`.** ESP32 SoCs don't advertise it, so
+   `CONFIG_USE_SEGGER_RTT=y` alone won't configure. Add a `select HAS_SEGGER_RTT`
+   in the application's own `Kconfig`, then the usual
+   `CONFIG_USE_SEGGER_RTT=y` + `CONFIG_LOG_BACKEND_RTT=y`.
+2. **Attach without resetting**, which is the whole point when you're chasing a
+   bug that only appears after a connection or pairing completes:
+
+```bash
+probe-rs attach --chip esp32s3 --non-interactive builds/<app>/zephyr/zephyr.elf
+```
+
+`--non-interactive` is required when backgrounding it, otherwise it dies with
+"Failed to create readline".
+
+Halt and backtrace:
+
+```bash
+probe-rs gdb --chip esp32s3 --gdb-connection-string 127.0.0.1:1337
+# then, in xtensa-esp32s3-elf-gdb:  target remote :1337
+```
+
+Generic OpenOCD (SDK or homebrew 0.12.0) does connect the JTAG
+(`esp_usb_jtag` + `caps_descriptor 0x2000`) but **lacks the `rtt setup` / `rtt
+start` commands**, so it cannot do RTT — use probe-rs unless you install
+Espressif's `openocd-esp32` fork. probe-rs handles both the C3 (RISC-V) and S3
+(Xtensa).
+
 ## Traps
 
 - **RTT is polled, not interrupt-driven on the host.** Very bursty logs can
@@ -68,3 +102,13 @@ pyocd rtt -t <target>
   until the new image re-inits RTT. Capture after boot, not across reset.
 - **Only one host tool at a time** owns the probe. Close openocd before
   running `west flash`, and vice versa.
+- **Opening the ESP32 USB-JTAG console can reset the chip.** On the C3 it resets
+  when pyserial asserts DTR/RTS, so set `dtr=False; rts=False` *before*
+  `.open()`. On the **S3 it resets on open regardless** of those flags — use a
+  single open and never reconnect. A monitor with a reconnect loop will
+  re-reset the chip and drop the BLE connection you were trying to observe.
+- **Bursty protocol traces need bigger buffers.** An SMP/pairing burst drops
+  messages unless both `CONFIG_LOG_BUFFER_SIZE` and
+  `CONFIG_SEGGER_RTT_BUFFER_SIZE_UP` are raised. Prefer deferred logging;
+  `CONFIG_LOG_MODE_IMMEDIATE=y` with verbose BT logging can overflow
+  `CONFIG_BT_LONG_WQ_STACK_SIZE` and crash at boot instead.

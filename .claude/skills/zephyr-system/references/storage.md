@@ -592,7 +592,7 @@ Use `west build -t menuconfig` or check generated devicetree:
 
 ```bash
 # View generated devicetree
-cat build/zephyr/zephyr.dts
+cat builds/zephyr/zephyr.dts
 
 # Check partition table
 west build -t partition_table  # If supported
@@ -1199,3 +1199,42 @@ if (free < MINIMUM_REQUIRED) {
 #### Slow Writes with CONFIG_ZMS_NO_DOUBLE_WRITE
 - Expected behavior; searches entire storage before writing
 - Only enable when write cycles are critical concern
+
+#### Reflashing does NOT clear the storage partition
+
+**`west flash` / `poe flash` only erases the image region.** On ESP32 targets
+esptool writes just the app slot (e.g. `0x20000–0x105fff`), so whatever was in
+the ZMS/settings/storage partition survives — across a rebuild, across a
+different app, across a Zephyr version bump.
+
+Consequences seen on hardware in this workspace:
+
+- A freshly flashed image that will not come up at all, because `fs_zms` cannot
+  mount stale content. On `pt_mcp` (xiao_esp32c5) this looked like endless bare
+  `uart:~$` prompts with no boot banner and a completely dead shell — no echo,
+  no command execution.
+- A first BLE pairing failing with `Security failed: level 1 err 4` from
+  leftover bond data (`bt_keys` on esp32c3).
+- Any of the "erase and reinitialize" fixes above appearing not to work, because
+  the reflash never actually erased anything.
+
+Full chip erase is the recovery:
+
+```bash
+uv run esptool --port /dev/cu.usbmodem1101 erase-flash
+uv run poe flash <app>
+```
+
+Two caveats:
+
+- **This also erases MCUboot** on a sysbuild image — reflash `merged.hex`, not
+  just the app. See `./sysbuild-mcuboot.md`.
+- It clears stored WiFi credentials too, which is *why* it recovers a board
+  wedged by boot-time auto-connect — see
+  `../../zephyr-connectivity/references/wifi.md`.
+
+When a storage-format change is deliberate (ZMS version, `CONFIG_ZMS_DATA_CRC`,
+32↔64-bit IDs), plan the erase rather than assuming a reflash covers it. On
+targets whose console is USB-Serial/JTAG, remember early boot output is lost on
+reset anyway because the USB device re-enumerates before the host monitor
+reattaches — a missing banner is not by itself evidence of a fault.

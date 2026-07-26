@@ -1,0 +1,54 @@
+# CONFIG_* symbols cited in .claude/skills/ that intentionally do not exist in
+# deps/. Checked by scripts/check_skill_symbols.py (uv run poe check-skills).
+#
+# Format: one fnmatch glob per line, `#` starts a trailing reason.
+# Keep a reason on every entry -- an unexplained entry is indistinguishable
+# from drift someone silenced.
+
+# --- Placeholder / illustrative names in example code -------------------------
+MY_*                        # generic example symbols (MY_SENSOR, MY_DRIVER, ...)
+MYDRIVER*                   # example driver in device-drivers.md
+ACME_*                      # example vendor in device-drivers.md
+APP_*                       # application-defined symbols in Kconfig examples
+FOO*                        # placeholder in kconfig.md syntax examples
+BAR                         # placeholder in kconfig.md syntax examples
+# Note: prefix wildcards (CONFIG_UART_STM32_*) and the CONFIG_CONFIG_FOO
+# anti-example are handled by the tokeniser, not this file.
+GPS_*                       # example GPS driver class in device-drivers*.md
+CUSTOM_LED_INIT_PRIORITY    # example init-priority in device-drivers.md
+SENSOR_B                    # placeholder in an init-priority ordering example
+MY_FEAT*                    # placeholder in Kconfig dependency examples
+REQUIRED_FEATURE            # placeholder in kconfig.md
+FEATURE_DISABLED            # placeholder in kconfig.md
+DEBUG_COMMANDS              # placeholder shell command group
+SHELL_DEBUG                 # placeholder in shell-commands.md
+RES_MASK                    # placeholder in a devicetree macro example
+RES_SHIFT                   # placeholder in a devicetree macro example
+STORAGE                     # placeholder partition label in storage examples
+STORAGE_SD                  # placeholder partition label in filesystems.md
+ID                          # fragment of a prose sentence, not a symbol
+OS                          # fragment of a prose sentence, not a symbol
+UART_DRIVER                 # placeholder in devicetree.md
+UART_VENDOR                 # placeholder in devicetree.md
+I2C_SENSOR_TRIGGER          # example driver's own trigger symbol
+EXTI                        # prose reference to STM32 EXTI, not a symbol
+
+# --- Deliberately documented as NOT existing ---------------------------------
+# These appear only in "there is no CONFIG_X, use Y instead" warnings added
+# after the 2026-07-26 audit against Zephyr 4.4.99. Removing the warning is
+# what should remove the entry.
+BT_PASSKEY                  # runtime bt_passkey_set()/app_passkey, never a Kconfig
+BT_SCAN_NAME_MAX_LEN        # app parses AD data via bt_data_parse() itself
+BT_CTLR_TX_BUFFER_SIZE      # use BT_CTLR_DATA_LENGTH_MAX / BT_BUF_ACL_TX_SIZE
+WIFI_MGMT_PS                # PS net_mgmt requests are unconditional
+WIFI_MGMT_TWT               # TWT net_mgmt requests are unconditional
+ZCBOR_VALIDATE              # never existed; see ZCBOR_* in modules/zcbor/Kconfig
+ZTEST_CUSTOM_TEST_MAIN      # test_main() is __weak; just override it
+VIDEO_BUFFER_POOL_SZ_MAX    # pool is sized by VIDEO_BUFFER_POOL_HEAP_SIZE
+
+# --- Real symbols this workspace cannot see ----------------------------------
+# west.yml uses name-allowlist, so some modules are never cloned into deps/.
+NANOPB*                     # nanopb not in west.yml allowlist; see protobuf.md
+
+# --- Core-specific SoC symbols ------------------------------------------------
+SOC_STM32H745XX             # troubleshooting.md cites it to contrast with _M7/_M4

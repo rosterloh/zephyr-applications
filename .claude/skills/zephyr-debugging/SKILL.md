@@ -21,6 +21,8 @@ description: >
 
 # Zephyr Debugging
 
+Validated against: Zephyr 4.4.99 (b3e7c445b343, 2026-07-26). Re-check with `uv run poe check-skills`.
+
 Debugging a flashed Zephyr board spans several transports and tools. They're
 not interchangeable — each answers a different question. Pick by **what you
 need to learn**, escalating only as far as you must. The UART shell answers

@@ -4,20 +4,26 @@ description: >
   Application-level Zephyr subsystems: Kconfig build configuration,
   Settings persistence, NVS/ZMS direct flash storage, file systems
   (LittleFS/FAT/ext2), Shell CLI commands, the Ztest test
-  framework + Twister, and power management (system sleep states,
-  device runtime PM, wake sources, PM policy locks). Use when editing
+  framework + Twister, power management (system sleep states,
+  device runtime PM, wake sources, PM policy locks), and multi-image
+  builds with sysbuild + MCUboot. Use when editing
   prj.conf or boards/*.conf, debugging "unmet dependencies" or
   symbol-visibility errors, persisting configuration or runtime state,
   mounting a filesystem, registering shell commands with
   SHELL_CMD_REGISTER, writing Ztest test cases, configuring
-  testcase.yaml, reducing current draw, or wiring wake sources.
+  testcase.yaml, reducing current draw, wiring wake sources, adding a
+  bootloader, signing an image, or setting up OTA/DFU.
   Triggers on prj.conf, CONFIG_*, settings_save/load, nvs_write,
   fs_mount, SHELL_CMD_*, ZTEST(), twister, "store this on flash",
   CONFIG_PM, pm_device_runtime_get/put, pm_policy_state_lock_*, "low
-  power", "deep sleep", or "wake source".
+  power", "deep sleep", "wake source", sysbuild, SB_CONFIG_*, MCUboot,
+  "slot0_partition", "swap mode", imgtool, "sign the image",
+  boot_write_img_confirmed, or "the update reverts".
 ---
 
 # Zephyr System
+
+Validated against: Zephyr 4.4.99 (b3e7c445b343, 2026-07-26). Re-check with `uv run poe check-skills`.
 
 ## Scope
 
@@ -38,6 +44,7 @@ or payload encoding (see `zephyr-serialization`).
 | Registering shell commands (`SHELL_CMD_REGISTER`), backends, getopt    | `references/shell-commands.md`      |
 | Ztest test cases, fixtures, FFF mocking, Twister config                | `references/testing.md`             |
 | System/device PM, wake sources, policy locks, reducing current draw    | `references/power-management.md`    |
+| sysbuild, MCUboot, signing, slot layout, DFU / confirming an image     | `references/sysbuild-mcuboot.md`    |
 
 For JSON/CBOR/Protobuf payload encoding, see the `zephyr-serialization`
 skill.

@@ -335,8 +335,8 @@ void k_mem_paging_thread_stats_get(k_tid_t thread,
 |--------|-------------|---------|
 | `CONFIG_DEMAND_PAGING` | Enable demand paging | n |
 | `CONFIG_DEMAND_PAGING_ALLOW_IRQ` | Allow page faults in ISR | n |
-| `CONFIG_DEMAND_PAGING_EVICTION_NRU` | NRU eviction algorithm | n |
-| `CONFIG_DEMAND_PAGING_EVICTION_LRU` | LRU eviction algorithm | n |
+| `CONFIG_EVICTION_NRU` | NRU eviction algorithm | n |
+| `CONFIG_EVICTION_LRU` | LRU eviction algorithm | n |
 | `CONFIG_DEMAND_PAGING_THREAD_STATS` | Per-thread paging stats | n |
 
 #### Memory Attributes
@@ -1359,11 +1359,15 @@ printk("Pages evicted: %llu\n", stats.eviction);
 
 ```kconfig
 # NRU: Not-Recently-Used (simple)
-CONFIG_DEMAND_PAGING_EVICTION_NRU=y
+CONFIG_EVICTION_NRU=y
 
 # LRU: Least-Recently-Used (recommended for production)
-CONFIG_DEMAND_PAGING_EVICTION_LRU=y
+CONFIG_EVICTION_LRU=y
 ```
+
+Custom eviction algorithms and backing stores live under
+`subsys/mem_mgmt/demand_paging/` (moved there from `subsys/demand_paging/`
+in Zephyr 4.5).
 
 #### Backing Store
 

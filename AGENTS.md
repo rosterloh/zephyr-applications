@@ -55,7 +55,17 @@ If you must call `west build` directly, always pass `--build-dir builds/<app>` s
 uv run poe setup            # first-time: west update + SDK install + blobs + zenoh patch
 uv run poe west-update      # refresh deps/ after pulling new manifest revisions
 uv run poe sdk-install      # reinstall SDK toolchains (version pinned in deps/zephyr/SDK_VERSION)
+uv run poe check-skills     # after west-update: flag Zephyr API drift in .claude/skills/
 ```
+
+**Run `check-skills` after every `west-update`.** It validates every `CONFIG_*`
+symbol cited in `.claude/skills/` against the Kconfig tree in `deps/`, and warns
+when a skill's `Validated against:` stamp no longer matches the Zephyr checkout.
+Renamed or removed Kconfig symbols are silently ignored by `prj.conf`, so stale
+skill docs otherwise produce builds that look fine but have the feature off.
+It is deliberately *not* part of `west-update` — doc drift should not fail a
+dependency update. Deeper API drift (function signatures, removed C APIs) is not
+covered and still needs a manual pass over `doc/releases/migration-guide-*.rst`.
 
 The west.yml uses `name-allowlist` to clone only the modules these apps need; do not remove modules from that list to "fix" missing-symbol errors without checking what depends on them.
 

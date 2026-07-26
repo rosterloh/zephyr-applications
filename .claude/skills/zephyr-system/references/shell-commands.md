@@ -866,14 +866,44 @@ west build -S nus-console [...]
 
 **Manual Configuration**:
 
+There is no `SHELL_BACKEND_NUS`. Upstream exposes NUS as a *virtual UART*
+(`CONFIG_UART_BT`), so the shell keeps using the normal serial backend and
+you point `zephyr,shell-uart` at the NUS UART node in devicetree:
+
 ```kconfig
 # prj.conf
 CONFIG_BT=y
 CONFIG_BT_PERIPHERAL=y
-CONFIG_BT_NUS=y
+CONFIG_BT_ZEPHYR_NUS=y
+CONFIG_BT_ZEPHYR_NUS_AUTO_START_BLUETOOTH=y
+CONFIG_UART_BT=y
 CONFIG_SHELL=y
-CONFIG_SHELL_BACKEND_NUS=y
+CONFIG_SHELL_BACKEND_SERIAL=y
+
+# NUS needs a bigger RX stack and larger ACL buffers to be usable
+CONFIG_BT_RX_STACK_SIZE=2048
+CONFIG_BT_L2CAP_TX_MTU=512
+CONFIG_BT_BUF_ACL_RX_SIZE=502
+CONFIG_BT_BUF_ACL_TX_SIZE=502
 ```
+
+```dts
+/* app.overlay */
+/ {
+    chosen {
+        zephyr,console = &bt_nus_console_uart;
+        zephyr,shell-uart = &bt_nus_console_uart;
+    };
+
+    bt_nus_console_uart: bt_nus_console_uart {
+        compatible = "zephyr,nus-uart";
+        rx-fifo-size = <1024>;
+        tx-fifo-size = <1024>;
+    };
+};
+```
+
+The `nus-console` snippet above is exactly this config — prefer it.
 
 #### Connecting
 
@@ -1010,7 +1040,7 @@ shell_execute_cmd(shell_backend_rtt_get_ptr(), "kernel threads");
 #### Output Not Visible
 **Issue:** `shell_print()` or `shell_fprintf()` calls execute but nothing appears on the console.
 **Cause:**
-1. Incorrect shell backend configuration (e.g., `CONFIG_SHELL_BACKEND_UART` vs `CONFIG_SHELL_BACKEND_RTT`).
+1. Incorrect shell backend configuration (e.g., `CONFIG_SHELL_BACKEND_SERIAL` vs `CONFIG_SHELL_BACKEND_RTT`).
 2. Logging level is suppressing output if the shell is integrated with the logger.
 3. The shell thread has lower priority than a CPU-bound thread.
 **Solution:** Verify backend settings and check if other shell output (like the prompt) is visible.
@@ -1020,7 +1050,7 @@ shell_execute_cmd(shell_backend_rtt_get_ptr(), "kernel threads");
 #### Checking .config
 Always verify the generated configuration in the build directory:
 ```bash
-grep CONFIG_SHELL build/zephyr/.config
+grep CONFIG_SHELL builds/zephyr/.config
 ```
 
 #### Using Shell Statistics

@@ -311,6 +311,10 @@ args = [
 ]
 help = "Flash a previously built application."
 
+[tool.poe.tasks.check-skills]
+cmd = "python scripts/check_skill_symbols.py"
+help = "Validate CONFIG_* symbols cited in .claude/skills/ against deps/, and flag stale skill validation stamps."
+
 [tool.poe.tasks.run-rasprover-sim]
 cmd = "west build -b native_sim/native/64 --build-dir builds/rasprover -t run applications/rasprover"
 help = "Run an already-built native_sim rasprover image."

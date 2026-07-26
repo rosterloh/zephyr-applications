@@ -14,6 +14,8 @@ description: >
 
 # Zephyr Connectivity
 
+Validated against: Zephyr 4.4.99 (b3e7c445b343, 2026-07-26). Re-check with `uv run poe check-skills`.
+
 ## Scope
 
 Network and wireless connectivity in Zephyr — Bluetooth Low Energy,

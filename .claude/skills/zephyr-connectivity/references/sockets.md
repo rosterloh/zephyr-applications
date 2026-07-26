@@ -671,8 +671,7 @@ int configure_dns_servers(void)
 |--------|---------|-------------|
 | `CONFIG_NET_SOCKETS` | n | Enable BSD sockets API |
 | `CONFIG_POSIX_API` | n | Use POSIX function names (no `zsock_` prefix) |
-| `CONFIG_NET_SOCKETS_POSIX_NAMES` | n | Alternative to POSIX_API for socket names only |
-| `CONFIG_NET_SOCKETS_POLL_MAX` | 3 | Max sockets in poll() |
+| `CONFIG_ZVFS_POLL_MAX` | 3 | Max file descriptors in a single `poll()` |
 | `CONFIG_NET_SOCKETS_PRIORITY_DEFAULT` | 50 | Socket implementation priority |
 
 ### TLS/DTLS
@@ -694,7 +693,7 @@ int configure_dns_servers(void)
 | `CONFIG_MBEDTLS_ENABLE_HEAP` | n | Enable mbedTLS heap (required for TLS) |
 | `CONFIG_MBEDTLS_HEAP_SIZE` | 0 | mbedTLS heap size (40000-60000 typical) |
 | `CONFIG_MBEDTLS_SSL_MAX_CONTENT_LEN` | 16384 | Max TLS record size |
-| `CONFIG_MBEDTLS_PEM_CERTIFICATE_FORMAT` | n | Enable PEM cert parsing |
+| `CONFIG_MBEDTLS_PEM_PARSE_C` | n | Enable PEM cert parsing |
 | `CONFIG_MBEDTLS_KEY_EXCHANGE_PSK_ENABLED` | n | Enable PSK ciphersuites |
 | `CONFIG_MBEDTLS_DEBUG` | n | Enable mbedTLS debug output |
 | `CONFIG_MBEDTLS_DEBUG_LEVEL` | 0 | Debug verbosity (0-4) |
@@ -1830,7 +1829,7 @@ static const unsigned char ca_cert[] = {
 
 #### PEM Support
 
-Enable PEM with `CONFIG_MBEDTLS_PEM_CERTIFICATE_FORMAT=y`:
+Enable PEM with `CONFIG_MBEDTLS_PEM_PARSE_C=y`:
 
 ```c
 static const char ca_cert_pem[] =
