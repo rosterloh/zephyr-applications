@@ -7,4 +7,7 @@ target_sources(app PRIVATE
   src/main.c
   src/hog.c
   src/keys.c
+  src/report_desc.c
 )
+
+target_sources_ifdef(CONFIG_USB_DEVICE_STACK_NEXT app PRIVATE src/usb_hid.c)

@@ -9,15 +9,14 @@
 
 #include <stdint.h>
 
-/* Keyboard input report: [modifiers][reserved][keycode x6]. */
-#define HOG_KEYBOARD_KEYS 6
+#include "report_desc.h"
 
 /*
  * Notify the connected host of the current keyboard state. keycodes holds up
- * to HOG_KEYBOARD_KEYS pressed HID keyboard usages (0 = empty slot). No-op if
+ * to HID_KEYBOARD_KEYS pressed HID keyboard usages (0 = empty slot). No-op if
  * no host has subscribed to the keyboard report.
  */
-void hog_notify_keyboard(uint8_t modifiers, const uint8_t keycodes[HOG_KEYBOARD_KEYS]);
+void hog_notify_keyboard(uint8_t modifiers, const uint8_t keycodes[HID_KEYBOARD_KEYS]);
 
 /*
  * Notify the connected host of the current consumer-control state. usage is the

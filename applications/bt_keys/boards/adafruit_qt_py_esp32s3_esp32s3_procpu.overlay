@@ -8,6 +8,18 @@
 
 #include <zephyr/dt-bindings/led/led.h>
 
+/* USB HID keypad, alongside the BLE HoG one - see boards/*.conf. */
+zephyr_udc0: &usb_otg {
+	status = "okay";
+
+	usb_hid: usb_hid {
+		compatible = "zephyr,hid-device";
+		protocol-code = "none";
+		in-report-size = <9>;
+		in-polling-period-us = <10000>;
+	};
+};
+
 &zephyr_i2c {
 	status = "okay";
 

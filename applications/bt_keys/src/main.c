@@ -26,6 +26,7 @@
 
 #include "hog.h"
 #include "keys.h"
+#include "usb_hid.h"
 
 LOG_MODULE_REGISTER(app, LOG_LEVEL_INF);
 
@@ -174,35 +175,73 @@ static void leds_update(int pressed_mask)
 /* Translate the pressed mask into HID reports and notify on change. */
 static void report_keys(int pressed_mask)
 {
-	static uint8_t prev_kbd[HOG_KEYBOARD_KEYS];
+	static uint8_t prev_kbd[HID_KEYBOARD_KEYS];
 	static uint16_t prev_consumer;
+	static int prev_mask;
+	/*
+	 * The consumer report carries a single 16-bit usage, so at most one held
+	 * consumer key can be reported at a time. A newly pressed consumer key
+	 * takes over from an older held one; releasing the active key falls back
+	 * to another still-held consumer key, if any.
+	 */
+	static int active_consumer_key = -1;
 
-	uint8_t kbd[HOG_KEYBOARD_KEYS] = {0};
+	uint8_t kbd[HID_KEYBOARD_KEYS] = {0};
 	uint16_t consumer = 0;
 	int kbd_idx = 0;
+
+	if (active_consumer_key >= 0 && !(pressed_mask & BIT(active_consumer_key))) {
+		active_consumer_key = -1;
+	}
+
+	for (int i = 0; i < BT_KEYS_NUM_KEYS; i++) {
+		bool newly_pressed = (pressed_mask & BIT(i)) && !(prev_mask & BIT(i));
+
+		if (newly_pressed && bt_keys_map[i].type == BT_KEYS_TYPE_CONSUMER) {
+			active_consumer_key = i;
+		}
+	}
+
+	if (active_consumer_key < 0) {
+		for (int i = 0; i < BT_KEYS_NUM_KEYS; i++) {
+			if ((pressed_mask & BIT(i)) &&
+			    bt_keys_map[i].type == BT_KEYS_TYPE_CONSUMER) {
+				active_consumer_key = i;
+				break;
+			}
+		}
+	}
+
+	if (active_consumer_key >= 0) {
+		consumer = bt_keys_map[active_consumer_key].usage;
+	}
 
 	for (int i = 0; i < BT_KEYS_NUM_KEYS; i++) {
 		if (!(pressed_mask & BIT(i))) {
 			continue;
 		}
 
-		if (bt_keys_map[i].type == BT_KEYS_TYPE_CONSUMER) {
-			if (consumer == 0) {
-				consumer = bt_keys_map[i].usage;
-			}
-		} else if (kbd_idx < HOG_KEYBOARD_KEYS) {
+		if (bt_keys_map[i].type == BT_KEYS_TYPE_KEYBOARD && kbd_idx < HID_KEYBOARD_KEYS) {
 			kbd[kbd_idx++] = (uint8_t)bt_keys_map[i].usage;
 		}
 	}
 
+	prev_mask = pressed_mask;
+
 	if (memcmp(kbd, prev_kbd, sizeof(kbd)) != 0) {
 		memcpy(prev_kbd, kbd, sizeof(kbd));
 		hog_notify_keyboard(0, kbd);
+		if (IS_ENABLED(CONFIG_USB_DEVICE_STACK_NEXT)) {
+			usb_hid_notify_keyboard(0, kbd);
+		}
 	}
 
 	if (consumer != prev_consumer) {
 		prev_consumer = consumer;
 		hog_notify_consumer(consumer);
+		if (IS_ENABLED(CONFIG_USB_DEVICE_STACK_NEXT)) {
+			usb_hid_notify_consumer(consumer);
+		}
 	}
 }
 
@@ -221,6 +260,14 @@ int main(void)
 		return 0;
 	}
 	leds_update(0);
+
+	if (IS_ENABLED(CONFIG_USB_DEVICE_STACK_NEXT)) {
+		err = bt_keys_usb_hid_init();
+		if (err) {
+			LOG_ERR("usb_hid_init failed (err %d)", err);
+			return 0;
+		}
+	}
 
 	err = bt_enable(bt_ready);
 	if (err) {
