@@ -22,6 +22,10 @@ updatable wirelessly over Bluetooth (MCUmgr SMP + MCUboot).
   cyan for visual feedback.
 - The HID report map exposes **two** input reports so a key can emit either a
   standard keyboard usage or a consumer-control (media) usage.
+- On the `adafruit_qt_py_esp32s3` board target, key presses are also sent over
+  a USB HID interface (same report map), in addition to BLE HoG. The
+  `adafruit_qt_py_esp32c3` target has no USB device controller and stays
+  BLE-only.
 
 ### Key mapping
 

@@ -44,9 +44,6 @@ struct hids_report {
 	uint8_t type;
 } __packed;
 
-#define REPORT_ID_KEYBOARD 0x01
-#define REPORT_ID_CONSUMER 0x02
-
 static struct hids_info info = {
 	.version = 0x0111,
 	.code = 0x00,
@@ -63,54 +60,6 @@ static struct hids_report consumer_ref = {
 	.type = HIDS_INPUT,
 };
 
-/*
- * Report map: a keyboard collection (report id 1, 8-byte report) and a consumer
- * collection (report id 2, one 16-bit usage). Standard HID descriptors.
- */
-/* clang-format off */
-static const uint8_t report_map[] = {
-	/* Keyboard */
-	0x05, 0x01,               /* Usage Page (Generic Desktop) */
-	0x09, 0x06,               /* Usage (Keyboard) */
-	0xA1, 0x01,               /* Collection (Application) */
-	0x85, REPORT_ID_KEYBOARD, /*  Report ID (1) */
-	0x05, 0x07,               /*  Usage Page (Keyboard/Keypad) */
-	0x19, 0xE0,               /*  Usage Minimum (Left Control) */
-	0x29, 0xE7,               /*  Usage Maximum (Right GUI) */
-	0x15, 0x00,               /*  Logical Minimum (0) */
-	0x25, 0x01,               /*  Logical Maximum (1) */
-	0x75, 0x01,               /*  Report Size (1) */
-	0x95, 0x08,               /*  Report Count (8) */
-	0x81, 0x02,               /*  Input (Data,Var,Abs) - modifier byte */
-	0x95, 0x01,               /*  Report Count (1) */
-	0x75, 0x08,               /*  Report Size (8) */
-	0x81, 0x03,               /*  Input (Const) - reserved byte */
-	0x95, 0x06,               /*  Report Count (6) */
-	0x75, 0x08,               /*  Report Size (8) */
-	0x15, 0x00,               /*  Logical Minimum (0) */
-	0x25, 0xFF,               /*  Logical Maximum (255) */
-	0x05, 0x07,               /*  Usage Page (Keyboard/Keypad) */
-	0x19, 0x00,               /*  Usage Minimum (0) */
-	0x29, 0xFF,               /*  Usage Maximum (255) */
-	0x81, 0x00,               /*  Input (Data,Array) - keycodes */
-	0xC0,                     /* End Collection */
-
-	/* Consumer control */
-	0x05, 0x0C,               /* Usage Page (Consumer) */
-	0x09, 0x01,               /* Usage (Consumer Control) */
-	0xA1, 0x01,               /* Collection (Application) */
-	0x85, REPORT_ID_CONSUMER, /*  Report ID (2) */
-	0x15, 0x00,               /*  Logical Minimum (0) */
-	0x26, 0xFF, 0x03,         /*  Logical Maximum (0x3FF) */
-	0x19, 0x00,               /*  Usage Minimum (0) */
-	0x2A, 0xFF, 0x03,         /*  Usage Maximum (0x3FF) */
-	0x75, 0x10,               /*  Report Size (16) */
-	0x95, 0x01,               /*  Report Count (1) */
-	0x81, 0x00,               /*  Input (Data,Array) */
-	0xC0,                     /* End Collection */
-};
-/* clang-format on */
-
 static uint8_t keyboard_notify;
 static uint8_t consumer_notify;
 static uint8_t ctrl_point;
@@ -125,7 +74,8 @@ static ssize_t read_info(struct bt_conn *conn, const struct bt_gatt_attr *attr, 
 static ssize_t read_report_map(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf,
 			       uint16_t len, uint16_t offset)
 {
-	return bt_gatt_attr_read(conn, attr, buf, len, offset, report_map, sizeof(report_map));
+	return bt_gatt_attr_read(conn, attr, buf, len, offset, hid_report_desc,
+				 hid_report_desc_len);
 }
 
 static ssize_t read_report(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf,
@@ -193,16 +143,22 @@ BT_GATT_SERVICE_DEFINE(
 #define ATTR_KEYBOARD_REPORT 6
 #define ATTR_CONSUMER_REPORT 10
 
-void hog_notify_keyboard(uint8_t modifiers, const uint8_t keycodes[HOG_KEYBOARD_KEYS])
+void hog_notify_keyboard(uint8_t modifiers, const uint8_t keycodes[HID_KEYBOARD_KEYS])
 {
 	if (!keyboard_notify) {
 		return;
 	}
 
-	uint8_t report[2 + HOG_KEYBOARD_KEYS] = {modifiers, 0};
+	uint8_t report[2 + HID_KEYBOARD_KEYS] = {modifiers, 0};
 
-	memcpy(&report[2], keycodes, HOG_KEYBOARD_KEYS);
-	bt_gatt_notify(NULL, &hog_svc.attrs[ATTR_KEYBOARD_REPORT], report, sizeof(report));
+	memcpy(&report[2], keycodes, HID_KEYBOARD_KEYS);
+
+	int err =
+		bt_gatt_notify(NULL, &hog_svc.attrs[ATTR_KEYBOARD_REPORT], report, sizeof(report));
+
+	if (err) {
+		LOG_WRN("keyboard notify failed: %d", err);
+	}
 }
 
 void hog_notify_consumer(uint16_t usage)
@@ -214,5 +170,11 @@ void hog_notify_consumer(uint16_t usage)
 	uint8_t report[2];
 
 	sys_put_le16(usage, report);
-	bt_gatt_notify(NULL, &hog_svc.attrs[ATTR_CONSUMER_REPORT], report, sizeof(report));
+
+	int err =
+		bt_gatt_notify(NULL, &hog_svc.attrs[ATTR_CONSUMER_REPORT], report, sizeof(report));
+
+	if (err) {
+		LOG_WRN("consumer notify failed: %d", err);
+	}
 }
