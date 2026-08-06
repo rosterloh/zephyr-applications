@@ -40,7 +40,7 @@ run = "find . \\( -path ./deps -o -path ./.venv \\) -prune -o -type d -name 'twi
 description = "Remove all twister-out* directories anywhere in the tree"
 
 [tasks.setup]
-depends = ["west-update", "sdk-install", "blobs-fetch", "patch-zenoh"]
+run = "mise run west-update && mise run sdk-install && mise run blobs-fetch && mise run patch-zenoh"
 description = "First-time workspace setup: fetch west deps, install Zephyr SDK, fetch binary blobs, apply patches. Safe to re-run."
 
 [tasks."west-update"]
