@@ -11,8 +11,8 @@ symbol universe defined by the Kconfig files under deps/. It also compares the
 `Validated against:` stamp in each SKILL.md with the current Zephyr checkout so
 you can see when the references are due for a re-verification pass.
 
-    uv run poe check-skills          # report + non-zero exit on unknown symbols
-    uv run poe check-skills --list   # also print every resolved symbol
+    mise run check-skills          # report + non-zero exit on unknown symbols
+    mise run check-skills --list   # also print every resolved symbol
 
 ponytail: this is a text scan, not a Kconfig parse -- it does not evaluate
 `depends on`, `source` globs, or `$(module)` template substitution. Symbols

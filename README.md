@@ -6,17 +6,18 @@
 
 ## Getting Started
 
-You need [uv](https://docs.astral.sh/uv/getting-started/installation/) installed.
-Everything else — Python, west, and the Zephyr SDK — is managed by the tooling.
+You need [mise](https://mise.jdx.dev/getting-started.html) installed.
+Everything else — Python, uv, west, and the Zephyr SDK — is managed by the tooling.
 
 ### First-time setup
 
 ```shell
 git clone https://github.com/rosterloh/zephyr-applications
 cd zephyr-applications
-uv sync                   # create .venv and install all Python tools
-uv run pre-commit install # install pre-commit hooks
-uv run poe setup          # west update (deps/) + Zephyr SDK toolchains
+mise trust                 # trust this repo's mise.toml
+mise run sync               # create .venv and install all Python tools (uv sync)
+mise x -- pre-commit install # install pre-commit hooks
+mise run setup               # west update (deps/) + Zephyr SDK toolchains
 ```
 
 ### Building
@@ -24,24 +25,24 @@ uv run poe setup          # west update (deps/) + Zephyr SDK toolchains
 Build any app against its default (or an explicitly allowed) board:
 
 ```shell
-uv run poe app motor_controller                        # default: robotis_openrb_150
-uv run poe app joystick_controller                     # default: adafruit_qt_py_esp32s3
-uv run poe app rasprover --sysbuild                    # rasprover hw build + MCUboot
-uv run poe app rasprover --board native_sim/native/64  # rasprover native_sim
+mise run app motor_controller                        # default: robotis_openrb_150
+mise run app joystick_controller                     # default: adafruit_qt_py_esp32s3
+mise run app rasprover --sysbuild                    # rasprover hw build + MCUboot
+mise run app rasprover --board native_sim/native/64  # rasprover native_sim
 ```
 
-Each app has an allowed-board list (see the `app` task in `poe.toml`); boards outside it are rejected.
+Each app has an allowed-board list (see the `app` task in `mise.toml`); boards outside it are rejected.
 
 ### Flashing
 
 ```shell
-uv run poe flash motor_controller
+mise run flash motor_controller
 ```
 
 ### Available tasks
 
 ```shell
-uv run poe --help
+mise tasks ls
 ```
 
 | Task                                            | Description                                                   |
@@ -63,7 +64,7 @@ uv run poe --help
 ├── boards/             # Out-of-tree board definitions
 ├── deps/               # West-managed dependencies (git-ignored)
 ├── scripts/            # Utility scripts
-├── poe.toml            # Task runner configuration
+├── mise.toml           # Tool versions + task runner configuration
 ├── pyproject.toml      # Python dependencies (uv)
 └── west.yml            # West manifest
 ```
@@ -75,6 +76,6 @@ uv run poe --help
   Re-enable in `west.yml` to restore Golioth support to `bluetooth_proxy_device`.
   `rasprover` has had Golioth removed and builds cleanly without it.
 - `pico_fw` uses Zephyr's in-tree AIROC driver for the Pico W's CYW43439;
-  the firmware blobs come from `hal_infineon` (fetched by `poe blobs-fetch`).
-- `deps/` is git-ignored. Run `uv run poe west-update` to refresh after pulling
+  the firmware blobs come from `hal_infineon` (fetched by `mise run blobs-fetch`).
+- `deps/` is git-ignored. Run `mise run west-update` to refresh after pulling
   changes to `west.yml`.

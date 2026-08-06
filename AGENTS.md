@@ -1,46 +1,46 @@
 # Working in this repo
 
-Zephyr workspace driven by `uv` (Python env) + `poethepoet` (task runner) + `west` (Zephyr meta-tool). Read this before running anything.
+Zephyr workspace driven by `mise` (tool versions + task runner) + `uv` (Python dependency lock/venv) + `west` (Zephyr meta-tool). Read this before running anything.
 
-## Python environment: always `uv run`
+## Python environment: always `mise run` / `mise x --`
 
-Every Python tool — including `west` — must be invoked through `uv run`. The repo's venv lives at `.venv/` but you never activate it.
+`mise.toml` pins the Python and `uv` versions and activates `.venv/` automatically for any `mise run <task>` or `mise x --` invocation. You never activate the venv yourself.
 
 ```bash
-uv run west <args>          # west calls
-uv run poe <task> [args]    # poe tasks (preferred)
-uv run python <script>      # ad-hoc python
+mise run <task> [args]      # tasks (preferred) — see below
+mise x -- west <args>       # ad-hoc west calls outside a task
+mise x -- python <script>   # ad-hoc python
 ```
 
 Forbidden:
 
 - `source .venv/bin/activate` — don't activate, don't suggest activating.
-- Bare `west`, `python`, `pip`, `pytest`. They will hit the wrong interpreter or fail entirely.
-- `pip install …` — dependencies are pinned in `pyproject.toml`; use `uv sync` if something is missing and check it in.
+- Bare `west`, `python`, `pip`, `pytest` outside `mise run`/`mise x --`. They will hit the wrong interpreter or fail entirely.
+- `pip install …` — dependencies are pinned in `pyproject.toml`/`uv.lock`; use `mise run sync` (`uv sync`) if something is missing and check in the lockfile.
 
-If a command needs a sub-shell or background invocation, prefix the inner command with `uv run` too (e.g. `nohup uv run west build … &`).
+If a command needs a sub-shell or background invocation, prefix the inner command with `mise x --` too (e.g. `nohup mise x -- west build … &`).
 
-## Build apps via `poe`, not bare `west build`
+## Build apps via `mise run app`, not bare `west build`
 
 Per-app build dirs live at `builds/<app>/`. The `app` task takes a bare app name, looks up the per-app default board (and an allowed-board list), and builds. Pass `--board` to override; pass `--sysbuild` for MCUboot integration.
 
 ```bash
-uv run poe app motor_controller                       # default: robotis_openrb_150
-uv run poe app joystick_controller                    # default: adafruit_qt_py_esp32s3/esp32s3/procpu
-uv run poe app embedded_vision                        # default: arduino_nicla_vision
-uv run poe app force_sensor                           # default: adafruit_qt_py_esp32c3
-uv run poe app pico_fw                                # default: rpi_pico/rp2040/w
-uv run poe app rasprover --sysbuild                   # rasprover hw build (ros_driver/esp32 + MCUboot)
-uv run poe app rasprover --board native_sim/native/64 # rasprover native_sim
-uv run poe flash motor_controller                     # flash a previously built app
+mise run app motor_controller                       # default: robotis_openrb_150
+mise run app joystick_controller                    # default: adafruit_qt_py_esp32s3/esp32s3/procpu
+mise run app embedded_vision                        # default: arduino_nicla_vision
+mise run app force_sensor                           # default: adafruit_qt_py_esp32c3
+mise run app pico_fw                                # default: rpi_pico/rp2040/w
+mise run app rasprover --sysbuild                   # rasprover hw build (ros_driver/esp32 + MCUboot)
+mise run app rasprover --board native_sim/native/64 # rasprover native_sim
+mise run flash motor_controller                     # flash a previously built app
 ```
 
-A board outside the app's allowed list is rejected — update the `case` in `poe.toml`'s `app` task to add new boards.
+A board outside the app's allowed list is rejected — update the `case` in `mise.toml`'s `app` task to add new boards.
 
 For agent-driven builds where you want truncated logs (and a full log on disk), use `agent-build`. It accepts the same args as `app` and writes the full log to `logs/<app>-build.log`:
 
 ```bash
-uv run poe agent-build motor_controller
+mise run agent-build motor_controller
 # → builds with -p always, writes logs/motor_controller-build.log,
 #   prints last 5 lines on success, last 50 on failure.
 # Override tail counts with TAIL_S / TAIL_F.
@@ -52,10 +52,10 @@ If you must call `west build` directly, always pass `--build-dir builds/<app>` s
 ## Workspace updates
 
 ```bash
-uv run poe setup            # first-time: west update + SDK install + blobs + zenoh patch
-uv run poe west-update      # refresh deps/ after pulling new manifest revisions
-uv run poe sdk-install      # reinstall SDK toolchains (version pinned in deps/zephyr/SDK_VERSION)
-uv run poe check-skills     # after west-update: flag Zephyr API drift in .claude/skills/
+mise run setup            # first-time: west update + SDK install + blobs + zenoh patch
+mise run west-update      # refresh deps/ after pulling new manifest revisions
+mise run sdk-install      # reinstall SDK toolchains (version pinned in deps/zephyr/SDK_VERSION)
+mise run check-skills     # after west-update: flag Zephyr API drift in .claude/skills/
 ```
 
 **Run `check-skills` after every `west-update`.** It validates every `CONFIG_*`

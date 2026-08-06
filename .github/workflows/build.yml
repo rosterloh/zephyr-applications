@@ -25,14 +25,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v7
+      - name: Install mise
+        uses: jdx/mise-action@v3
         with:
-          python-version: "3.14"
-          enable-cache: true
+          install: true
+          cache: true
 
       - name: Install Python dependencies
-        run: uv sync
+        run: mise run sync
 
       - name: Cache west deps
         uses: actions/cache@v6
@@ -51,9 +51,9 @@ jobs:
             zephyr-sdk-
 
       - name: Setup workspace
-        run: uv run poe setup
+        run: mise run setup
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build firmware
-        run: uv run poe app ${{ matrix.app }} ${{ matrix.flags }}
+        run: mise run app ${{ matrix.app }} ${{ matrix.flags }}
