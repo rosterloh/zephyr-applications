@@ -6,6 +6,26 @@ on:
   workflow_dispatch:
 
 jobs:
+  clang-format:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install mise
+        uses: jdx/mise-action@v3
+        with:
+          bootstrap: true
+          cache: true
+
+      - name: Install Python dependencies
+        run: mise run sync
+
+      - name: Check clang-format
+        run: |
+          files=$(find applications boards -type f \( -name "*.c" -o -name "*.h" -o -name "*.cpp" -o -name "*.hpp" \))
+          mise x -- clang-format --dry-run --Werror $files
+
   build:
     strategy:
       fail-fast: false
