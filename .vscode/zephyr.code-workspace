@@ -100,7 +100,7 @@
 		"C_Cpp.clang_format_fallbackStyle": "LLVM",
 		// "C_Cpp.default.compilerPath": "${env:HOME}/zephyr-sdk/arm-zephyr-eabi/bin/arm-zephyr-eabi-gcc",
 		// "C_Cpp.default.compileCommands": "${workspaceFolder:RepoRoot}/build/primary/compile_commands.json",
-		
+
 		// The number of spaces a tab is equal to. This setting is overridden
 		// based on the file contents when `editor.detectIndentation` is true.
 		"editor.tabSize": 8,
@@ -199,7 +199,7 @@
 			"**/log/**": true,
 			"**/.west/**": true
 		},
-		
+
 		"python.defaultInterpreterPath": "${workspaceFolder:RepoRoot}/.venv/bin/python",
 
 		// extensions settings

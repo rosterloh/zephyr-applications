@@ -3,7 +3,7 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
- 
+
  / {
 	xiao_d: connector {
 		compatible = "seeed,xiao-gpio";

@@ -1,5 +1,6 @@
 default_language_version:
   python: python3.14
+exclude: \.vscode/svd/.*\.svd$ # vendor-supplied SVDs, don't reformat
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
@@ -13,12 +14,12 @@ repos:
       - id: mixed-line-ending
       - id: trailing-whitespace
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.15.20
+    rev: v0.16.1
     hooks:
       - id: ruff
       - id: ruff-format
   - repo: https://github.com/astral-sh/uv-pre-commit
-    rev: 0.11.26
+    rev: 0.12.2
     hooks:
       - id: uv-lock
   - repo: local
