@@ -295,7 +295,7 @@ echo "zenoh config.h written to $CONFIG_H"
 [tasks.app]
 description = "Build a Zephyr application for its default (or an explicitly allowed) board."
 usage = '''
-arg "<app>" help="App name (motor_controller, joystick_controller, embedded_vision, force_sensor, bt_keys, powerbread, pico_fw, pt_mcp, rasprover, data_collection)"
+arg "<app>" help="App name (motor_controller, joystick_controller, embedded_vision, force_sensor, bt_keys, codex_keys, powerbread, pico_fw, pt_mcp, rasprover, data_collection)"
 flag "-b --board <board>" help="Override target board (must be in app's allowed list)"
 flag "--sysbuild" help="Build with sysbuild (e.g. for MCUboot integration)"
 '''
@@ -307,6 +307,7 @@ case "${usage_app}" in
     embedded_vision)      ALLOWED="arduino_nicla_vision/stm32h747xx/m7"; DEFAULT="arduino_nicla_vision/stm32h747xx/m7" ;;
     force_sensor)         ALLOWED="adafruit_qt_py_esp32c3"; DEFAULT="adafruit_qt_py_esp32c3" ;;
     bt_keys)              ALLOWED="adafruit_qt_py_esp32c3 adafruit_qt_py_esp32s3@psram/esp32s3/procpu"; DEFAULT="adafruit_qt_py_esp32c3" ;;
+    codex_keys)           ALLOWED="adafruit_qt_py_esp32c3"; DEFAULT="adafruit_qt_py_esp32c3" ;;
     powerbread)           ALLOWED="adafruit_qt_py_esp32c3 native_sim/native/64"; DEFAULT="adafruit_qt_py_esp32c3" ;;
     pico_fw)              ALLOWED="rpi_pico/rp2040/w"; DEFAULT="rpi_pico/rp2040/w" ;;
     pt_mcp)               ALLOWED="xiao_esp32c5/esp32c5/hpcore"; DEFAULT="xiao_esp32c5/esp32c5/hpcore" ;;
