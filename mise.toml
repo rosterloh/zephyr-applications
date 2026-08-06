@@ -1,6 +1,9 @@
 [tools]
 python = "3.14"
 uv = "latest"
+cmake = "latest"
+ninja = "latest"
+ccache = "latest"
 
 [env]
 _.python.venv = { path = ".venv", create = true }
