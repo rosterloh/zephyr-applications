@@ -7,17 +7,19 @@
 ## Getting Started
 
 You need [mise](https://mise.jdx.dev/getting-started.html) installed.
-Everything else — Python, uv, west, and the Zephyr SDK — is managed by the tooling.
+Everything else — Python, uv, cmake/ninja/ccache, Zephyr's remaining Ubuntu
+host deps (via `apt`), west, and the Zephyr SDK — is managed by the tooling.
 
 ### First-time setup
 
 ```shell
 git clone https://github.com/rosterloh/zephyr-applications
 cd zephyr-applications
-mise trust                 # trust this repo's mise.toml
-mise run sync               # create .venv and install all Python tools (uv sync)
-mise x -- pre-commit install # install pre-commit hooks
-mise run setup               # west update (deps/) + Zephyr SDK toolchains
+mise trust                   # trust this repo's mise.toml
+mise bootstrap                # apt-install Zephyr's host deps + install [tools] (cmake, ninja, ccache, python, uv)
+mise run sync                 # create .venv and install all Python tools (uv sync)
+mise x -- pre-commit install  # install pre-commit hooks
+mise run setup                 # west update (deps/) + Zephyr SDK toolchains
 ```
 
 ### Building

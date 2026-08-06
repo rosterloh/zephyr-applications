@@ -8,6 +8,25 @@ ccache = "latest"
 [env]
 _.python.venv = { path = ".venv", create = true }
 
+# Remaining Ubuntu host deps from deps/zephyr/doc/develop/getting_started/index.rst
+# that have no mise dev-tool backend (no upstream GitHub releases / not
+# version-managed tools) — installed via apt through `mise bootstrap`.
+[bootstrap.packages]
+"apt:gperf" = "latest"
+"apt:dfu-util" = "latest"
+"apt:device-tree-compiler" = "latest"
+"apt:wget" = "latest"
+"apt:python3-dev" = "latest"
+"apt:python3-tk" = "latest"
+"apt:xz-utils" = "latest"
+"apt:file" = "latest"
+"apt:make" = "latest"
+"apt:gcc" = "latest"
+"apt:gcc-multilib" = "latest"
+"apt:g++-multilib" = "latest"
+"apt:libsdl2-dev" = "latest"
+"apt:libmagic1" = "latest"
+
 [tasks.sync]
 run = "uv sync"
 description = "Install/update Python deps from uv.lock into .venv"
