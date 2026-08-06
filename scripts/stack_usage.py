@@ -19,10 +19,10 @@
 
 # Requires CONFIG_USERSPACE and CONFIG_STACK_USAGE to be enabled.
 
-from elftools.elf.elffile import ELFFile
-import os
 import argparse
+import os
 
+from elftools.elf.elffile import ELFFile
 
 # This function uses pyelftools to extract the DWARF information from the ELF file.
 
@@ -33,12 +33,13 @@ import argparse
 # Documentation on the structure and available functions can be found at:
 # https://github.com/eliben/pyelftools
 
+
 def getElf(elffile):
-    with open(elffile, 'rb') as f:
+    with open(elffile, "rb") as f:
         elffile = ELFFile(f)
 
         if not elffile.has_dwarf_info():
-            print('no DWARF info')
+            print("no DWARF info")
             return
 
         dwarf_info = elffile.get_dwarf_info()
@@ -56,46 +57,43 @@ def getElf(elffile):
 
 # Output is a dictionary organized by object file that contains a list of syscalls.
 
+
 def get_syscalls(dwarf_info, cuOffsets, stack):
     syscall_table = {}
 
     for CU in dwarf_info.iter_CUs():
-
         cuOffset = CU.cu_offset
 
         # The first debugging entry in a compilation unit contains
         # the object file the consequent entries belong to.
         top_DIE = CU.get_top_DIE()
-        file_name = top_DIE.attributes['DW_AT_name'].value.decode('utf-8')
+        file_name = top_DIE.attributes["DW_AT_name"].value.decode("utf-8")
         syscall_table[file_name] = []
         cuOffsets[file_name] = cuOffset
 
         for DIE in CU.iter_DIEs():
-
             # When CONFIG_USERSPACE is enabled, the stack size is found
             # in a structure named z_<arch_name>_thread_stack_header under the
             # userspace.c file.
-            if DIE.tag == 'DW_TAG_structure_type' and 'userspace.c' in file_name:
+            if DIE.tag == "DW_TAG_structure_type" and "userspace.c" in file_name:
                 try:
-                    func_name = DIE.attributes['DW_AT_name'].value.decode('utf-8')
+                    func_name = DIE.attributes["DW_AT_name"].value.decode("utf-8")
                 except KeyError:
                     continue
 
-                if 'thread_stack_header' in func_name:
-                    stack.append(DIE.attributes['DW_AT_byte_size'].value)
+                if "thread_stack_header" in func_name:
+                    stack.append(DIE.attributes["DW_AT_byte_size"].value)
 
-            elif DIE.tag == 'DW_TAG_subprogram':
-
+            elif DIE.tag == "DW_TAG_subprogram":
                 try:
-                    func_name = DIE.attributes['DW_AT_name'].value.decode('utf-8')
+                    func_name = DIE.attributes["DW_AT_name"].value.decode("utf-8")
                 except KeyError:
                     continue
 
                 # Addresses are relative to their space in the ELF file.
                 address = DIE.offset
 
-                if func_name.startswith(('z_mrsh', 'z_vrfy', 'z_impl')):
-
+                if func_name.startswith(("z_mrsh", "z_vrfy", "z_impl")):
                     if func_name not in syscall_table[file_name]:
                         syscall_table[file_name].append([func_name, address])
 
@@ -112,6 +110,7 @@ def get_syscalls(dwarf_info, cuOffsets, stack):
 # Output is a dictionary organized by object file that contains
 # a list of syscalls and their call tree.
 
+
 def get_call_tree(dwarf_info, syscall_table, flags, cuOffsets):
 
     # call_tree dictionary structure:
@@ -120,7 +119,6 @@ def get_call_tree(dwarf_info, syscall_table, flags, cuOffsets):
     call_tree = {}
 
     for key in syscall_table:
-
         call_tree[key] = []
 
         cuOffset = cuOffsets[key]
@@ -155,13 +153,13 @@ def get_call_tree(dwarf_info, syscall_table, flags, cuOffsets):
 
 # Note: 'DW_AT_abstract_origin' + compilation unit offset of object file = function address in ELF file
 
+
 def check_call_sites(dwarf_info, DIE, cuOffset, call_tree, key, depth, flags):
     for child in DIE.iter_children():
-
         # GNU_call_sites are 'regularly' called functions. Not inlined or a pointer.
-        if child.tag == 'DW_TAG_GNU_call_site':
+        if child.tag == "DW_TAG_GNU_call_site":
             try:
-                target_address = child.attributes['DW_AT_abstract_origin'].value + cuOffset
+                target_address = child.attributes["DW_AT_abstract_origin"].value + cuOffset
                 target_DIE = dwarf_info.get_DIE_from_refaddr(target_address)
                 call_tree[key].append([target_address, depth])
                 check_call_sites(dwarf_info, target_DIE, cuOffset, call_tree, key, depth + 1, flags)
@@ -169,13 +167,13 @@ def check_call_sites(dwarf_info, DIE, cuOffset, call_tree, key, depth, flags):
                 target_address = ""
 
         # Inlined_subroutines are inlined functions.
-        elif child.tag == 'DW_TAG_inlined_subroutine':
+        elif child.tag == "DW_TAG_inlined_subroutine":
             try:
-                target_address = child.attributes['DW_AT_abstract_origin'].value + cuOffset
+                target_address = child.attributes["DW_AT_abstract_origin"].value + cuOffset
                 target_DIE = dwarf_info.get_DIE_from_refaddr(target_address)
                 call_tree[key].append([target_address, depth])
                 if target_address not in flags:
-                    flags[target_address] = 'inlined'
+                    flags[target_address] = "inlined"
                 check_call_sites(dwarf_info, target_DIE, cuOffset, call_tree, key, depth + 1, flags)
             except KeyError:
                 target_address = ""
@@ -190,7 +188,7 @@ def check_call_sites(dwarf_info, DIE, cuOffset, call_tree, key, depth, flags):
                 if ptr != 0:
                     call_tree[key].append([ptr, depth])
                 if ptr not in flags:
-                    flags[ptr] = 'pointer'
+                    flags[ptr] = "pointer"
 
         # Debugging entries can nest other debugging entries.
         if child.has_children:
@@ -209,29 +207,30 @@ def check_call_sites(dwarf_info, DIE, cuOffset, call_tree, key, depth, flags):
 # No output but the pointer addresses list is updated
 # with the found function pointer address, if any.
 
+
 def tags(dwarf_info, call_tree, flags, DIE, cuOffset, ptr_addresses, at_name_addr):
     try:
         try:
             # If getting the at_name attribute fails
             # then I do not want to store the address.
-            at_name = DIE.attributes['DW_AT_name'].value.decode('utf-8')
+            at_name = DIE.attributes["DW_AT_name"].value.decode("utf-8")
         except KeyError:
             at_name = ""
         if at_name != "":
             at_name_addr = DIE.offset
-        at_type = DIE.attributes['DW_AT_type'].value + cuOffset
+        at_type = DIE.attributes["DW_AT_type"].value + cuOffset
         target_DIE = dwarf_info.get_DIE_from_refaddr(at_type)
-        if target_DIE.tag == 'DW_TAG_pointer_type':
+        if target_DIE.tag == "DW_TAG_pointer_type":
             tags(dwarf_info, call_tree, flags, target_DIE, cuOffset, ptr_addresses, at_name_addr)
-        elif target_DIE.tag == 'DW_TAG_const_type':
+        elif target_DIE.tag == "DW_TAG_const_type":
             tags(dwarf_info, call_tree, flags, target_DIE, cuOffset, ptr_addresses, at_name_addr)
-        elif target_DIE.tag == 'DW_TAG_variable':
+        elif target_DIE.tag == "DW_TAG_variable":
             tags(dwarf_info, call_tree, flags, target_DIE, cuOffset, ptr_addresses, at_name_addr)
-        elif target_DIE.tag == 'DW_TAG_structure_type':
+        elif target_DIE.tag == "DW_TAG_structure_type":
             for c in target_DIE.iter_children():
-                if c.tag == 'DW_TAG_member':
+                if c.tag == "DW_TAG_member":
                     tags(dwarf_info, call_tree, flags, c, cuOffset, ptr_addresses, at_name_addr)
-        elif target_DIE.tag == 'DW_TAG_subroutine_type':
+        elif target_DIE.tag == "DW_TAG_subroutine_type":
             ptr_addresses.append(at_name_addr)
     except KeyError:
         pass
@@ -248,8 +247,9 @@ def tags(dwarf_info, call_tree, flags, DIE, cuOffset, ptr_addresses, at_name_add
 # If not found, the function's max memory usage is set to 0
 # and is flagged with '*'.
 
+
 def get_memory_usage(dwarf_info, call_tree, flags, build_location):
-    mem_usage_dict = {} # Key = function address, Value = memory usage found in .su file
+    mem_usage_dict = {}  # Key = function address, Value = memory usage found in .su file
 
     for key in call_tree:
         mem_usage = 0
@@ -259,13 +259,13 @@ def get_memory_usage(dwarf_info, call_tree, flags, build_location):
             DIE = dwarf_info.get_DIE_from_refaddr(address)
 
             try:
-                name = DIE.attributes['DW_AT_name'].value.decode('utf-8')
+                name = DIE.attributes["DW_AT_name"].value.decode("utf-8")
             except KeyError:
                 continue
 
             try:
-                decl_line = DIE.attributes['DW_AT_decl_line'].value
-                decl_column = DIE.attributes['DW_AT_decl_column'].value
+                decl_line = DIE.attributes["DW_AT_decl_line"].value
+                decl_column = DIE.attributes["DW_AT_decl_column"].value
             except KeyError:
                 continue
 
@@ -294,13 +294,14 @@ def get_memory_usage(dwarf_info, call_tree, flags, build_location):
 # mem_by_name: Key = function name, Value = list of memory usages found in
 # all .su files that included that function name
 
+
 def redo_memory(dwarf_info, original_mem, mem_by_name):
-    new_mem = {} # Key = function name, Value = maximum memory usage found in .su file
+    new_mem = {}  # Key = function name, Value = maximum memory usage found in .su file
 
     for key in original_mem:
         address = key
         DIE = dwarf_info.get_DIE_from_refaddr(address)
-        name = DIE.attributes['DW_AT_name'].value.decode('utf-8')
+        name = DIE.attributes["DW_AT_name"].value.decode("utf-8")
 
         if name not in new_mem:
             new_mem[name] = original_mem[key]
@@ -316,7 +317,7 @@ def redo_memory(dwarf_info, original_mem, mem_by_name):
     for key in original_mem:
         address = key
         DIE = dwarf_info.get_DIE_from_refaddr(address)
-        name = DIE.attributes['DW_AT_name'].value.decode('utf-8')
+        name = DIE.attributes["DW_AT_name"].value.decode("utf-8")
 
         new_memory = new_mem[name]
         original_mem[key] = new_memory
@@ -335,15 +336,15 @@ def redo_memory(dwarf_info, original_mem, mem_by_name):
 # Note: if the function is not found in the .su file,
 # the function's max memory usage is set to 0 and is flagged with '*'.
 
+
 def su_files(c_file, line, column, name, address, flags, build_location):
-    c_file = c_file.split('/')[-1]
-    su_file = c_file + '.su' # .su files will be the name of the object file with .su appended to it
+    c_file = c_file.split("/")[-1]
+    su_file = c_file + ".su"  # .su files will be the name of the object file with .su appended to it
     mem = None
 
     for root, _, files in os.walk(build_location):
         if su_file in files:
-
-            target_line = str(line) + ':' + str(column) + ':' + name
+            target_line = str(line) + ":" + str(column) + ":" + name
 
             found_path = os.path.join(root, su_file)
             mem = confirm_su_file(found_path, target_line, address, flags)
@@ -368,27 +369,26 @@ def su_files(c_file, line, column, name, address, flags, build_location):
 
 # Output is the stack usage of the function if found in the .su file.
 
+
 def confirm_su_file(file_name, find_line, address, flags):
-    with open(file_name, 'r') as file:
-
+    with open(file_name, "r") as file:
         for line in file:
-
             if find_line in line:
                 split_line = line.split()
 
                 if address not in flags:
-                    flags[address] = split_line[2] # flags are 'dynamic', 'bounded', 'static'
+                    flags[address] = split_line[2]  # flags are 'dynamic', 'bounded', 'static'
                 else:
                     if split_line[2] not in flags[address]:
-                        flags[address] = flags[address] + ',' + ' ' + split_line[2]
+                        flags[address] = flags[address] + "," + " " + split_line[2]
                 return split_line[1]
 
         # Following lines mean that the function was not found in the .su file. Noted by '*'.
         if address not in flags:
-            flags[address] = '*'
+            flags[address] = "*"
         else:
-            if '*' not in flags[address]:
-                flags[address] = flags[address] + ',' + ' ' + '*'
+            if "*" not in flags[address]:
+                flags[address] = flags[address] + "," + " " + "*"
 
         return 0
 
@@ -404,15 +404,15 @@ def confirm_su_file(file_name, find_line, address, flags):
 # Key = object file
 # Value = [[function_name, depth_of_function_call, function_address, memory_usage], [...], ...]
 
+
 def get_names(call_tree, dwarf_info, mem_usage):
     for key in call_tree:
-
         for i in range(0, len(call_tree[key])):
             address = call_tree[key][i][0]
             DIE = dwarf_info.get_DIE_from_refaddr(address)
 
             try:
-                name = DIE.attributes['DW_AT_name'].value.decode('utf-8')
+                name = DIE.attributes["DW_AT_name"].value.decode("utf-8")
             except KeyError:
                 name = "NA"
 
@@ -438,24 +438,23 @@ def get_names(call_tree, dwarf_info, mem_usage):
 # Value = [[root_address, max_memory_usage], [root_address, max_memory_usage], [...], ...]
 # with the root_addresses being the root syscall addresses.
 
+
 def max_mem_usage(call_tree, max_usage):
     for key in call_tree:
-
-        curr_stack = [] # Current call stack
-        max_stack = [] # Maximum memory usage path found so far
-        root = 0 # Root syscall address
+        curr_stack = []  # Current call stack
+        max_stack = []  # Maximum memory usage path found so far
+        root = 0  # Root syscall address
         max_mem_used = 0
         max_usage[key] = []
 
         for i in range(0, len(call_tree[key])):
-
             curr_name = call_tree[key][i][0]
             curr_depth = call_tree[key][i][1]
             curr_address = call_tree[key][i][2]
             curr_usage = int(call_tree[key][i][3])
 
-            if i+1 < len(call_tree[key]):
-                next_depth = call_tree[key][i+1][1]
+            if i + 1 < len(call_tree[key]):
+                next_depth = call_tree[key][i + 1][1]
             else:
                 next_depth = -1
 
@@ -472,7 +471,6 @@ def max_mem_usage(call_tree, max_usage):
                 max_stack = check_stacks(curr_stack, max_stack)
 
                 if next_depth in (-1, 0):
-
                     for max in max_stack:
                         max_mem_used += max[3]
                     max_usage[key].append([root, max_mem_used])
@@ -495,6 +493,7 @@ def max_mem_usage(call_tree, max_usage):
 # found so far.
 
 # Output is the maximum call stack of the two stacks.
+
 
 def check_stacks(curr_s, max_s):
     max_mem = 0
@@ -524,51 +523,52 @@ def check_stacks(curr_s, max_s):
 # No direct return to main but the output
 # is a text file with the script's results.
 
+
 def print_tree(call_tree, flags, max_usage, stack_size, mem_by_name, output_file, verbose):
-    f = open(output_file, 'w')
+    f = open(output_file, "w")
 
     for key in call_tree:
-        f.write(f'File: {key}\n')
+        f.write(f"File: {key}\n")
 
         prev_depth = -1
 
         for function, depth, address, mem in call_tree[key]:
             if depth == 0:
-                f.write('\n')
+                f.write("\n")
 
             if not verbose:
                 if depth != 0:
                     continue
 
-            print_string = '   ' * depth
+            print_string = "   " * depth
 
             if depth > prev_depth or depth == 0:
-                print_string += '+'
+                print_string += "+"
 
             if verbose:
-                print_string += function + '   ' + str(mem)
+                print_string += function + "   " + str(mem)
 
                 if address in flags:
-                    if '*' in flags[address]:
+                    if "*" in flags[address]:
                         if mem_by_name[function] > 1:
-                            flags[address] = flags[address].replace('*', 'external')
-                    print_string += '   ' + flags[address]
+                            flags[address] = flags[address].replace("*", "external")
+                    print_string += "   " + flags[address]
             else:
                 print_string += function
 
             if depth == 0:
                 for entry in max_usage[key]:
                     if address == entry[0]:
-                        print_string += '   ' + 'MAX MEMORY USAGE: ' + str(entry[1])
+                        print_string += "   " + "MAX MEMORY USAGE: " + str(entry[1])
                         if stack_size != 0:
-                            if entry[1] > (.9 * stack_size):
-                                print_string += '   ' + 'WARNING: STACK USAGE EXCEEDS 90% OF STACK SIZE'
+                            if entry[1] > (0.9 * stack_size):
+                                print_string += "   " + "WARNING: STACK USAGE EXCEEDS 90% OF STACK SIZE"
 
-            f.write(print_string + '\n')
+            f.write(print_string + "\n")
             prev_depth = depth
 
-        f.write('\n')
-        f.write('-' * 50 + '\n')
+        f.write("\n")
+        f.write("-" * 50 + "\n")
 
     f.close()
 
@@ -577,6 +577,7 @@ def print_tree(call_tree, flags, max_usage, stack_size, mem_by_name, output_file
 
 # No inputs. Outputs text to the console with information on
 # how to use the script and what the generated output means.
+
 
 def print_help():
     print("""
@@ -609,11 +610,17 @@ def main():
         def print_help(self):
             print_help()
 
-    parser = CustomArgumentParser(description='Analyze syscall stack usage.')
-    parser.add_argument('--elf-file', type=str, required=True, default='', help='ELF file to process')
-    parser.add_argument('--output-file', type=str, required=True, default='', help='Output file name')
-    parser.add_argument('--build-dir', type=str, required=True, default='', help='Build directory')
-    parser.add_argument('--input-flags', type=str, required=False, default='', help='Include full call tree with individual memory usage and informational flags')
+    parser = CustomArgumentParser(description="Analyze syscall stack usage.")
+    parser.add_argument("--elf-file", type=str, required=True, default="", help="ELF file to process")
+    parser.add_argument("--output-file", type=str, required=True, default="", help="Output file name")
+    parser.add_argument("--build-dir", type=str, required=True, default="", help="Build directory")
+    parser.add_argument(
+        "--input-flags",
+        type=str,
+        required=False,
+        default="",
+        help="Include full call tree with individual memory usage and informational flags",
+    )
 
     args = parser.parse_args()
 
@@ -623,25 +630,25 @@ def main():
     input_flags = args.input_flags
 
     try:
-        with open(elf_file_path, 'r'):
+        with open(elf_file_path, "r"):
             pass
     except FileNotFoundError:
-        print('ELF file not found. Exiting...')
+        print("ELF file not found. Exiting...")
         return -1
 
-    if output_file_path == '' or not output_file_path.endswith('.txt'):
-        output_file_path = build_location + '/syscall_stack_usage.txt'
-        print('Invalid output file. Storing in ' + output_file_path)
+    if output_file_path == "" or not output_file_path.endswith(".txt"):
+        output_file_path = build_location + "/syscall_stack_usage.txt"
+        print("Invalid output file. Storing in " + output_file_path)
 
-    if input_flags == '':
+    if input_flags == "":
         verbose = False
-    elif input_flags == '-v':
+    elif input_flags == "-v":
         verbose = True
-    elif input_flags == '-h':
+    elif input_flags == "-h":
         print_help()
         return 0
     else:
-        print('Invalid input flag. Exiting...')
+        print("Invalid input flag. Exiting...")
         return -1
 
     # flags structure:
@@ -677,5 +684,6 @@ def main():
 
     return 0
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()

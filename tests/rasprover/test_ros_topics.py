@@ -1,6 +1,5 @@
 from pathlib import Path
 
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -10,7 +9,7 @@ def test_joint_state_topic_defaults_to_global_ros_topic() -> None:
 
     assert "config APP_ZENOH_JOINT_STATE_KEY" in kconfig
     assert 'default "rt/joint_states"' in kconfig
-    assert '#define JOINT_STATE_KEY          CONFIG_APP_ZENOH_JOINT_STATE_KEY' in app_zenoh
+    assert "#define JOINT_STATE_KEY          CONFIG_APP_ZENOH_JOINT_STATE_KEY" in app_zenoh
 
 
 def test_rasprover_overlay_removes_stale_zenoh_serial_alias() -> None:
