@@ -18,14 +18,14 @@
 > ```
 >
 > ```bash
-> uv run poe west-update
+> mise run west-update
 > ```
 >
 > You also need the host `protoc` compiler available — nanopb's CMake
 > integration invokes it at build time.
 >
 > Because the module is absent, the `CONFIG_NANOPB*` symbols below are
-> **unverified against the tree** — `uv run poe check-skills` allowlists them
+> **unverified against the tree** — `mise run check-skills` allowlists them
 > for that reason rather than confirming them. Re-check them once the module is
 > actually cloned. Everything in `./cbor.md` and `./json.md` *is* verified;
 > prefer CBOR unless you specifically need protobuf schema compatibility with

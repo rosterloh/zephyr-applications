@@ -6,13 +6,13 @@ inversely (so default to the *last* one if you're not sure).
 
 ## Reflash to reset (most reliable, ~9 s)
 
-`west flash` (and any wrapper poe task that calls it) drives NRST as part
+`west flash` (and any wrapper mise task that calls it) drives NRST as part
 of programming. Start the serial reader in the background, kick off the
 flash, then collect the captured log. Cheap, deterministic, and gives you
 "booted with the image I think it has."
 
 ```bash
-uv run python3 -u <<'PY' > /tmp/serial.log 2>&1 &
+mise x -- python3 -u <<'PY' > /tmp/serial.log 2>&1 &
 import serial, time, re, sys
 strip = lambda b: re.sub(r'\x1b\[[0-9;=?]*[mABCDEFGHJKLMST]', '',
                           b.decode('utf-8', errors='replace'))
@@ -25,14 +25,14 @@ while time.time() < deadline:
         sys.stdout.write(strip(data)); sys.stdout.flush()
 PY
 sleep 1
-uv run poe flash --proj <app>     # or: uv run west flash -r openocd
+mise run flash <app>            # or: mise x -- west flash -r openocd
 wait
 cat /tmp/serial.log
 ```
 
 The default `west flash` runner is whatever was resolved at configure
 time; on STM32 workspaces that often means `stm32cubeprogrammer` (rarely
-installed). Pass `-r openocd` explicitly or use the project's poe task,
+installed). Pass `-r openocd` explicitly or use the project's mise task,
 which usually pins openocd.
 
 ## openocd reset (no reflash, ~3 s)

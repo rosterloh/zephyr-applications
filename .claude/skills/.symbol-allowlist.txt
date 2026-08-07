@@ -1,5 +1,5 @@
 # CONFIG_* symbols cited in .claude/skills/ that intentionally do not exist in
-# deps/. Checked by scripts/check_skill_symbols.py (uv run poe check-skills).
+# deps/. Checked by scripts/check_skill_symbols.py (mise run check-skills).
 #
 # Format: one fnmatch glob per line, `#` starts a trailing reason.
 # Keep a reason on every entry -- an unexplained entry is indistinguishable

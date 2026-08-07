@@ -111,15 +111,15 @@ log lines. Save raw, then narrow.
 ## Project venv
 
 `import serial` only works inside the project venv. If
-`uv run python3 -c "import serial"` fails with `ModuleNotFoundError`,
+`mise x -- python3 -c "import serial"` fails with `ModuleNotFoundError`,
 you're invoking python from outside the project root:
 
 ```bash
 cd /path/to/project        # IMPORTANT
-uv run python3 ...
+mise x -- python3 ...
 ```
 
-`uv run west <command>` has the same constraint — west extensions, the
+`mise x -- west <command>` has the same constraint — west extensions, the
 build, and any pyserial use all rely on the same `.venv/`.
 
 ## Debug build overlays
@@ -142,7 +142,5 @@ CONFIG_I2C_LOG_LEVEL_DBG=y
 Build with:
 
 ```bash
-uv run west build ... --extra-conf debug.conf
-# or via poe if the project supports it:
-uv run poe agent-build-app --debug
+mise x -- west build ... --extra-conf debug.conf
 ```

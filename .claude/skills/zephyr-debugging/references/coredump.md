@@ -32,11 +32,11 @@ Zephyr ships the tooling under `scripts/coredump/`:
 
 ```
 # 1. turn the captured log block into a coredump binary
-uv run python $ZEPHYR_BASE/scripts/coredump/coredump_serial_log_parser.py \
+mise x -- python $ZEPHYR_BASE/scripts/coredump/coredump_serial_log_parser.py \
     boot.log coredump.bin
 
 # 2. start a gdbserver that speaks the coredump
-uv run python $ZEPHYR_BASE/scripts/coredump/coredump_gdbserver.py \
+mise x -- python $ZEPHYR_BASE/scripts/coredump/coredump_gdbserver.py \
     builds/<app>/zephyr/zephyr.elf coredump.bin
 
 # 3. connect normal gdb to it
