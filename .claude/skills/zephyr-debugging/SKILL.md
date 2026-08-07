@@ -21,7 +21,7 @@ description: >
 
 # Zephyr Debugging
 
-Validated against: Zephyr 4.4.99 (b3e7c445b343, 2026-07-26). Re-check with `uv run poe check-skills`.
+Validated against: Zephyr 4.4.99 (a632b9723bab, 2026-08-07). Re-check with `mise run check-skills`.
 
 Debugging a flashed Zephyr board spans several transports and tools. They're
 not interchangeable — each answers a different question. Pick by **what you
@@ -102,5 +102,5 @@ Load only the one the table points you at:
 - **Capture loosely, filter post-hoc.** Aggressive live filters (serial
   monitor lines, tshark display filters) routinely eat the one error you
   needed. Log to a file, `grep` afterwards.
-- **Run python in the project venv** (`uv run python3 ...`) or pyserial and
+- **Run python in the project venv** (`mise x -- python3 ...`) or pyserial and
   friends won't import.

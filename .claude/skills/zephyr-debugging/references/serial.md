@@ -10,7 +10,7 @@ debug probe is attached, `rtt.md` gives you the same logs over SWD.
 You have Python + `pyserial`. Open the device (default `/dev/ttyACM0`),
 talk to the shell whose prompt is `uart:~$`. Pattern: drain stale data,
 write a command + `\r`, read back the response, strip ANSI before matching.
-**Run python inside the project venv** — `uv run python3 ...` from the
+**Run python inside the project venv** — `mise x -- python3 ...` from the
 project root or pyserial won't import.
 
 ```python

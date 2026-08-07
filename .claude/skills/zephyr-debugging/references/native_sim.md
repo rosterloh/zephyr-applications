@@ -16,7 +16,7 @@ simulates those. Use it for the firmware's logic, not its hardware coupling.
 ## Build & run
 
 ```
-uv run west build -b native_sim -p always -d builds/<app> applications/<app>
+mise x -- west build -b native_sim -p always -d builds/<app> applications/<app>
 ./build/<app>/zephyr/zephyr.exe            # runs as a normal process
 ./build/<app>/zephyr/zephyr.exe --help     # native_sim runtime options
 ```
@@ -41,7 +41,7 @@ watchpoints on a Cortex-M.
 ## Sanitizers — the reason to bother
 
 ```
-uv run west build -b native_sim -d builds/<app> applications/<app> -- \
+mise x -- west build -b native_sim -d builds/<app> applications/<app> -- \
     -DCONFIG_ASAN=y -DCONFIG_UBSAN=y
 ./build/<app>/zephyr/zephyr.exe
 ```
@@ -56,10 +56,10 @@ uv run west build -b native_sim -d builds/<app> applications/<app> -- \
 
 ```
 # coverage: which lines a test/run actually exercised
-uv run west build -b native_sim ... -- -DCONFIG_COVERAGE=y
+mise x -- west build -b native_sim ... -- -DCONFIG_COVERAGE=y
 ./zephyr.exe && gcovr -r .            # or lcov/genhtml
 # twister runs this for you:
-uv run west twister -T tests --coverage -p native_sim
+mise x -- west twister -T tests --coverage -p native_sim
 
 # rr — record once, replay deterministically backwards/forwards
 rr record ./build/<app>/zephyr/zephyr.exe

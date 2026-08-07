@@ -438,7 +438,7 @@ device that LVGL flushes into.)
 #### Building
 
 ```bash
-uv run west build -b native_sim/native/64 -p always \
+mise x -- west build -b native_sim/native/64 -p always \
                   -d builds/<app>_sim applications/<app>
 ./build/<app>_sim/zephyr/zephyr.exe
 ```
@@ -447,14 +447,16 @@ uv run west build -b native_sim/native/64 -p always \
 flavors; use `-p always` whenever you change configs to force a clean
 configure.)
 
-If your project uses `poe` tasks, add a sim variant alongside the
+If your project uses `mise` tasks, add a sim variant alongside the
 hardware build:
 
 ```toml
 [tasks.build-sim]
-cmd  = "west build -b native_sim/native/64 -p always -d builds/${proj}_sim applications/${proj}"
-[tasks.build-sim.args]
-proj = { default = "beta_hri" }
+description = "Build an application for native_sim."
+usage = '''
+arg "<app>" help="App name"
+'''
+run = "west build -b native_sim/native/64 -p always --build-dir builds/${usage_app}_sim applications/${usage_app}"
 ```
 
 The `zephyr.exe` is a normal POSIX binary — run it directly, kill it
@@ -502,7 +504,7 @@ For pure UI work the loop is:
 
 ```bash
 # Edit ui_screen_foo.c
-uv run west build -d builds/foo_sim
+mise x -- west build -d builds/foo_sim
 ./build/foo_sim/zephyr/zephyr.exe
 ```
 

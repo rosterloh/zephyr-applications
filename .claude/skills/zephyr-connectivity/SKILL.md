@@ -14,7 +14,7 @@ description: >
 
 # Zephyr Connectivity
 
-Validated against: Zephyr 4.4.99 (b3e7c445b343, 2026-07-26). Re-check with `uv run poe check-skills`.
+Validated against: Zephyr 4.4.99 (a632b9723bab, 2026-08-07). Re-check with `mise run check-skills`.
 
 ## Scope
 

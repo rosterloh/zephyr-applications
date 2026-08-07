@@ -1599,6 +1599,6 @@ the iface admin-up itself, and with
 then, so an `admin_up` early-return deadlocks the retry.
 
 Recovery for an already-wedged board: a full chip erase clears the stored
-credential (`uv run esptool --port <port> erase-flash`, then reflash) — a plain
-`poe flash` does not, because it only erases the app region. See
+credential (`mise x -- esptool --port <port> erase-flash`, then reflash) — a plain
+`mise run flash` does not, because it only erases the app region. See
 `../../zephyr-system/references/storage.md`.

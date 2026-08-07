@@ -144,7 +144,7 @@ def main() -> int:
     args = ap.parse_args()
 
     if not ZEPHYR.exists():
-        print("deps/zephyr missing -- run: uv run poe west-update", file=sys.stderr)
+        print("deps/zephyr missing -- run: mise run west-update", file=sys.stderr)
         return 2
 
     universe = kconfig_universe()

@@ -144,7 +144,7 @@ the merged config rather than trusting `prj.conf`:
 grep FOO builds/<app>/zephyr/.config
 ```
 
-For the skill references in this repo, `uv run poe check-skills` validates every
+For the skill references in this repo, `mise run check-skills` validates every
 cited `CONFIG_*` against the current tree for exactly this reason.
 
 #### `CONFIG_*` in `prj.conf` never configures another image

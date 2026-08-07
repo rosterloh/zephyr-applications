@@ -16,9 +16,9 @@ backtrace. gdb attaches through the same debug probe as RTT.
 
 west wraps the probe + gdb for you:
 ```
-uv run west debug   -d builds/<app>     # flash, reset, attach, halt at main
-uv run west attach  -d builds/<app>     # attach to a *running* target, no reset
-uv run west debugserver -d builds/<app> # just the gdbserver; connect gdb yourself
+mise x -- west debug   -d builds/<app>     # flash, reset, attach, halt at main
+mise x -- west attach  -d builds/<app>     # attach to a *running* target, no reset
+mise x -- west debugserver -d builds/<app> # just the gdbserver; connect gdb yourself
 ```
 `west attach` is the one you usually want when chasing a live hang — it
 doesn't reset, so you catch the system in the bad state.

@@ -15,7 +15,7 @@ description: >
 
 # Zephyr Serialization
 
-Validated against: Zephyr 4.4.99 (b3e7c445b343, 2026-07-26). Re-check with `uv run poe check-skills`.
+Validated against: Zephyr 4.4.99 (a632b9723bab, 2026-08-07). Re-check with `mise run check-skills`.
 
 ## Scope
 
@@ -41,7 +41,7 @@ carry these payloads (CoAP/HTTP/MQTT/SMP) — see `zephyr-connectivity`.
 
 ⚠️ **nanopb is not in this workspace's `west.yml` allowlist**, so
 `deps/modules/lib/nanopb` does not exist and no app here uses protobuf. Adding
-the module is a one-line `west.yml` change plus `poe west-update` — see the note
+the module is a one-line `west.yml` change plus `mise run west-update` — see the note
 at the top of `references/protobuf.md`. Its `CONFIG_NANOPB*` symbols are
 consequently unverified.
 

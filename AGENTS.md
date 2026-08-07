@@ -75,14 +75,14 @@ The west.yml uses `name-allowlist` to clone only the modules these apps need; do
 - `boards/<vendor>/<board>/` — out-of-tree board definitions.
 - `deps/zephyr/` — Zephyr tree (managed by west, gitignored).
 - `deps/modules/lib/rosterloh-drivers/` — out-of-tree drivers repo. Tracks `main` via west.yml. Local edits during PR development are fine; commit them in that repo, not this one.
-- `deps/modules/lib/zenoh/` — zenoh-pico, patched by `poe patch-zenoh`.
+- `deps/modules/lib/zenoh/` — zenoh-pico, patched by `mise run patch-zenoh`.
 - `builds/<app>/` — build outputs (gitignored).
 - `logs/` — `agent-build` log destination.
 
 ## Formatting
 
-- Python: `uv run poe fmt` (ruff format, line-length 120).
-- C / Zephyr code: clang-format using the in-tree `.clang-format`. Verify with `uv run clang-format --dry-run --Werror <files>`.
+- Python: `mise run fmt` (ruff format, line-length 120).
+- C / Zephyr code: clang-format using the in-tree `.clang-format`. Verify with `mise x -- clang-format --dry-run --Werror <files>`.
 
 ## Out-of-tree modules and PR work
 
@@ -90,8 +90,8 @@ When iterating on `deps/modules/lib/rosterloh-drivers` (or zenoh) you are editin
 
 1. Branch and commit inside the module dir.
 2. Push and open a PR against that module's repo (e.g. `rosterloh/zephyr-drivers`).
-3. Verify dependent apps still build from this workspace: `uv run poe build-motor`, etc.
-4. After merge: `uv run poe west-update` to advance the pinned `main` ref locally.
+3. Verify dependent apps still build from this workspace: `mise run app motor_controller`, etc.
+4. After merge: `mise run west-update` to advance the pinned `main` ref locally.
 
 Do **not** vendor module changes into this repo; west owns those paths.
 

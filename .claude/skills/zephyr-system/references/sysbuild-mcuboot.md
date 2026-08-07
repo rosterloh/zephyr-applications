@@ -9,7 +9,7 @@ In this workspace, six apps opt in via a `sysbuild.conf`:
 `pt_mcp`, `rasprover`. Build them with:
 
 ```bash
-uv run poe app rasprover --sysbuild
+mise run app rasprover --sysbuild
 ```
 
 ## Contents
@@ -95,7 +95,7 @@ CONFIG_LOG=y
 or pass it inline:
 
 ```bash
-uv run west build --sysbuild -b <board> --build-dir builds/<app> applications/<app> \
+mise x -- west build --sysbuild -b <board> --build-dir builds/<app> applications/<app> \
     -- -Dmcuboot_CONFIG_BOOT_MAX_IMG_SECTORS=256
 ```
 
@@ -228,7 +228,7 @@ Enable the MCUboot-side Kconfig for whichever transport does the upload —
 
 - **`west flash` after a sysbuild build must flash `merged.hex`.** Flashing the
   app alone gives an unsigned image in slot 0 and a device that hangs in the
-  bootloader. `uv run poe flash <app>` uses the build directory, so make sure it
+  bootloader. `mise run flash <app>` uses the build directory, so make sure it
   was a `--sysbuild` build if that's what you intend.
 - **Artifact paths gain a domain level.** `builds/<app>/<app>/zephyr/zephyr.elf`,
   not `builds/<app>/zephyr/zephyr.elf`. Stale debugger paths read the wrong ELF
@@ -253,6 +253,6 @@ Enable the MCUboot-side Kconfig for whichever transport does the upload —
   file are silently ignored — see `./kconfig.md`.
 - **Erasing flash wipes your bootloader too.** A full `esptool erase-flash` or
   `nrfjprog --eraseall` removes MCUboot; reflash `merged.hex`, not just the app.
-  Note that on ESP32 targets a plain `poe flash` only erases the app region, so
+  Note that on ESP32 targets a plain `mise run flash` only erases the app region, so
   stale ZMS/settings data can survive and wedge the firmware — see
   `./storage.md`.

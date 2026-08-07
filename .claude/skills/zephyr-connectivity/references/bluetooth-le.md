@@ -1734,7 +1734,7 @@ Two related stack limits hit while tracing the same bug:
 ### A stale bond partition makes the first fresh pairing fail
 
 On the C3, leftover ZMS content produced `Security failed: level 1 err 4` on a
-first pairing attempt. `poe flash` does not erase the storage partition — do a
+first pairing attempt. `mise run flash` does not erase the storage partition — do a
 full `esptool erase-flash` and reflash, then pairing succeeds. See
 `../../zephyr-system/references/storage.md`.
 
