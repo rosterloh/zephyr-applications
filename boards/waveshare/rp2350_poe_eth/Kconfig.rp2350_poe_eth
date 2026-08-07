@@ -1,0 +1,6 @@
+# Copyright (c) 2026 Richard Osterloh
+# SPDX-License-Identifier: Apache-2.0
+
+config BOARD_RP2350_POE_ETH
+	select SOC_RP2350A_M33 if BOARD_RP2350_POE_ETH_RP2350A_M33 || \
+				  BOARD_RP2350_POE_ETH_RP2350A_M33_MCUBOOT

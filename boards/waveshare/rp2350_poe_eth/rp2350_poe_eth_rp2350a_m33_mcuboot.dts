@@ -1,0 +1,55 @@
+/*
+ * Copyright (c) 2026 Richard Osterloh
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/dts-v1/;
+
+#include <raspberrypi/rpi_pico/rp2350a.dtsi>
+#include <raspberrypi/rpi_pico/m33.dtsi>
+
+#include "rp2350_poe_eth.dtsi"
+
+/*
+ * MCUboot layout for the 16 MB part. Two equally sized slots are required
+ * by the swap-using-move upgrade mode that hawkBit relies on for revert.
+ *
+ *   0x000000  64 KB   MCUboot
+ *   0x010000  1.5 MB  image-0 (running application)
+ *   0x190000  1.5 MB  image-1 (staged update)
+ *   0x310000  13.9 MB storage (settings / NVS)
+ */
+&flash0 {
+	partitions {
+		compatible = "fixed-partitions";
+		#address-cells = <1>;
+		#size-cells = <1>;
+
+		boot_partition: partition@0 {
+			label = "mcuboot";
+			reg = <0x00000000 DT_SIZE_K(64)>;
+		};
+
+		slot0_partition: partition@10000 {
+			label = "image-0";
+			reg = <0x00010000 DT_SIZE_K(1536)>;
+		};
+
+		slot1_partition: partition@190000 {
+			label = "image-1";
+			reg = <0x00190000 DT_SIZE_K(1536)>;
+		};
+
+		storage_partition: partition@310000 {
+			label = "storage";
+			reg = <0x00310000 DT_SIZE_K(13248)>;
+		};
+	};
+};
+
+/ {
+	chosen {
+		zephyr,code-partition = &slot0_partition;
+	};
+};

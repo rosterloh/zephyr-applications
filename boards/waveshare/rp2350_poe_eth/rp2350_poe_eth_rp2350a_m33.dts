@@ -1,0 +1,41 @@
+/*
+ * Copyright (c) 2026 Richard Osterloh
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/dts-v1/;
+
+#include <raspberrypi/rpi_pico/rp2350a.dtsi>
+#include <raspberrypi/rpi_pico/m33.dtsi>
+
+#include "rp2350_poe_eth.dtsi"
+
+/*
+ * Single-image layout: the application is linked at the base of flash and
+ * runs directly from the boot ROM. The tail of flash is left for settings /
+ * NVS so hawkBit's DDI state has somewhere to live even without MCUboot.
+ */
+&flash0 {
+	partitions {
+		compatible = "fixed-partitions";
+		#address-cells = <1>;
+		#size-cells = <1>;
+
+		code_partition: partition@0 {
+			label = "code";
+			reg = <0x00000000 DT_SIZE_M(15)>;
+		};
+
+		storage_partition: partition@f00000 {
+			label = "storage";
+			reg = <0x00f00000 DT_SIZE_M(1)>;
+		};
+	};
+};
+
+/ {
+	chosen {
+		zephyr,code-partition = &code_partition;
+	};
+};

@@ -1,0 +1,15 @@
+# This file is provided so that the application can be compiled using Twister,
+# the Zephyr testing tool. In this file, multiple combinations can be specified,
+# so that you can easily test all of them locally or in CI.
+sample:
+  description: Waveshare RP2350-POE-ETH bring-up and hawkBit OTA test application
+  name: rp2350-poe-eth
+common:
+  build_only: true
+  platform_allow:
+    - rp2350_poe_eth/rp2350a/m33/mcuboot
+  integration_platforms:
+    - rp2350_poe_eth/rp2350a/m33/mcuboot
+tests:
+  app.rp2350_poe_eth.sysbuild:
+    sysbuild: true

@@ -1,0 +1,28 @@
+menu "RP2350-POE-ETH test application"
+
+config APP_STATUS_LED
+	bool "Drive the onboard WS2812 as a status indicator"
+	default y
+	depends on DT_HAS_WORLDSEMI_WS2812_RPI_PICO_PIO_ENABLED
+	select LED_STRIP
+	help
+	  Use the WS2812 on GP25 to show boot / link / online / updating /
+	  error state.
+
+config APP_NET_READY_TIMEOUT_SEC
+	int "Seconds to wait for a DHCPv4 lease before continuing"
+	default 60
+	range 5 600
+	help
+	  The application carries on after this expires, since the hawkBit
+	  autohandler retries on its own and the shell stays usable.
+
+endmenu
+
+menu "Zephyr"
+source "Kconfig.zephyr"
+endmenu
+
+module = APP
+module-str = APP
+source "subsys/logging/Kconfig.template.log_config"

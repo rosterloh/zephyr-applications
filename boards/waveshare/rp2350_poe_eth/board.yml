@@ -1,0 +1,9 @@
+board:
+  name: rp2350_poe_eth
+  full_name: RP2350-POE-ETH
+  vendor: waveshare
+  socs:
+    - name: rp2350a
+      variants:
+        - name: mcuboot
+          cpucluster: m33

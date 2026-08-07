@@ -295,7 +295,7 @@ echo "zenoh config.h written to $CONFIG_H"
 [tasks.app]
 description = "Build a Zephyr application for its default (or an explicitly allowed) board."
 usage = '''
-arg "<app>" help="App name (motor_controller, joystick_controller, embedded_vision, force_sensor, bt_keys, powerbread, pico_fw, pt_mcp, rasprover, data_collection)"
+arg "<app>" help="App name (motor_controller, joystick_controller, embedded_vision, force_sensor, bt_keys, powerbread, pico_fw, pt_mcp, rasprover, data_collection, rp2350_poe_eth)"
 flag "-b --board <board>" help="Override target board (must be in app's allowed list)"
 flag "--sysbuild" help="Build with sysbuild (e.g. for MCUboot integration)"
 '''
@@ -312,6 +312,7 @@ case "${usage_app}" in
     pt_mcp)               ALLOWED="xiao_esp32c5/esp32c5/hpcore"; DEFAULT="xiao_esp32c5/esp32c5/hpcore" ;;
     rasprover)            ALLOWED="ros_driver/esp32/procpu native_sim/native/64"; DEFAULT="ros_driver/esp32/procpu" ;;
     data_collection)      ALLOWED="esp32p4_nano/esp32p4/hpcore"; DEFAULT="esp32p4_nano/esp32p4/hpcore" ;;
+    rp2350_poe_eth)       ALLOWED="rp2350_poe_eth/rp2350a/m33/mcuboot"; DEFAULT="rp2350_poe_eth/rp2350a/m33/mcuboot" ;;
     *) echo "unknown app: ${usage_app}" >&2; exit 2 ;;
 esac
 
