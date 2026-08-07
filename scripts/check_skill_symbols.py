@@ -2,9 +2,11 @@
 """Validate that every CONFIG_* symbol cited in .claude/skills/ exists in deps/.
 
 The Zephyr skill references are large hand/LLM-authored documents. The failure
-mode that matters is a Kconfig symbol that was renamed or removed upstream:
-`prj.conf` silently ignores unknown symbols, so a stale skill produces a build
-that "works" but doesn't have the feature enabled.
+mode that matters is a Kconfig symbol that was renamed or removed upstream.
+Zephyr sets `warn_assign_undef` for handwritten fragments and turns that warning
+into an error, so a stale symbol in `prj.conf` does not quietly do nothing -- it
+aborts the build at the Kconfig stage with "Aborting due to Kconfig warnings",
+pointing at your config rather than at the skill that told you to write it.
 
 This scans skill markdown for CONFIG_* tokens and checks each against the
 symbol universe defined by the Kconfig files under deps/. It also compares the

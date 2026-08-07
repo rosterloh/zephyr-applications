@@ -61,8 +61,12 @@ mise run check-skills     # after west-update: flag Zephyr API drift in .claude/
 **Run `check-skills` after every `west-update`.** It validates every `CONFIG_*`
 symbol cited in `.claude/skills/` against the Kconfig tree in `deps/`, and warns
 when a skill's `Validated against:` stamp no longer matches the Zephyr checkout.
-Renamed or removed Kconfig symbols are silently ignored by `prj.conf`, so stale
-skill docs otherwise produce builds that look fine but have the feature off.
+Assigning a renamed or removed symbol in a handwritten fragment (`prj.conf`,
+`boards/*.conf`, `--extra-conf`) aborts the Kconfig stage outright —
+`scripts/kconfig/kconfig.py` sets `warn_assign_undef` for handwritten input and
+then turns the warning into `error: Aborting due to Kconfig warnings`. A stale
+skill therefore sends you into a build failure whose real cause is a doc, not
+your code.
 It is deliberately *not* part of `west-update` — doc drift should not fail a
 dependency update. Deeper API drift (function signatures, removed C APIs) is not
 covered and still needs a manual pass over `doc/releases/migration-guide-*.rst`.
