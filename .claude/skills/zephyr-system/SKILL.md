@@ -23,7 +23,7 @@ description: >
 
 # Zephyr System
 
-Validated against: Zephyr 4.4.99 (a632b9723bab, 2026-08-07). Re-check with `mise run check-skills`.
+Validated against: Zephyr 4.4.99 (cee159bb557d, 2026-08-07). Re-check with `mise run check-skills`.
 
 ## Scope
 
@@ -66,3 +66,21 @@ skill.
   thread (or a busy loop with short `k_sleep`s) keeps the scheduler busy
   and silently prevents *all* deep idle. Make threads block on a
   semaphore/event instead — see `references/power-management.md`.
+
+## Validation Checklist
+
+- [ ] Every symbol you assigned survives to `builds/<app>/zephyr/.config`.
+      A `prj.conf` line dropped by an unmet dependency leaves no error — the
+      resolved `.config` is the only proof it took effect.
+- [ ] The Kconfig stage printed no `attempt to assign the value ... to the
+      undefined symbol` warning (for handwritten fragments this aborts the
+      build; if you saw one, the skill or your fragment is stale — run
+      `mise run check-skills`).
+- [ ] Persistence tested across a **power cycle**, not a soft reset:
+      `settings_load()` returns 0 and the value is the one you stored.
+- [ ] After a `west flash`, you know whether the storage partition was
+      erased — if the value vanished, that's the cause, not your code.
+- [ ] Tests actually *ran*: twister/ztest reports PASS per suite (check
+      `twister-out/<board>/<test>/` for the log), not just a successful build.
+- [ ] MCUboot/sysbuild: the new image is confirmed, or you have demonstrated
+      the revert path by deliberately not confirming one boot.

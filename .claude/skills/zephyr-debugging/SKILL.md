@@ -21,7 +21,7 @@ description: >
 
 # Zephyr Debugging
 
-Validated against: Zephyr 4.4.99 (a632b9723bab, 2026-08-07). Re-check with `mise run check-skills`.
+Validated against: Zephyr 4.4.99 (cee159bb557d, 2026-08-07). Re-check with `mise run check-skills`.
 
 Debugging a flashed Zephyr board spans several transports and tools. They're
 not interchangeable — each answers a different question. Pick by **what you
@@ -31,7 +31,7 @@ can't.
 
 ## First decision: which approach?
 
-| What you're trying to do                                          | Approach            | Reference            |
+| What you're trying to do                                          | Approach            | Reference (`references/`) |
 |-------------------------------------------------------------------|---------------------|----------------------|
 | Send shell commands, read boot logs, probe I2C/SPI/GPIO, timing   | **UART shell**      | `serial.md`          |
 | Board has no free UART / shell is dead but CPU alive + probe wired | **RTT over SWD**    | `rtt.md`             |
@@ -104,3 +104,20 @@ Load only the one the table points you at:
   needed. Log to a file, `grep` afterwards.
 - **Run python in the project venv** (`mise x -- python3 ...`) or pyserial and
   friends won't import.
+
+## Validation Checklist
+
+- [ ] The symptom reproduces on demand *before* you change anything. A bug
+      you can't trigger twice can't be shown fixed.
+- [ ] The transport is proven alive before you conclude the board is dead:
+      a prompt or `kernel version` response on serial/RTT. A silent UART is
+      more often the console config than a hung CPU.
+- [ ] The log you're reading is a fresh boot — first timestamp near
+      `[00:00:00.0xx]`, not a mid-stream capture.
+- [ ] A fault is decoded to a **source line** (gdb / `addr2line` against the
+      matching `builds/<app>/zephyr/zephyr.elf`), not left as a register dump.
+- [ ] Root cause named, and it explains every observed symptom — not just the
+      first one. If part of the behaviour is still unexplained, keep going.
+- [ ] After the fix: the original reproduction runs clean repeatedly, and any
+      temporary debug config (log levels, `CONFIG_ASSERT`, sanitizers) is
+      either removed or deliberately kept.

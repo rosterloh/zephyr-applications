@@ -47,6 +47,8 @@ ALLOWLIST = SKILLS / ".symbol-allowlist.txt"
 CONFIG_TOKEN = re.compile(r"\bCONFIG_(?!CONFIG_)([A-Z0-9_]+)")
 CONFIG_DEF = re.compile(r"^\s*(?:menu)?config\s+([A-Za-z0-9_]+)\s*$", re.MULTILINE)
 STAMP = re.compile(r"^Validated against:\s*Zephyr\s+(\S+)\s+\(([0-9a-f]{7,40})", re.MULTILINE)
+# `references/x.md` (this skill) or `other-skill/references/x.md` (cross-skill).
+REF_LINK = re.compile(r"(?:([a-z0-9-]+)/)?references/([A-Za-z0-9_.\-]+\.md)")
 
 # Symbols synthesised by Kconfig templates rather than a literal `config FOO`.
 # Zephyr's logging templates emit `config $(module)_LOG_LEVEL...`, which no
@@ -126,7 +128,7 @@ def zephyr_head() -> tuple[str, str]:
 def check_stamps(version: str, sha: str) -> list[str]:
     """Warn about SKILL.md files with a missing or outdated validation stamp.
 
-    Only the zephyr-* skills track the tree; others (e.g. poethepoet) version
+    Only the zephyr-* skills track the tree; others (e.g. mise) version
     themselves independently.
     """
     warnings = []
@@ -138,6 +140,31 @@ def check_stamps(version: str, sha: str) -> list[str]:
         elif not sha.startswith(m.group(2)) and not m.group(2).startswith(sha):
             warnings.append(f"{name}: stamped {m.group(1)} ({m.group(2)}), tree is {version} ({sha})")
     return warnings
+
+
+def check_references() -> list[str]:
+    """Report SKILL.md pointers to reference files that don't exist, and
+    reference files no SKILL.md points at.
+
+    A skill routes by naming a file under its `references/`; a typo'd or
+    renamed name costs the agent a wasted read and then a guess. An orphan
+    reference is worse -- content that is never reachable.
+    """
+    problems = []
+    for skill in sorted(SKILLS.glob("*/SKILL.md")):
+        body = skill.read_text()
+        name = skill.parent.name
+        if "## Validation Checklist" not in body:
+            problems.append(f"{name}: no '## Validation Checklist' section")
+        for other, ref in REF_LINK.findall(body):
+            target = SKILLS / (other or name) / "references" / ref
+            if not target.exists():
+                problems.append(f"{name}: points at missing {target.relative_to(SKILLS)}")
+        mentioned = set(re.findall(r"[A-Za-z0-9_.\-]+\.md", body))
+        for path in sorted((skill.parent / "references").glob("*.md")):
+            if path.name not in mentioned:
+                problems.append(f"{name}: {path.name} is not referenced from SKILL.md")
+    return problems
 
 
 def main() -> int:
@@ -183,6 +210,12 @@ def main() -> int:
         for w in warnings:
             print(f"  ! {w}")
 
+    links = check_references()
+    if links:
+        print("\nReference routing problems:")
+        for problem in links:
+            print(f"  ! {problem}")
+
     if unknown:
         print(f"\nUnknown symbols ({len(unknown)}) -- renamed, removed, or need allowlisting:")
         for sym, files in unknown.items():
@@ -193,7 +226,7 @@ def main() -> int:
         return 1
 
     print("\nAll cited CONFIG_* symbols resolve against the current tree.")
-    return 1 if warnings else 0
+    return 1 if warnings or links else 0
 
 
 if __name__ == "__main__":

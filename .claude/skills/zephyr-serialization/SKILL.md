@@ -15,7 +15,7 @@ description: >
 
 # Zephyr Serialization
 
-Validated against: Zephyr 4.4.99 (a632b9723bab, 2026-08-07). Re-check with `mise run check-skills`.
+Validated against: Zephyr 4.4.99 (cee159bb557d, 2026-08-07). Re-check with `mise run check-skills`.
 
 ## Scope
 
@@ -78,9 +78,26 @@ consequently unverified.
   `CONFIG_NANOPB_ENABLE_MALLOC` for variable-length fields; without
   it, every repeated/string field needs a `max_size` in `.options`.
 
+## Validation Checklist
+
+- [ ] Round-trip **on target**, not just on the host: encode → decode →
+      compare every field. Alignment, endianness and float support differ
+      between native_sim and the real SoC.
+- [ ] Undersized buffer tested: the encoder returns a failure instead of
+      overrunning. This is the bug that corrupts a neighbouring struct and
+      surfaces somewhere unrelated.
+- [ ] Malformed/truncated input tested: the decoder returns an error rather
+      than asserting or faulting — anything arriving off a wire is untrusted.
+- [ ] Codegen output is regenerated, not stale: a clean build
+      (`mise run agent-build <app>`, which builds `-p always`) reproduces the
+      generated sources from the current `.cddl`/`.proto`.
+- [ ] The encoded length is what you budgeted for the transport MTU
+      (BLE ATT, CoAP block, MQTT payload) — measured, not estimated.
+
 ## Related skills
 
 - `zephyr-connectivity` — transports that carry serialized payloads
   (sockets/HTTP/CoAP, BLE/SMP).
-- `zephyr-system` — `references/settings.md` and `references/storage.md`
+- `zephyr-system` — `zephyr-system/references/settings.md` and
+  `zephyr-system/references/storage.md`
   for persisting serialized blobs on flash.

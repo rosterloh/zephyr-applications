@@ -14,7 +14,7 @@ description: >
 
 # Zephyr Connectivity
 
-Validated against: Zephyr 4.4.99 (a632b9723bab, 2026-08-07). Re-check with `mise run check-skills`.
+Validated against: Zephyr 4.4.99 (cee159bb557d, 2026-08-07). Re-check with `mise run check-skills`.
 
 ## Scope
 
@@ -44,3 +44,27 @@ configuration, or the `net_buf` primitive (see `zephyr-kernel`).
   separate API. Easy to confuse with TLS option codes.
 - **`net_if_get_default()` returns NULL** if no interface has been
   brought up — always null-check before configuring an IP.
+- **Multicast joins survive an interface down/up** as of 4.5:
+  `net_if_down()` sends the leave message but keeps the addresses in the
+  interface's multicast list and rejoins on the way back up. Don't re-join
+  manually after a reconnect — relevant to zenoh's UDP multicast scouting.
+
+## Validation Checklist
+
+A link that works once is not a link that works. Verify recovery too.
+
+- [ ] The interface is genuinely up with an address: `net if` on the shell
+      (not just "no error from the connect call").
+- [ ] Peer-side confirmation, not just device-side: the WiFi AP lists the
+      station, or a BLE central (`bluetoothctl`, nRF Connect) enumerates the
+      expected services and characteristic properties.
+- [ ] Every scan has a matching stop — a second connect attempt succeeds
+      without a reboot.
+- [ ] Reconnect exercised deliberately: drop the AP / disconnect the peer and
+      confirm the device recovers on its own. Boot-time auto-connect is the
+      path most likely to wedge a driver.
+- [ ] TLS/DTLS: the handshake completes against the real endpoint, and a
+      deliberate failure (wrong CA) reports a clean error rather than
+      hanging — raise the mbedTLS log level to read the alert.
+- [ ] BLE bonds survive a power cycle if pairing is used: reconnect without
+      re-pairing.
