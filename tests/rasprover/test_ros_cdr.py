@@ -18,7 +18,7 @@ CDR_SRC = DRIVERS_ROOT / "lib" / "cdr" / "cdr.c"
 
 def _compile_and_run(tmp_path: Path, source: str) -> bytes:
     if not CDR_SRC.exists():
-        pytest.skip(f"CDR driver source not found at {CDR_SRC}; run `uv run poe setup`")
+        pytest.skip(f"CDR driver source not found at {CDR_SRC}; run `mise run setup`")
 
     test_c = tmp_path / "test_ros_cdr.c"
     test_c.write_text(textwrap.dedent(source))

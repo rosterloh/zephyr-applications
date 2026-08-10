@@ -1,13 +1,13 @@
 build:
-  # Path to the Kconfig file that will be sourced into Zephyr Kconfig tree under
-  # Zephyr > Modules > example-application. Path is relative from root of this
-  # repository.
+  # Module-level Kconfig, sourced into the Zephyr Kconfig tree under
+  # Zephyr > Modules. Currently an empty placeholder — per-app symbols live in
+  # applications/<app>/Kconfig instead. Path is relative to the repo root.
   kconfig: Kconfig
-  # Path to the folder that contains the CMakeLists.txt file to be included by
-  # Zephyr build system. The `.` is the root of this repository.
+  # CMakeLists.txt included by the Zephyr build system; `.` is the repo root.
+  # Ours only adds a top-level include/ to the include path, if one exists.
   cmake: .
   settings:
-    # Additional roots for boards and DTS files. Zephyr will use the
-    # `<board_root>/boards` for additional boards. The `.` is the root of this
-    # repository.
+    # Makes this repo a board root, so Zephyr discovers boards/<vendor>/<board>/
+    # (robotis_openrb_150, adafruit_qt_py_esp32c3). `.` is the repo root.
+    # No dts_root here: DT bindings live in the rosterloh-drivers module.
     board_root: .

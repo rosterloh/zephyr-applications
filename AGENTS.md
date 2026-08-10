@@ -61,6 +61,9 @@ mise run check-skills     # after west-update: flag Zephyr API drift in .claude/
 **Run `check-skills` after every `west-update`.** It validates every `CONFIG_*`
 symbol cited in `.claude/skills/` against the Kconfig tree in `deps/`, and warns
 when a skill's `Validated against:` stamp no longer matches the Zephyr checkout.
+It also checks each skill's structure: every `references/*.md` pointer resolves,
+every reference file is reachable from its `SKILL.md`, and every skill carries a
+`## Validation Checklist`.
 Assigning a renamed or removed symbol in a handwritten fragment (`prj.conf`,
 `boards/*.conf`, `--extra-conf`) aborts the Kconfig stage outright —
 `scripts/kconfig/kconfig.py` sets `warn_assign_undef` for handwritten input and

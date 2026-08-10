@@ -19,7 +19,7 @@ description: >
 
 # Zephyr Peripherals
 
-Validated against: Zephyr 4.4.99 (a632b9723bab, 2026-08-07). Re-check with `mise run check-skills`.
+Validated against: Zephyr 4.4.99 (cee159bb557d, 2026-08-07). Re-check with `mise run check-skills`.
 
 ## Scope
 
@@ -61,3 +61,22 @@ interfaces (see `zephyr-connectivity`), filesystem drivers (see
 - **`DT_INST_*` macros only work inside a driver's compatible-bound
   source file.** From application code, use `DT_NODELABEL` /
   `DT_PATH` / `DT_CHOSEN`.
+
+## Validation Checklist
+
+Don't stop at "it compiles" — each of these names an artifact to look at.
+
+- [ ] `builds/<app>/zephyr/zephyr.dts` (the *resolved* tree, after every
+      overlay) shows the node with `status = "okay"` and the properties you
+      intended. An overlay that silently didn't apply looks identical to a
+      typo'd node label until you read this file.
+- [ ] The macros your C code uses exist in
+      `builds/<app>/zephyr/include/generated/zephyr/devicetree_generated.h`
+      — catches a `compatible` that no binding matched.
+- [ ] `device list` on the shell reports the device (and every device it
+      depends on) as ready, not `DISABLED` or `ERR`.
+- [ ] `device_is_ready()` is checked in code before the first API call, and
+      the boot log has no init-failure line for the driver.
+- [ ] Bus traffic confirmed at the expected address/rate — `i2c scan` finds
+      the device, or a logic analyzer shows real edges when the driver claims
+      a NACK/timeout.

@@ -16,7 +16,7 @@ description: >
 
 # Zephyr Kernel
 
-Validated against: Zephyr 4.4.99 (a632b9723bab, 2026-08-07). Re-check with `mise run check-skills`.
+Validated against: Zephyr 4.4.99 (cee159bb557d, 2026-08-07). Re-check with `mise run check-skills`.
 
 ## Scope
 
@@ -56,3 +56,23 @@ filesystem/storage subsystems (see `zephyr-system`).
 - **Priority inversion needs `CONFIG_PRIORITY_CEILING` on
   `k_mutex_t`.** Default mutexes inherit priority but don't ceiling —
   fine for most cases, important to know for hard real-time paths.
+
+## Validation Checklist
+
+Concurrency bugs pass a single happy-path run. Verify under load.
+
+- [ ] Stacks measured, not guessed: with `CONFIG_THREAD_ANALYZER=y` the
+      shell's `kernel thread stacks` shows peak usage for every thread with
+      real headroom after exercising the worst-case path (deepest call chain,
+      logging enabled, printf/float formatting).
+- [ ] A `CONFIG_ASSERT=y` build runs the workload without tripping an
+      assertion — this is what catches an illegal blocking call reached from
+      ISR context.
+- [ ] Pool-backed primitives don't leak: after N cycles of the workload,
+      `k_heap`/slab/`net_buf` pool free counts return to their starting
+      values (an allocation freed on the happy path only leaks on the error
+      path).
+- [ ] Every timeout is a `k_timeout_t` macro (`K_MSEC`/`K_SECONDS`/
+      `K_NO_WAIT`/`K_FOREVER`), never a bare integer.
+- [ ] Producer/consumer rates checked, not assumed: the queue/FIFO never
+      hits its high-water mark, or the overrun path is handled deliberately.
