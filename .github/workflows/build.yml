@@ -12,6 +12,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
+      # mise-action's `bootstrap` runs `apt-get install` for
+      # [bootstrap.packages]. The runner image ships a stale apt index, so the
+      # pinned .debs (libc6-dev-i386 & co, via gcc-multilib) 404 on the mirror
+      # unless the index is refreshed first.
+      - name: Refresh apt index
+        run: sudo apt-get update
+
       - name: Install mise
         uses: jdx/mise-action@v4
         with:
@@ -44,6 +51,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+
+      # See the clang-format job: bootstrap's apt install needs a fresh index.
+      - name: Refresh apt index
+        run: sudo apt-get update
 
       - name: Install mise
         uses: jdx/mise-action@v4
