@@ -1,7 +1,10 @@
 name: Build
 
 on:
+  # Branch pushes are covered by pull_request, which tests the merge result;
+  # an unfiltered `push` would run the whole matrix a second time per PR.
   push:
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
