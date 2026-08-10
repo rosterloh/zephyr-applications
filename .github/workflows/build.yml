@@ -84,24 +84,25 @@ jobs:
           restore-keys: |
             zephyr-sdk-
 
-      # One ccache shared by the whole matrix rather than one per app: the repo
-      # has ~5.9 GB of the 10 GB cache budget left (west-deps 2.3 GB + SDK
-      # 830 MB + mise), and six per-app caches would risk evicting those and
-      # paying cold restores instead. `app` builds with `-p always`, so the
-      # build dir is pristine every run and ccache is the only thing that can
-      # make the compile phase cheaper — locally a pristine rebuild of
-      # motor_controller hits 561/562 (99.8%).
+      # `app` builds with `-p always`, so the build dir is pristine every run and
+      # ccache is the only thing that can make the compile phase cheaper: a
+      # pristine rebuild hits ~100% once its objects are cached.
       #
-      # All six jobs race to save the run's entry and only the first wins ("cache
-      # already exists" from the others is expected, not a failure). The winner
-      # rotates run to run, and each save layers onto what it restored, so the
-      # shared entry accumulates a mix of apps up to CCACHE_MAXSIZE.
+      # One entry per app, because the boards share almost no objects (samd21/arm,
+      # esp32+esp32s3/xtensa, stm32h7/arm, rp2040/arm). A single shared entry only
+      # warms whichever job wins the save race, leaving the other five at ~0% —
+      # measured on this branch. Per-app keys warm the whole matrix in one run.
+      #
+      # Cheap enough to ignore the cache budget: a saved entry is ~5 MiB, so all
+      # six are ~0.3% of the 10 GB limit and can't evict west-deps or the SDK.
+      # The bare `ccache-` fallback seeds a brand-new app from whatever exists.
       - name: Cache ccache
         uses: actions/cache@v6
         with:
           path: ~/.cache/ccache
-          key: ccache-${{ github.run_id }}
+          key: ccache-${{ matrix.app }}-${{ github.run_id }}
           restore-keys: |
+            ccache-${{ matrix.app }}-
             ccache-
 
       - name: Setup workspace
@@ -111,10 +112,9 @@ jobs:
 
       - name: Build firmware
         env:
-          # A local cache covering this app set sits at ~1.4 GiB, so cap just
-          # above it. Compresses further in the GitHub cache, and still leaves
-          # the west-deps/SDK entries room in the 10 GB budget.
-          CCACHE_MAXSIZE: 1500M
+          # A per-app cache measures ~5 MiB, so this is a safety ceiling rather
+          # than an allocation — ccache only ever uses what it needs.
+          CCACHE_MAXSIZE: 500M
         run: |
           mise x -- ccache --zero-stats
           mise run app ${{ matrix.app }} ${{ matrix.flags }}
