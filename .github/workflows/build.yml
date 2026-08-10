@@ -3,10 +3,31 @@ name: Build
 on:
   # Branch pushes are covered by pull_request, which tests the merge result;
   # an unfiltered `push` would run the whole matrix a second time per PR.
+  #
+  # paths-ignore skips the whole matrix for changes that cannot affect firmware
+  # — six full builds for a docs- or skills-only PR is ~15 min of runner time
+  # for no signal. Anything not listed here (applications/, boards/, west.yml,
+  # mise.toml, scripts/, tests/, the workflow itself) still triggers.
+  # (duplicated rather than a YAML anchor: Actions' parser rejects anchors)
   push:
     branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - '.claude/**'
+      - '**/*.md'
+      - 'LICENSE'
   pull_request:
+    paths-ignore:
+      - 'docs/**'
+      - '.claude/**'
+      - '**/*.md'
+      - 'LICENSE'
   workflow_dispatch:
+
+# A newer push supersedes whatever is in flight for the same ref.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   clang-format:
@@ -15,10 +36,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      # mise-action's `bootstrap` runs `apt-get install` for
-      # [bootstrap.packages]. The runner image ships a stale apt index, so the
-      # pinned .debs (libc6-dev-i386 & co, via gcc-multilib) 404 on the mirror
-      # unless the index is refreshed first.
+      # This is the only job that bootstraps, so `mise bootstrap` still gets
+      # exercised on every run without the build matrix paying ~15s each for
+      # apt packages it doesn't need (the runner image already carries dtc,
+      # gperf and friends — the builds were green throughout the window where
+      # mise-action v3 silently ignored this input).
+      #
+      # The index refresh is required: the image ships a stale apt index, so the
+      # pinned .debs (libc6-dev-i386 & co, via gcc-multilib) 404 on the mirror.
       - name: Refresh apt index
         run: sudo apt-get update
 
@@ -55,14 +80,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      # See the clang-format job: bootstrap's apt install needs a fresh index.
-      - name: Refresh apt index
-        run: sudo apt-get update
-
+      # No bootstrap here — see the clang-format job, which owns that coverage.
       - name: Install mise
         uses: jdx/mise-action@v4
         with:
-          bootstrap: true
           cache: true
 
       - name: Install Python dependencies

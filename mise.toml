@@ -52,16 +52,34 @@ run = "west blobs fetch hal_espressif hal_infineon"
 description = "Fetch required binary blobs: Espressif HAL (WiFi/BLE firmware) and Infineon HAL (CYW43439 firmware for pico_fw, Nicla Vision)."
 
 [tasks."sdk-install"]
-description = "Install Zephyr SDK toolchains for this project's targets (version read from deps/zephyr/SDK_VERSION)."
+description = "Install Zephyr SDK toolchains for this project's targets (version pinned in deps/zephyr/SDK_VERSION). No-op beyond CMake registration when everything is already present."
 run = """
 set -e
 SDK_VER=$(cat "${MISE_PROJECT_ROOT}/deps/zephyr/SDK_VERSION")
+SDK_DIR="${HOME}/zephyr-sdk-${SDK_VER}"
+TOOLCHAINS="arm-zephyr-eabi riscv64-zephyr-elf xtensa-espressif_esp32_zephyr-elf xtensa-espressif_esp32s3_zephyr-elf"
+
+# `west sdk install` costs ~13s even with nothing to do -- it fetches the SDK
+# release list over the network before discovering the SDK is already there.
+# When the SDK and every toolchain we need are on disk (a cache-restored CI
+# runner, or any second local run) the only thing still required is the CMake
+# package registration, which setup.sh does instantly.
+MISSING=""
+for tc in $TOOLCHAINS; do
+    [ -d "${SDK_DIR}/gnu/${tc}" ] || MISSING="$MISSING $tc"
+done
+
+if [ -d "$SDK_DIR" ] && [ -z "$MISSING" ]; then
+    echo "Zephyr SDK ${SDK_VER} complete at ${SDK_DIR} -- registering CMake package only"
+    "${SDK_DIR}/setup.sh" -c
+    exit 0
+fi
+
+[ -n "$MISSING" ] && echo "Zephyr SDK ${SDK_VER}: missing toolchains:${MISSING}"
+
 west sdk install --version "$SDK_VER" \
   ${GITHUB_TOKEN:+--personal-access-token "$GITHUB_TOKEN"} \
-  -t arm-zephyr-eabi \
-     riscv64-zephyr-elf \
-     xtensa-espressif_esp32_zephyr-elf \
-     xtensa-espressif_esp32s3_zephyr-elf
+  -t $TOOLCHAINS
 """
 
 [tasks."patch-zenoh"]
