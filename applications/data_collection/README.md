@@ -15,38 +15,66 @@ exposes an MCUmgr/SMP management surface over UDP, plus a UART shell.
 ## Build & flash
 
 ```bash
-uv run poe app data_collection            # board defaults to esp32p4_nano/esp32p4/hpcore
+uv run poe app data_collection --sysbuild   # MCUboot + app; board defaults to esp32p4_nano/esp32p4/hpcore
 uv run poe flash data_collection
 ```
 
-The console is on `uart0` (GPIO pins). The board's USB-C is the
-USB-Serial-JTAG interface, which the ROM uses for flashing but which does not
-currently carry the Zephyr console — attach a USB-UART adapter to `uart0` to
-see shell/log output.
+Build **with `--sysbuild`**: that is what produces the MCUboot bootloader and a
+signed, upgradeable application image. A plain `uv run poe app data_collection`
+still compiles and boots via ESP simple boot, but has no upgrade path.
 
-## OTA / MCUboot — not enabled (hardware limitation)
+`west flash` writes both sysbuild domains in `domains.yaml` `flash_order` —
+MCUboot to `0x2000`, then the app to `0x20000`. No `--domain` argument is
+needed; if you pipe the output through `tail` you will only see the second
+write and wrongly conclude MCUboot was skipped.
 
-This app is built **without MCUboot** (ESP "simple boot"), so it has no
-image-upgrade path. That is a deliberate, hardware-driven choice, not an
-oversight:
+Console and shell come out of the board's USB-C port (the USB-Serial-JTAG
+interface used for flashing) at 115200 — the same port carries the ROM log,
+the MCUboot log and the Zephyr shell.
 
-- The physical board is an **ESP32-P4 rev v1.3 engineering sample**
-  (ROM `esp32p4-eco2-20240710`). Pre-v3.0 ESP32-P4 silicon is "preliminary".
-- The MCUboot second-stage bootloader image built by sysbuild is loaded
-  **corrupt** by the ROM on this silicon (SHA-256 mismatch) and panics with an
-  illegal instruction before reaching the application. This reproduces on
-  Espressif's own in-tree `esp32p4_function_ev_board`, so it is a
-  silicon/toolchain-tree issue, not a fault in this application. See the
-  upstream reports: esphome/esphome#15336 and esp-rs/esp-idf-sys#376.
+## OTA / MCUboot
 
-The SMP-over-UDP transport and OS group are kept precisely so that an OTA build
-only needs the MCUboot/image pieces added back. **To enable OTA-over-SMP** once
-you have production **rev v3.x** ESP32-P4 hardware:
+MCUboot **works on this board**, including the rev v1.3 engineering sample
+(ROM `esp32p4-eco2-20240710`). It did not until mid-2026: the second-stage
+bootloader image was loaded corrupt by the ROM and panicked with an illegal
+instruction before reaching the application. That was an upstream software bug,
+not a silicon limitation, and Espressif fixed it in Zephyr
+`adc3d53fd33` ("soc: esp32p4: Fix MCUboot RAM layout on rev 1.3") — pre-v3 P4
+puts the bootloader in low SRAM rather than at the top of the app region.
+Espressif's own in-tree `waveshare_esp32p4_eth` board is also rev v1.3 and now
+defaults to MCUboot.
 
-1. Restore `sysbuild.conf` / `sysbuild/mcuboot.conf`.
-2. Add back to `prj.conf`: `CONFIG_BOOTLOADER_MCUBOOT`, `CONFIG_FLASH`,
-   `CONFIG_FLASH_MAP`, `CONFIG_STREAM_FLASH`, `CONFIG_IMG_MANAGER`,
-   `CONFIG_IMG_ERASE_PROGRESSIVELY`, `CONFIG_MCUBOOT_IMG_MANAGER`,
-   `CONFIG_MCUMGR_GRP_IMG`.
-3. Build with `uv run poe app data_collection --sysbuild` and upload images
-   with `mcumgr --conntype udp --connstring <board-ip>:1337 image upload ...`.
+Two prerequisites, both already in place:
+
+- The board must clock its CPUs at a frequency the silicon has. Rev v1.3 does
+  90/180/360 MHz, not the SoC dtsi default of 400 MHz; the `esp32p4_nano` board
+  definition sets 360 MHz. `soc/espressif/esp32p4/soc.c` `BUILD_ASSERT`s this.
+- MCUboot's sector bookkeeping is sized from the slot size, so a large slot can
+  overflow its `dram_seg`. The 16M partition table this board inherits gives
+  1984 sectors/slot ≈ 31 kB of `.bss`, which fits. A board on the 32M table
+  needs a smaller-slot partition override.
+
+Verified on hardware: ROM → MCUboot (`Loading image 0 - slot 0`) → Zephyr, with
+PSRAM initialised and the Ethernet PHY detected.
+
+**Upgrading over the network** (untested end to end — needs a DHCP-served
+Ethernet link):
+
+```bash
+uv run poe app data_collection --sysbuild
+mcumgr --conntype udp --connstring <board-ip>:1337 image list
+mcumgr --conntype udp --connstring <board-ip>:1337 image upload \
+    builds/data_collection/data_collection/zephyr/zephyr.signed.bin
+mcumgr --conntype udp --connstring <board-ip>:1337 image test <hash>
+mcumgr --conntype udp --connstring <board-ip>:1337 reset
+```
+
+Images are unsigned for development (`BOOT_SIGNATURE_TYPE_NONE`, the board's
+`Kconfig.sysbuild` default). Generate a key and switch to
+`CONFIG_BOOT_SIGNATURE_TYPE_ECDSA_P256` before shipping.
+
+One flashing caveat inherited from the swap-using-move layout: the image
+trailer lives at the **end** of slot0, and `west flash` only erases the region
+it writes. A board still carrying an older, larger image can leave stale
+trailer bytes behind that confuse MCUboot. `uv run esptool --port <port>
+erase-flash` clears it.
