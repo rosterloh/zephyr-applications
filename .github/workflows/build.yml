@@ -68,6 +68,8 @@ jobs:
         include:
           - app: rasprover
             flags: --sysbuild
+          - app: data_collection
+            flags: --sysbuild
           - app: embedded_vision
           - app: force_sensor
           - app: joystick_controller
