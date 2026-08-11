@@ -57,21 +57,43 @@ Two prerequisites, both already in place:
 Verified on hardware: ROM → MCUboot (`Loading image 0 - slot 0`) → Zephyr, with
 PSRAM initialised and the Ethernet PHY detected.
 
-**Upgrading over the network** (untested end to end — needs a DHCP-served
-Ethernet link):
+### Upgrading over the network
+
+Verified end to end on hardware, including revert-on-failure.
 
 ```bash
 uv run poe app data_collection --sysbuild
 mcumgr --conntype udp --connstring <board-ip>:1337 image list
 mcumgr --conntype udp --connstring <board-ip>:1337 image upload \
     builds/data_collection/data_collection/zephyr/zephyr.signed.bin
-mcumgr --conntype udp --connstring <board-ip>:1337 image test <hash>
+mcumgr --conntype udp --connstring <board-ip>:1337 image test <new-hash>
 mcumgr --conntype udp --connstring <board-ip>:1337 reset
+# board now runs the new image with flags "active" (on trial, not confirmed)
+mcumgr --conntype udp --connstring <board-ip>:1337 image confirm <new-hash>
 ```
+
+**Always pass the hash to `image confirm`.** The bare `mcumgr image confirm`
+form, which is supposed to confirm the running image, fails against this
+firmware with `Error: 3` and leaves the flags untouched — the request is
+rejected before it reaches the confirm logic. Passing the running image's hash
+explicitly works. Confirming a hash that is not the active slot is refused by
+design (`IMG_MGMT_ERR_IMAGE_CONFIRMATION_DENIED`).
+
+If a test image is never confirmed, the next reset reverts to the previous
+image, which MCUboot kept in slot1 — verified: an unconfirmed upgrade was rolled
+back and the old image came up `active confirmed` again. This safety net exists
+only because `sysbuild.conf` selects swap-using-move; see the comment in that
+file for why the ESP32 family default would silently remove it.
 
 Images are unsigned for development (`BOOT_SIGNATURE_TYPE_NONE`, the board's
 `Kconfig.sysbuild` default). Generate a key and switch to
 `CONFIG_BOOT_SIGNATURE_TYPE_ECDSA_P256` before shipping.
+
+Note that the app only logs its DHCP address on the `NET_EVENT_IPV4_ADDR_ADD`
+event, and `main()` registers that callback several seconds after the lease
+normally arrives, so the address is usually never printed. Find the board with
+`arp -an | grep <board-mac>` after an ARP sweep of the subnet until that is
+fixed.
 
 One flashing caveat inherited from the swap-using-move layout: the image
 trailer lives at the **end** of slot0, and `west flash` only erases the region
