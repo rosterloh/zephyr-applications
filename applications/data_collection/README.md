@@ -10,6 +10,10 @@ exposes an MCUmgr/SMP management surface over UDP, plus a UART shell.
   The assigned IPv4 address is logged once the lease is acquired.
 - **SMP over UDP** — MCUmgr OS group (remote reboot, echo, taskstat) reachable
   with `mcumgr --conntype udp`.
+- **Camera** — IMX219 (Raspberry Pi Camera v2) over MIPI CSI-2, via Zephyr's
+  in-tree `raspberry_pi_camera_module_2` shield rather than a bespoke overlay.
+  `CMakeLists.txt` sets `SHIELD` so no `--shield` argument is needed. Frames are
+  RAW10 and drawn from PSRAM through the shared multi-heap.
 - **Shell** — interactive console on `uart0`.
 
 ## Build & flash
@@ -28,9 +32,11 @@ MCUboot to `0x2000`, then the app to `0x20000`. No `--domain` argument is
 needed; if you pipe the output through `tail` you will only see the second
 write and wrongly conclude MCUboot was skipped.
 
-Console and shell come out of the board's USB-C port (the USB-Serial-JTAG
-interface used for flashing) at 115200 — the same port carries the ROM log,
-the MCUboot log and the Zephyr shell.
+Console and shell come out of the board's USB-C port at 115200. That port is the
+on-board USB-UART bridge on `uart0` (GPIO37/38), and the same port also carries
+the ROM log and the MCUboot log, so one serial connection shows the whole boot
+chain. The board's other USB connector is a USB-A **host** port (J2) and has no
+console role.
 
 ## OTA / MCUboot
 
