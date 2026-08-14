@@ -50,9 +50,9 @@
  *  36  32   00 00 C0 7F     capacity         = qNaN
  *  40  36   00 00 C0 7F     design_capacity  = qNaN
  *  44  40   00 00 C0 7F     percentage       = qNaN
- *  48  44   02              power_supply_status (DISCHARGING)
- *  49  45   02              power_supply_health (see BUG note below)
- *  50  46   00              power_supply_technology (UNKNOWN)
+ *  48  44   02              power_supply_status = DISCHARGING (2)
+ *  49  45   01              power_supply_health = GOOD (1)
+ *  50  46   00              power_supply_technology = UNKNOWN (0)
  *  51  47   01              present = true
  *  52  48   00 00 00 00     cell_voltage count = 0 (rel 48 is already 4-aligned)
  *  56  52   00 00 00 00     cell_temperature count = 0
@@ -78,9 +78,9 @@ static const uint8_t battery_golden[] = {
 	0x00, 0x00, 0xC0, 0x7F, /* capacity NaN */
 	0x00, 0x00, 0xC0, 0x7F, /* design_capacity NaN */
 	0x00, 0x00, 0xC0, 0x7F, /* percentage NaN */
-	0x02,                   /* power_supply_status */
-	0x02,                   /* power_supply_health */
-	0x00,                   /* power_supply_technology */
+	0x02,                   /* power_supply_status = DISCHARGING */
+	0x01,                   /* power_supply_health = GOOD */
+	0x00,                   /* power_supply_technology = UNKNOWN */
 	0x01,                   /* present */
 	0x00, 0x00, 0x00, 0x00, /* cell_voltage count */
 	0x00, 0x00, 0x00, 0x00, /* cell_temperature count */
@@ -219,12 +219,9 @@ ZTEST(ros_cdr, test_battery_state_nan_sentinels)
 }
 
 /*
- * BUG (behaviour asserted as-is, deliberately not fixed here):
- * app_ros_cdr.c writes 2 for power_supply_health and comments it
- * "POWER_SUPPLY_HEALTH_GOOD". In sensor_msgs/BatteryState the constants are
- * POWER_SUPPLY_HEALTH_UNKNOWN = 0, _GOOD = 1, _OVERHEAT = 2. The wire therefore
- * says the pack is OVERHEATING. The status byte (2 = DISCHARGING) and the
- * technology byte (0 = UNKNOWN) are correct.
+ * The three enum bytes, pinned to their sensor_msgs/BatteryState values. These
+ * are bare integers on the wire, so a wrong one is only visible to the
+ * subscriber -- POWER_SUPPLY_HEALTH_GOOD is 1 and 2 is OVERHEAT, one apart.
  */
 ZTEST(ros_cdr, test_battery_state_power_supply_enums)
 {
@@ -234,9 +231,7 @@ ZTEST(ros_cdr, test_battery_state_power_supply_enums)
 	(void)app_ros_encode_battery_state(buf, sizeof(buf), stamp, 12.5f, -1.5f);
 
 	zassert_equal(buf[48], 2, "power_supply_status should be DISCHARGING (2)");
-	zassert_equal(buf[49], 2,
-		      "power_supply_health currently encodes OVERHEAT (2); "
-		      "GOOD is 1 -- see the BUG note above this test");
+	zassert_equal(buf[49], 1, "power_supply_health should be GOOD (1), not OVERHEAT (2)");
 	zassert_equal(buf[50], 0, "power_supply_technology should be UNKNOWN (0)");
 	zassert_equal(buf[51], 1, "present should be true");
 }
