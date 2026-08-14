@@ -31,43 +31,51 @@ static const struct usb_bos_capability_lpm bos_cap_lpm = {
 USBD_DESC_BOS_DEFINE(app_usbext, sizeof(bos_cap_lpm), &bos_cap_lpm);
 
 /*
+ * BOSSA 1200-baud touch reset.
+ *
+ * The legacy USB stack got this for free from soc/atmel/sam0/common/bossa.c,
+ * which hangs off CDC_ACM_DTE_RATE_CALLBACK_SUPPORT -- a legacy-stack-only
+ * symbol. Under the new stack BOOTLOADER_BOSSA_DEVICE_NAME is unsatisfiable,
+ * so bossa.c compiles to nothing and the behaviour has to live here instead.
+ *
+ * Without it `west flash` (bossac) cannot put the board into its bootloader,
+ * and every flash needs a manual double-tap of the reset button.
+ *
+ * The magic value and its SRAM location are a contract with the bootloader:
+ * keep them identical to bossa.c.
+ */
+#if defined(CONFIG_BOOTLOADER_BOSSA_ADAFRUIT_UF2)
+#define BOSSA_DOUBLE_TAP_MAGIC 0xf01669ef
+#elif defined(CONFIG_BOOTLOADER_BOSSA_ARDUINO)
+#define BOSSA_DOUBLE_TAP_MAGIC 0x07738135
+#endif
+
 static void usb_msg_cb(struct usbd_context *const ctx, const struct usbd_msg *msg)
 {
-	LOG_INF("USBD message: %s", usbd_msg_type_string(msg->type));
-
-	if (usbd_can_detect_vbus(ctx)) {
-		if (msg->type == USBD_MSG_VBUS_READY) {
-			if (usbd_enable(ctx)) {
-				LOG_ERR("Failed to enable device support");
-			}
-		}
-
-		if (msg->type == USBD_MSG_VBUS_REMOVED) {
-			if (usbd_disable(ctx)) {
-				LOG_ERR("Failed to disable device support");
-			}
-		}
+	if (msg->type != USBD_MSG_CDC_ACM_LINE_CODING) {
+		return;
 	}
 
-	if (msg->type == USBD_MSG_CDC_ACM_CONTROL_LINE_STATE) {
-		uint32_t dtr = 0U;
+#if defined(BOSSA_DOUBLE_TAP_MAGIC)
+	uint32_t baudrate = 0U;
 
-		uart_line_ctrl_get(msg->dev, UART_LINE_CTRL_DTR, &dtr);
-		if (dtr) {
-			LOG_INF("Got DTR from USB");
-		}
+	if (uart_line_ctrl_get(msg->dev, UART_LINE_CTRL_BAUD_RATE, &baudrate)) {
+		return;
 	}
 
-	if (msg->type == USBD_MSG_CDC_ACM_LINE_CODING) {
-		uint32_t baudrate = 0U;
+	if (baudrate == 1200) {
+		uint32_t *top = (uint32_t *)(DT_REG_ADDR(DT_NODELABEL(sram0)) +
+					     DT_REG_SIZE(DT_NODELABEL(sram0)));
 
-		uart_line_ctrl_get(msg->dev, UART_LINE_CTRL_BAUD_RATE, &baudrate);
-		if (baudrate) {
-			LOG_INF("Baudrate %u", baudrate);
-		}
+		/* Detach before resetting, as bossa.c did, so the host sees the
+		 * device go away rather than stop responding mid-enumeration. */
+		(void)usbd_disable(ctx);
+		top[-1] = BOSSA_DOUBLE_TAP_MAGIC;
+		NVIC_SystemReset();
 	}
+#endif
 }
-*/
+
 static int app_usb_init(void)
 {
 	int err;
@@ -87,7 +95,7 @@ static int app_usb_init(void)
 		return err;
 	}
 
-	err = usbd_register_all_classes(&app_usbd, USBD_SPEED_FS, 1);
+	err = usbd_register_all_classes(&app_usbd, USBD_SPEED_FS, 1, NULL);
 	if (err) {
 		LOG_ERR("Failed to add register classes");
 		return err;
@@ -98,13 +106,13 @@ static int app_usb_init(void)
 	 * available, use an appropriate triple to indicate it.
 	 */
 	usbd_device_set_code_triple(&app_usbd, USBD_SPEED_FS, USB_BCC_MISCELLANEOUS, 0x02, 0x01);
-	/*
-		err = usbd_msg_register_cb(&app_usbd, &usb_msg_cb);
-		if (err) {
-			LOG_ERR("Failed to register message callback");
-			return err;
-		}
-	*/
+
+	err = usbd_msg_register_cb(&app_usbd, &usb_msg_cb);
+	if (err) {
+		LOG_ERR("Failed to register message callback");
+		return err;
+	}
+
 	(void)usbd_device_set_bcd_usb(&app_usbd, USBD_SPEED_FS, 0x0201);
 
 	err = usbd_add_descriptor(&app_usbd, &app_usbext);

@@ -6,6 +6,13 @@ sample:
   name: motor-controller-application
 common:
   build_only: true
+  # The app is board-specific: it needs the motor0/seesaw/display nodes from
+  # boards/robotis_openrb_150.overlay, and mise's `app` task allows no other
+  # board. Without this, twister fans out over ~60 unrelated platforms and
+  # reports failures ("'__device_dts_ord_..._motor0_ORD' undeclared") that only
+  # mean "this app was never meant to build there".
+  platform_allow:
+    - robotis_openrb_150
   integration_platforms:
     - robotis_openrb_150
 tests:
