@@ -35,9 +35,9 @@ size_t app_ros_encode_battery_state(uint8_t *buf, size_t buf_size, struct app_ro
 	encode_f32_nan(&w); /* design_capacity */
 	encode_f32_nan(&w); /* percentage */
 
-	cdr_write_u8(&w, 2); /* POWER_SUPPLY_STATUS_DISCHARGING */
-	cdr_write_u8(&w, 2); /* POWER_SUPPLY_HEALTH_GOOD */
-	cdr_write_u8(&w, 0); /* POWER_SUPPLY_TECHNOLOGY_UNKNOWN */
+	cdr_write_u8(&w, 2); /* POWER_SUPPLY_STATUS_DISCHARGING = 2 */
+	cdr_write_u8(&w, 1); /* POWER_SUPPLY_HEALTH_GOOD = 1 */
+	cdr_write_u8(&w, 0); /* POWER_SUPPLY_TECHNOLOGY_UNKNOWN = 0 */
 	cdr_write_u8(&w, 1); /* present */
 
 	cdr_write_u32(&w, 0); /* cell_voltage */
