@@ -1,0 +1,13 @@
+tests:
+  rasprover.ros_cdr:
+    tags: rasprover ros cdr
+    # The code under test is pure, so this would ideally run on `unit_testing`.
+    # It cannot: Zephyr's ztest registration uses ELF iterable sections, and
+    # Mach-O rejects the section attribute, so unit_testing does not build on
+    # macOS. native_sim is Linux-only. qemu_cortex_m3 runs anywhere the Zephyr
+    # SDK does (it ships the QEMU binary), including this macOS dev host.
+    platform_allow:
+      - qemu_cortex_m3
+      - native_sim
+    integration_platforms:
+      - qemu_cortex_m3
