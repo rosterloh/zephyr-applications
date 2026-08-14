@@ -14,3 +14,5 @@ project(data_collection)
 zephyr_compile_options(-fdiagnostics-color=always)
 
 target_sources(app PRIVATE src/main.c)
+
+target_sources_ifdef(CONFIG_APP_CAM_MGMT app PRIVATE src/cam_mgmt.c)

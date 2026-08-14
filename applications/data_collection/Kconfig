@@ -1,0 +1,13 @@
+mainmenu "Application options"
+
+config APP_CAM_MGMT
+	bool "Camera SMP management group"
+	depends on MCUMGR && VIDEO
+	default y
+	help
+	  Register a custom MCUmgr group (id 0x1000) on the transports MCUmgr
+	  already serves, letting an SMP client query the camera, capture a
+	  frame and pull it back in chunks. Wire contract: see "SMP camera
+	  group" in the application README.
+
+source "Kconfig.zephyr"
