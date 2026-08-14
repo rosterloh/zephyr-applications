@@ -20,6 +20,7 @@ target_sources_ifdef(CONFIG_APP_ZENOH  app PRIVATE src/app_zenoh.c)
 target_sources_ifdef(CONFIG_APP_MOTORS app PRIVATE src/app_motors.c)
 target_sources_ifdef(CONFIG_APP_GIMBAL app PRIVATE src/app_gimbal.c)
 target_sources_ifdef(CONFIG_APP_TIME_SYNC app PRIVATE src/app_time.c)
+target_sources_ifdef(CONFIG_APP_WATCHDOG app PRIVATE src/app_watchdog.c)
 target_sources(app PRIVATE src/app_ros_cdr.c)
 
 # On Debian/Ubuntu, libsdl2-dev uses a multiarch include path that Zephyr's

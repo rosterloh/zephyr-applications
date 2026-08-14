@@ -226,4 +226,21 @@ config APP_ZENOH_GIMBAL_CMD_KEY
 
 endif # APP_GIMBAL
 
+config APP_WATCHDOG
+	bool "Enable task watchdog stall detection"
+	default y
+	select TASK_WDT
+	select WATCHDOG
+	help
+	  Monitors main() with Zephyr's task watchdog and reboots the board if
+	  it stops being fed: first a "boot" channel covering the init sequence
+	  (where a WiFi connect can livelock), then a "main" channel covering
+	  the superloop. rasprover's observed failure modes are hangs rather
+	  than CPU faults, which a fatal-error handler cannot catch.
+
+	  Covers only what main() calls directly. A hang inside a workqueue
+	  handler (e.g. the LVGL display work submitted by app_display_init())
+	  or during pre-main driver init is not detected -- main keeps running
+	  and keeps feeding. Those need their own channel fed by that thread.
+
 source "Kconfig.zephyr"
