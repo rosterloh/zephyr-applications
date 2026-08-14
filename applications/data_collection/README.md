@@ -9,7 +9,7 @@ exposes an MCUmgr/SMP management surface over UDP, plus a UART shell.
 - **Ethernet** — on-chip RMII EMAC (`CONFIG_ETH_ESP32`) with DHCPv4 addressing.
   The assigned IPv4 address is logged once the lease is acquired.
 - **SMP over UDP** — MCUmgr OS group (remote reboot, echo, taskstat) reachable
-  with `mcumgr --conntype udp`.
+  with `mcumgr --conntype udp`, plus a custom camera group (below).
 - **Camera** — IMX219 (Raspberry Pi Camera v2) over MIPI CSI-2, via Zephyr's
   in-tree `raspberry_pi_camera_module_2` shield rather than a bespoke overlay.
   `CMakeLists.txt` sets `SHIELD` so no `--shield` argument is needed. Frames are
@@ -37,6 +37,43 @@ on-board USB-UART bridge on `uart0` (GPIO37/38), and the same port also carries
 the ROM log and the MCUboot log, so one serial connection shows the whole boot
 chain. The board's other USB connector is a USB-A **host** port (J2) and has no
 console role.
+
+## SMP camera group
+
+`src/cam_mgmt.c` registers a custom MCUmgr group so a host can drive the camera
+over the SMP transport already used for OTA, rather than only the boot-time
+capture and the interactive `video` shell. Enabled by `CONFIG_APP_CAM_MGMT`
+(default `y` when `MCUMGR` && `VIDEO`).
+
+**Group id `0x1000`.** Custom groups start at `MGMT_GROUP_ID_PERUSER` (64) and
+the Zephyr-specific groups count *down* from there, so `0x1000` keeps clear of
+both. Requests and responses are CBOR maps, as in every MCUmgr group.
+
+| cmd | name | op | request | response |
+|---|---|---|---|---|
+| 0 | `INFO` | read | — | `group` u32, `cam` tstr, `fmt` u32, `w` u16, `h` u16, `ready` bool |
+| 1 | `CAPTURE` | write | — | `seq` u32, `size` u32, `w` u16, `h` u16, `fmt` u32 |
+| 2 | `READ` | read | `seq` u32, `off` u32, `len` u16 | `seq` u32, `off` u32, `data` bstr, `eof` bool |
+
+- `group` is the command-set version (currently `1`), so clients need not be
+  pinned to a firmware build.
+- `fmt` is the Zephyr fourcc (`VIDEO_PIX_FMT_SBGGR10P`). `INFO`'s `fmt`/`w`/`h`
+  are what `CAPTURE` *requests*, not what the sensor negotiated — treat them as
+  planning values and **size buffers from `CAPTURE`'s `size`**, which is the
+  real frame length.
+- `CAPTURE` is a *write* because it drives the sensor and discards the
+  previously retained frame. `seq` starts at 1 and increments per capture.
+- `READ` pages the retained frame: repeat with `off += len(data)` until `eof`.
+  `len` is clamped to 1024 B, which fits both the response encode buffer
+  (`CONFIG_MCUMGR_TRANSPORT_NETBUF_SIZE`, 2048 B under UDP) and the datagram
+  (`CONFIG_MCUMGR_TRANSPORT_UDP_MTU`, 1500 B).
+- `READ` answers `MGMT_ERR_ENOENT` (3) if `seq` does not match the buffered
+  frame — nothing captured yet, or a newer `CAPTURE` replaced it mid-pull.
+  Restart from the `seq` that `CAPTURE` returned.
+
+Only one frame is buffered: it stays checked out of the video buffer pool (PSRAM,
+~2.5 MB per RAW10 frame) so `READ` serves it without a copy, and is released at
+the top of the next `CAPTURE`.
 
 ## OTA / MCUboot
 
