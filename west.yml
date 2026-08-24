@@ -61,8 +61,11 @@ manifest:
     #   revision: main
     #   url: https://github.com/golioth/pouch.git
 
+    # Pin to a release tag, not main: zenoh-pico must match the zenoh version
+    # of the router it talks to (zenohd + zenoh-plugin-ros2dds on the host).
+    # Bump this in lockstep with the host's zenohd, then re-run patch-zenoh.
     - name: zenoh
       repo-path: zenoh-pico
       remote: eclipse-zenoh
-      revision: main
+      revision: 1.10.0
       path: deps/modules/lib/zenoh
