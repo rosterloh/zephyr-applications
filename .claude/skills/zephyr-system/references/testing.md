@@ -987,31 +987,35 @@ int main(void)
 import pytest
 import re
 
+
 def test_hello_command(shell):
     """Test the hello command."""
     lines = shell.exec_command("hello")
     assert "Hello from Zephyr!" in lines, f"Unexpected output: {lines}"
+
 
 def test_add_command(shell):
     """Test the add command."""
     lines = shell.exec_command("add 2 3")
     assert "Result: 5" in lines, f"Unexpected output: {lines}"
 
+
 def test_add_large_numbers(shell):
     """Test add with larger numbers."""
     lines = shell.exec_command("add 100 200")
     assert "Result: 300" in lines, f"Unexpected output: {lines}"
+
 
 def test_add_negative(shell):
     """Test add with negative numbers."""
     lines = shell.exec_command("add -5 10")
     assert "Result: 5" in lines, f"Unexpected output: {lines}"
 
+
 def test_add_missing_args(shell):
     """Test add with missing arguments."""
     lines = shell.exec_command("add 5")
-    assert "Usage:" in lines or "error" in lines.lower(), \
-        f"Expected error message, got: {lines}"
+    assert "Usage:" in lines or "error" in lines.lower(), f"Expected error message, got: {lines}"
 ```
 
 #### Run

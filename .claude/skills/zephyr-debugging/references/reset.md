@@ -75,7 +75,7 @@ trigger an architectural reset by writing to ARM SCB->AIRCR. From a python
 session that already has a shell open:
 
 ```python
-s.write(b'devmem 0xE000ED0C 32 0x05FA0004\r')
+s.write(b"devmem 0xE000ED0C 32 0x05FA0004\r")
 ```
 
 The key `0x05FA` plus bit 2 (SYSRESETREQ) trips the system reset on any
@@ -86,8 +86,10 @@ re-booting before the response prints.
 ## DTR reset (cheap when wired right, but flaky)
 
 ```python
-s.setDTR(False); time.sleep(0.1); s.setDTR(True)
-out = b''
+s.setDTR(False)
+time.sleep(0.1)
+s.setDTR(True)
+out = b""
 deadline = time.time() + 5
 while time.time() < deadline:
     data = s.read(512)
