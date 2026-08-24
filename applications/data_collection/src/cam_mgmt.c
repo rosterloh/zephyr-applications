@@ -97,8 +97,16 @@ int cam_mgmt_capture(const struct device *cam)
 		fmt.pitch * fmt.height);
 
 	for (int i = 0; i < CAPTURE_NBUFS; i++) {
-		vbuf = video_buffer_aligned_alloc(fmt.pitch * fmt.height,
-						  CONFIG_VIDEO_BUFFER_POOL_ALIGN, K_NO_WAIT);
+		/* Round the allocation up to a whole D-cache line. The CSI driver
+		 * invalidates the buffer around each DMA, and an invalidate that ends
+		 * mid-line discards the dirty half of that line belonging to whatever
+		 * the heap placed next -- in practice the following buffer's chunk
+		 * header, which then faults sys_heap_free(). POOL_ALIGN only aligns the
+		 * start; video_buffer_aligned_alloc() passes the size through as-is.
+		 */
+		vbuf = video_buffer_aligned_alloc(
+			ROUND_UP(fmt.pitch * fmt.height, CONFIG_DCACHE_LINE_SIZE),
+			CONFIG_VIDEO_BUFFER_POOL_ALIGN, K_NO_WAIT);
 		if (vbuf == NULL) {
 			LOG_ERR("Failed to allocate video buffer %d", i);
 			ret = -ENOMEM;
