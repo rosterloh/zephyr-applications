@@ -15,7 +15,7 @@ flow control, they don't deassert DTR. The proper no-touch open:
 
 ```python
 s = serial.Serial()
-s.port = '/dev/ttyACM0'
+s.port = "/dev/ttyACM0"
 s.baudrate = 115200
 s.timeout = 0.5
 s.dtr = False
@@ -38,14 +38,14 @@ a small delay between:
 
 ```python
 def send_paced(s, line, chunk=16, delay=0.04):
-    data = (line + '\r').encode()
+    data = (line + "\r").encode()
     for i in range(0, len(data), chunk):
-        s.write(data[i:i+chunk])
+        s.write(data[i : i + chunk])
         s.flush()
         time.sleep(delay)
     # collect 4 s of response
     end = time.time() + 4.0
-    out = b''
+    out = b""
     while time.time() < end:
         chunk_read = s.read(4096)
         if chunk_read:
@@ -66,7 +66,7 @@ Stale bytes in the kernel's TTY buffer corrupt your command output. Drain
 both pyserial's read queue and the in_waiting count:
 
 ```python
-s.read(s.in_waiting or 1)   # safe even when nothing is queued
+s.read(s.in_waiting or 1)  # safe even when nothing is queued
 ```
 
 Call this at start, and again before any command where output ordering
@@ -79,8 +79,8 @@ break naive `in` / regex matching. Strip with:
 
 ```python
 import re
-strip_ansi = lambda b: re.sub(r'\x1b\[[0-9;=?]*[mABCDEFGHJKLMST]', '',
-                              b.decode('utf-8', errors='replace'))
+
+strip_ansi = lambda b: re.sub(r"\x1b\[[0-9;=?]*[mABCDEFGHJKLMST]", "", b.decode("utf-8", errors="replace"))
 ```
 
 Run on every read before saving or comparing.
@@ -94,8 +94,10 @@ spam, flash enumeration), and write everything else to a file. Then
 
 ```python
 # in the capture loop, only drop *known* noise
-if 'bms_service' in line and 'soc=' in line: continue
-if 'flash_stm32_qspi' in line: continue
+if "bms_service" in line and "soc=" in line:
+    continue
+if "flash_stm32_qspi" in line:
+    continue
 sys.stdout.write(line)
 ```
 

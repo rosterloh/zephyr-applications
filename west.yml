@@ -33,6 +33,9 @@ manifest:
           - lvgl
           - mbedtls
           - mcuboot
+          # esp-hosted-mcu (ESP32-P4-Nano's C6 radio) speaks a nanopb-generated
+          # protobuf RPC to the coprocessor; CONFIG_ESP_HOSTED_MCU selects it.
+          - nanopb
           - open-amp
           - segger
           - tf-psa-crypto

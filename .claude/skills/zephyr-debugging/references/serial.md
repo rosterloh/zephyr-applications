@@ -16,20 +16,25 @@ project root or pyserial won't import.
 ```python
 import serial, time, re
 
-def strip_ansi(b: bytes) -> str:
-    return re.sub(r'\x1b\[[0-9;=?]*[mABCDEFGHJKLMST]', '',
-                  b.decode('utf-8', errors='replace'))
 
-with serial.Serial('/dev/ttyACM0', 115200, timeout=2) as s:
+def strip_ansi(b: bytes) -> str:
+    return re.sub(r"\x1b\[[0-9;=?]*[mABCDEFGHJKLMST]", "", b.decode("utf-8", errors="replace"))
+
+
+with serial.Serial("/dev/ttyACM0", 115200, timeout=2) as s:
     time.sleep(0.5)
-    s.read(s.in_waiting or 1)          # drain stale data
+    s.read(s.in_waiting or 1)  # drain stale data
+
     def cmd(text, delay=0.5):
-        s.write((text + '\r').encode()); time.sleep(delay)
-        out = b''
+        s.write((text + "\r").encode())
+        time.sleep(delay)
+        out = b""
         while s.in_waiting:
-            out += s.read(s.in_waiting); time.sleep(0.05)
+            out += s.read(s.in_waiting)
+            time.sleep(0.05)
         return strip_ansi(out)
-    print(cmd('device list'))
+
+    print(cmd("device list"))
 ```
 
 Ports vary: `/dev/ttyACM0`, `/dev/ttyUSB0`. Ask if unsure.

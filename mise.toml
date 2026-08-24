@@ -4,6 +4,9 @@ uv = "latest"
 cmake = "latest"
 ninja = "latest"
 ccache = "latest"
+# nanopb's generator shells out to a real protoc (deps/modules/lib/nanopb's
+# generator/protoc is only a wrapper), needed by esp-hosted-mcu's protobuf RPC.
+protoc = "latest"
 
 [env]
 _.python.venv = { path = ".venv", create = true }

@@ -39,14 +39,17 @@ Time a single read from Python to distinguish "device absent" from
 
 ```python
 t0 = time.monotonic()
-s.write(b'i2c read i2c@58001c00 0x38 0x00 1\r')
-out = b''
+s.write(b"i2c read i2c@58001c00 0x38 0x00 1\r")
+out = b""
 while True:
     ch = s.read(1)
-    if ch: out += ch
-    if b'uart:~$' in out and len(out) > 20: break
-    if time.monotonic() - t0 > 5: break
-print(f"{(time.monotonic()-t0)*1000:.1f}ms")
+    if ch:
+        out += ch
+    if b"uart:~$" in out and len(out) > 20:
+        break
+    if time.monotonic() - t0 > 5:
+        break
+print(f"{(time.monotonic() - t0) * 1000:.1f}ms")
 ```
 
 - **< 1 ms** → a real NACK. The device is absent or at a different
