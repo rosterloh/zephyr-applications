@@ -10,10 +10,12 @@ exposes an MCUmgr/SMP management surface over UDP, plus a UART shell.
   The assigned IPv4 address is logged once the lease is acquired.
 - **SMP over UDP** — MCUmgr OS group (remote reboot, echo, taskstat) reachable
   with `mcumgr --conntype udp`, plus a custom camera group (below).
-- **Camera** — IMX219 (Raspberry Pi Camera v2) over MIPI CSI-2, via Zephyr's
-  in-tree `raspberry_pi_camera_module_2` shield rather than a bespoke overlay.
-  `CMakeLists.txt` sets `SHIELD` so no `--shield` argument is needed. Frames are
-  RAW10 and drawn from PSRAM through the shared multi-heap.
+- **Camera** — a MIPI CSI-2 module selected at build time by shield. Defaults to
+  the IMX219 (Raspberry Pi Camera v2) via Zephyr's in-tree
+  `raspberry_pi_camera_module_2`; pass `--shield arducam_tof_camera` for the
+  Arducam ToF depth camera. The capture path takes whatever format the camera
+  advertises first, so nothing in the app is pinned to one sensor. Frames are
+  drawn from PSRAM through the shared multi-heap.
 - **Shell** — interactive console on `uart0`.
 
 ## Build & flash
@@ -58,9 +60,9 @@ both. Requests and responses are CBOR maps, as in every MCUmgr group.
 - `group` is the command-set version (currently `1`), so clients need not be
   pinned to a firmware build.
 - `fmt` is the Zephyr fourcc (`VIDEO_PIX_FMT_SBGGR10P`). `INFO`'s `fmt`/`w`/`h`
-  are what `CAPTURE` *requests*, not what the sensor negotiated — treat them as
-  planning values and **size buffers from `CAPTURE`'s `size`**, which is the
-  real frame length.
+  are the format the camera negotiated on the most recent capture, and are zero
+  before the first one. Still size buffers from `CAPTURE`'s `size`, which is
+  the authoritative frame length.
 - `CAPTURE` is a *write* because it drives the sensor and discards the
   previously retained frame. `seq` starts at 1 and increments per capture.
 - `READ` pages the retained frame: repeat with `off += len(data)` until `eof`.

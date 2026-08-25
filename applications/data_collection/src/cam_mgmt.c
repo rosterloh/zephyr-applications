@@ -14,6 +14,7 @@
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/drivers/video.h>
+#include <zephyr/video/formats.h>
 #include <zephyr/mgmt/mcumgr/mgmt/mgmt.h>
 #include <zephyr/mgmt/mcumgr/mgmt/handlers.h>
 #include <zephyr/mgmt/mcumgr/smp/smp.h>
@@ -46,11 +47,25 @@ LOG_MODULE_REGISTER(cam_mgmt, LOG_LEVEL_INF);
  * the MTU, not just one of them. */
 #define CAM_MGMT_READ_MAX 1024
 
-/* IMX219 2x2-binned full-FoV RAW10 frame. */
-#define CAPTURE_WIDTH  1640
-#define CAPTURE_HEIGHT 1232
-#define CAPTURE_FORMAT VIDEO_PIX_FMT_SBGGR10P
-#define CAPTURE_NBUFS  2
+#define CAPTURE_NBUFS 2
+
+/* The app's PSRAM budget, expressed as a resolution ceiling rather than a
+ * format. A sensor advertising a stepwise range -- the IMX219 goes to
+ * 3280x2464 -- would otherwise have us ask for an 8 MB frame when the pool
+ * cannot hold two of them.
+ *
+ * ponytail: assumes the ceiling lands on the sensor's width/height step (it
+ * does for the IMX219's step of 4). If a sensor with a coarser step appears,
+ * round the clamped value down to cap->width_min + n * cap->width_step.
+ */
+#define CAPTURE_MAX_WIDTH  1640
+#define CAPTURE_MAX_HEIGHT 1232
+
+/* The negotiated format, filled in by the first capture. INFO and CAPTURE
+ * report it so a client sees what the camera actually agreed to rather than a
+ * compile-time guess -- the two differ as soon as the shield changes.
+ */
+static struct video_format frame_fmt;
 
 /* Buffer ownership: the captured frame stays checked out of the video buffer
  * pool until the next CAPTURE. A frame is ~2.5 MB of PSRAM, so READ serves it
@@ -64,14 +79,51 @@ static struct video_buffer *frame_vbuf;
 static uint32_t frame_seq;
 K_MUTEX_DEFINE(frame_lock);
 
+/* Choose the advertised format with the highest bit depth that fits the
+ * ceiling. Depth first because this is a data-collection app: a sensor offering
+ * both RAW8 and RAW10 should give us RAW10. Sizes are clamped rather than
+ * rejected, so a stepwise sensor lands on the largest frame we can hold while a
+ * sensor with one fixed small size (the ToF module's 240x180) is taken as-is.
+ */
+static int cam_pick_format(const struct device *cam, struct video_format *fmt)
+{
+	struct video_caps caps = {.type = VIDEO_BUF_TYPE_OUTPUT};
+	unsigned int best_bpp = 0;
+	int ret;
+
+	ret = video_get_caps(cam, &caps);
+	if (ret < 0) {
+		LOG_ERR("Failed to get caps (%d)", ret);
+		return ret;
+	}
+
+	for (int i = 0; caps.format_caps[i].pixelformat != 0; i++) {
+		const struct video_format_cap *cap = &caps.format_caps[i];
+		unsigned int bpp = video_bits_per_pixel(cap->pixelformat);
+
+		if (bpp <= best_bpp) {
+			continue;
+		}
+
+		fmt->pixelformat = cap->pixelformat;
+		fmt->width = MIN(cap->width_max, CAPTURE_MAX_WIDTH);
+		fmt->height = MIN(cap->height_max, CAPTURE_MAX_HEIGHT);
+		best_bpp = bpp;
+	}
+
+	if (best_bpp == 0) {
+		LOG_ERR("Camera advertises no usable format");
+		return -ENOTSUP;
+	}
+
+	fmt->type = VIDEO_BUF_TYPE_OUTPUT;
+
+	return 0;
+}
+
 int cam_mgmt_capture(const struct device *cam)
 {
-	struct video_format fmt = {
-		.type = VIDEO_BUF_TYPE_OUTPUT,
-		.pixelformat = CAPTURE_FORMAT,
-		.width = CAPTURE_WIDTH,
-		.height = CAPTURE_HEIGHT,
-	};
+	struct video_format fmt;
 	struct video_buffer *vbuf = NULL;
 	struct video_buffer *drained;
 	int ret;
@@ -81,6 +133,11 @@ int cam_mgmt_capture(const struct device *cam)
 	if (frame_vbuf != NULL) {
 		video_buffer_release(frame_vbuf);
 		frame_vbuf = NULL;
+	}
+
+	ret = cam_pick_format(cam, &fmt);
+	if (ret < 0) {
+		goto out;
 	}
 
 	ret = video_set_format(cam, &fmt);
@@ -95,6 +152,7 @@ int cam_mgmt_capture(const struct device *cam)
 	}
 	LOG_INF("Capturing %ux%u, pitch %u, %u bytes/frame", fmt.width, fmt.height, fmt.pitch,
 		fmt.pitch * fmt.height);
+	frame_fmt = fmt;
 
 	for (int i = 0; i < CAPTURE_NBUFS; i++) {
 		/* Round the allocation up to a whole D-cache line. The CSI driver
@@ -158,9 +216,8 @@ out:
 }
 
 /* INFO (read): {} -> {group, cam, fmt, w, h, ready}. The format triple is what
- * CAPTURE *requests*, not what the sensor negotiated -- video_set_format() may
- * come back with something else. It is here so a client can plan before
- * capturing anything; the authoritative frame length is CAPTURE's `size`, and
+ * the camera negotiated on the most recent CAPTURE, and is zero before the
+ * first one. The authoritative frame length is still CAPTURE's `size`, and
  * clients must size their buffer from that. */
 static int cam_h_info(struct smp_streamer *ctxt)
 {
@@ -170,9 +227,9 @@ static int cam_h_info(struct smp_streamer *ctxt)
 
 	ok = zcbor_tstr_put_lit(zse, "group") && zcbor_uint32_put(zse, CAM_MGMT_GROUP_VERSION) &&
 	     zcbor_tstr_put_lit(zse, "cam") && zcbor_tstr_put_term(zse, cam->name, 32) &&
-	     zcbor_tstr_put_lit(zse, "fmt") && zcbor_uint32_put(zse, CAPTURE_FORMAT) &&
-	     zcbor_tstr_put_lit(zse, "w") && zcbor_uint32_put(zse, CAPTURE_WIDTH) &&
-	     zcbor_tstr_put_lit(zse, "h") && zcbor_uint32_put(zse, CAPTURE_HEIGHT) &&
+	     zcbor_tstr_put_lit(zse, "fmt") && zcbor_uint32_put(zse, frame_fmt.pixelformat) &&
+	     zcbor_tstr_put_lit(zse, "w") && zcbor_uint32_put(zse, frame_fmt.width) &&
+	     zcbor_tstr_put_lit(zse, "h") && zcbor_uint32_put(zse, frame_fmt.height) &&
 	     zcbor_tstr_put_lit(zse, "ready") && zcbor_bool_put(zse, device_is_ready(cam));
 
 	return ok ? MGMT_ERR_EOK : MGMT_ERR_EMSGSIZE;
@@ -201,9 +258,9 @@ static int cam_h_capture(struct smp_streamer *ctxt)
 
 	ok = zcbor_tstr_put_lit(zse, "seq") && zcbor_uint32_put(zse, frame_seq) &&
 	     zcbor_tstr_put_lit(zse, "size") && zcbor_uint32_put(zse, frame_vbuf->bytesused) &&
-	     zcbor_tstr_put_lit(zse, "w") && zcbor_uint32_put(zse, CAPTURE_WIDTH) &&
-	     zcbor_tstr_put_lit(zse, "h") && zcbor_uint32_put(zse, CAPTURE_HEIGHT) &&
-	     zcbor_tstr_put_lit(zse, "fmt") && zcbor_uint32_put(zse, CAPTURE_FORMAT);
+	     zcbor_tstr_put_lit(zse, "w") && zcbor_uint32_put(zse, frame_fmt.width) &&
+	     zcbor_tstr_put_lit(zse, "h") && zcbor_uint32_put(zse, frame_fmt.height) &&
+	     zcbor_tstr_put_lit(zse, "fmt") && zcbor_uint32_put(zse, frame_fmt.pixelformat);
 	k_mutex_unlock(&frame_lock);
 
 	return ok ? MGMT_ERR_EOK : MGMT_ERR_EMSGSIZE;
