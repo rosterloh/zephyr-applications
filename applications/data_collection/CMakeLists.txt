@@ -1,10 +1,11 @@
 cmake_minimum_required(VERSION 3.20.0)
 
-# The IMX219 (Raspberry Pi Camera v2) is wired to the CSI connector, and Zephyr
-# ships a shield for exactly that module. Set it here rather than expecting every
-# caller to pass --shield, since the camera is part of this application.
+# Default to the Raspberry Pi Camera v2, but let -DSHIELD=... or
+# `west build --shield` pick a different camera (e.g. arducam_tof_camera).
 # Must precede find_package(Zephyr).
-set(SHIELD raspberry_pi_camera_module_2)
+if(NOT DEFINED SHIELD)
+  set(SHIELD raspberry_pi_camera_module_2)
+endif()
 
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 
