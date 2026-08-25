@@ -225,12 +225,19 @@ static int cam_h_info(struct smp_streamer *ctxt)
 	zcbor_state_t *zse = ctxt->writer->zs;
 	bool ok;
 
+	/* frame_fmt is written by cam_mgmt_capture() under frame_lock, and the
+	 * boot-time capture runs on the main thread while this handler runs on the
+	 * SMP thread. Read the triple under the lock or a concurrent capture can
+	 * hand back a mixed answer -- the old pixelformat with the new width.
+	 */
+	k_mutex_lock(&frame_lock, K_FOREVER);
 	ok = zcbor_tstr_put_lit(zse, "group") && zcbor_uint32_put(zse, CAM_MGMT_GROUP_VERSION) &&
 	     zcbor_tstr_put_lit(zse, "cam") && zcbor_tstr_put_term(zse, cam->name, 32) &&
 	     zcbor_tstr_put_lit(zse, "fmt") && zcbor_uint32_put(zse, frame_fmt.pixelformat) &&
 	     zcbor_tstr_put_lit(zse, "w") && zcbor_uint32_put(zse, frame_fmt.width) &&
 	     zcbor_tstr_put_lit(zse, "h") && zcbor_uint32_put(zse, frame_fmt.height) &&
 	     zcbor_tstr_put_lit(zse, "ready") && zcbor_bool_put(zse, device_is_ready(cam));
+	k_mutex_unlock(&frame_lock);
 
 	return ok ? MGMT_ERR_EOK : MGMT_ERR_EMSGSIZE;
 }

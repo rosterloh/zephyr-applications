@@ -13,8 +13,9 @@ exposes an MCUmgr/SMP management surface over UDP, plus a UART shell.
 - **Camera** — a MIPI CSI-2 module selected at build time by shield. Defaults to
   the IMX219 (Raspberry Pi Camera v2) via Zephyr's in-tree
   `raspberry_pi_camera_module_2`; pass `--shield arducam_tof_camera` for the
-  Arducam ToF depth camera. The capture path takes whatever format the camera
-  advertises first, so nothing in the app is pinned to one sensor. Frames are
+  Arducam ToF depth camera. The capture path takes the highest bit depth the camera
+  advertises that fits the app's PSRAM ceiling, so nothing in the app is pinned
+  to one sensor. Frames are
   drawn from PSRAM through the shared multi-heap.
 - **Shell** — interactive console on `uart0`.
 
