@@ -38,6 +38,20 @@ description = "Install/update Python deps from uv.lock into .venv"
 run = "ruff format"
 description = "Format Python (ruff, line-length 120)"
 
+[tasks.compdb]
+description = "Merge every builds/**/compile_commands.json into ./compile_commands.json for clangd. clangd walks up from each source file and finds it at the workspace root, so no per-app .clangd is needed. A source compiled by several apps keeps whichever build's flags come first; re-run after building the app you are working on to put its flags in front."
+run = """
+set -e
+files=$(find builds -name compile_commands.json 2>/dev/null)
+if [ -z "$files" ]; then
+  echo "no builds/**/compile_commands.json yet - build an app first (mise run app)" >&2
+  exit 1
+fi
+# shellcheck disable=SC2086
+jq -s add $files > compile_commands.json
+echo "merged $(printf '%s\\n' "$files" | wc -l | tr -d ' ') databases -> compile_commands.json"
+"""
+
 [tasks."clean-twister"]
 run = "find . \\( -path ./deps -o -path ./.venv \\) -prune -o -type d -name 'twister-out*' -prune -exec rm -rf {} +"
 description = "Remove all twister-out* directories anywhere in the tree"

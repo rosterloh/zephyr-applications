@@ -18,6 +18,7 @@ __pycache__/
 
 # build artifacts
 /builds/
+/compile_commands.json
 /logs/
 **/build
 /twister-out*

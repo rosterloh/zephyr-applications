@@ -1,0 +1,22 @@
+# Zephyr builds with GCC; clangd rejects the GCC-only flags that end up in
+# compile_commands.json. Each rejected flag is reported as an error on every
+# file, and an unknown -m* flag also makes clangd give up on the target, which
+# loses the sysroot and turns every libc include into "file not found".
+#
+# Only GCC-only flags are removed here. -march/-mabi/-mcpu/-mthumb/-mcmodel are
+# deliberately kept: clangd needs them to pick the right target and sysroot.
+#
+# The compilation database is ./compile_commands.json, produced by
+# `mise run compdb` (merges every builds/<app>/**/compile_commands.json).
+CompileFlags:
+  Remove:
+    # GCC-only codegen/diagnostic flags
+    - -fno-printf-return-value
+    - -fno-reorder-functions
+    - -fno-defer-pop
+    - -fstrict-volatile-bitfields
+    - -fdump-rtl-expand
+    - --param=*
+    # GCC-only target flags (Xtensa / ARM)
+    - -mlongcalls
+    - -mfp16-format=*
