@@ -1,0 +1,116 @@
+/*
+ * Codex Micro controller box: 3x Adafruit NeoKey 1x4 QT (PID 4980) plus an
+ * Adafruit I2C QT Rotary Encoder (PID 4991), all seesaw devices chained on the
+ * STEMMA QT bus. Drivers come from the rosterloh-drivers module.
+ *
+ * NeoKey addresses are set with the A0..A3 solder jumpers (base 0x30, A0 adds
+ * 1, A1 adds 2): board 0 stock, board 1 with A0 bridged, board 2 with A1
+ * bridged. On each board the 4 keys are seesaw GPIO 4..7 (active-low, internal
+ * pull-up) and the 4 NeoPixels are chained on seesaw pin 3.
+ *
+ * The encoder breakout sits at its stock 0x36; its push switch is seesaw pin
+ * 24 and its onboard NeoPixel (unused so far) is on seesaw pin 6.
+ *
+ * read-delay-us is a busy-wait before every register read. 10 ms is inherited
+ * from bt_keys where it is known to work, but with four devices on the bus
+ * that is ~50 ms of spinning per scan pass, so it is the first knob to wind
+ * down (the binding default is 250 us) if key latency disappoints.
+ */
+
+#include <zephyr/dt-bindings/led/led.h>
+
+&zephyr_i2c {
+	status = "okay";
+
+	neokey0: seesaw@30 {
+		status = "okay";
+		compatible = "adafruit,seesaw-mfd";
+		reg = <0x30>;
+		read-delay-us = <10000>;
+
+		neokey0_gpio: gpio {
+			status = "okay";
+			compatible = "adafruit,seesaw-gpio";
+			gpio-controller;
+			#gpio-cells = <2>;
+			ngpios = <16>;
+		};
+
+		neokey0_leds: neopixel {
+			status = "okay";
+			compatible = "adafruit,seesaw-neopixel";
+			chain-length = <4>;
+			color-mapping = <LED_COLOR_ID_GREEN LED_COLOR_ID_RED LED_COLOR_ID_BLUE>;
+			seesaw-pin = <3>;
+			frequency = <800000>;
+		};
+	};
+
+	neokey1: seesaw@31 {
+		status = "okay";
+		compatible = "adafruit,seesaw-mfd";
+		reg = <0x31>;
+		read-delay-us = <10000>;
+
+		neokey1_gpio: gpio {
+			status = "okay";
+			compatible = "adafruit,seesaw-gpio";
+			gpio-controller;
+			#gpio-cells = <2>;
+			ngpios = <16>;
+		};
+
+		neokey1_leds: neopixel {
+			status = "okay";
+			compatible = "adafruit,seesaw-neopixel";
+			chain-length = <4>;
+			color-mapping = <LED_COLOR_ID_GREEN LED_COLOR_ID_RED LED_COLOR_ID_BLUE>;
+			seesaw-pin = <3>;
+			frequency = <800000>;
+		};
+	};
+
+	neokey2: seesaw@32 {
+		status = "okay";
+		compatible = "adafruit,seesaw-mfd";
+		reg = <0x32>;
+		read-delay-us = <10000>;
+
+		neokey2_gpio: gpio {
+			status = "okay";
+			compatible = "adafruit,seesaw-gpio";
+			gpio-controller;
+			#gpio-cells = <2>;
+			ngpios = <16>;
+		};
+
+		neokey2_leds: neopixel {
+			status = "okay";
+			compatible = "adafruit,seesaw-neopixel";
+			chain-length = <4>;
+			color-mapping = <LED_COLOR_ID_GREEN LED_COLOR_ID_RED LED_COLOR_ID_BLUE>;
+			seesaw-pin = <3>;
+			frequency = <800000>;
+		};
+	};
+
+	encoder_mfd: seesaw@36 {
+		status = "okay";
+		compatible = "adafruit,seesaw-mfd";
+		reg = <0x36>;
+		read-delay-us = <10000>;
+
+		encoder: encoder {
+			status = "okay";
+			compatible = "adafruit,seesaw-encoder";
+		};
+
+		encoder_gpio: gpio {
+			status = "okay";
+			compatible = "adafruit,seesaw-gpio";
+			gpio-controller;
+			#gpio-cells = <2>;
+			ngpios = <32>;
+		};
+	};
+};
