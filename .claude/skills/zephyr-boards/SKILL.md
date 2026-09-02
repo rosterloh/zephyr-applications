@@ -18,7 +18,7 @@ description: >
 
 # Zephyr Boards & Out-of-Tree Modules
 
-Validated against: Zephyr 4.4.99 (cee159bb557d, 2026-08-07). Re-check with `mise run check-skills`.
+Validated against: Zephyr 4.4.99 (3062245d5980, 2026-09-01). Re-check with `mise run check-skills`.
 
 ## Scope
 
@@ -34,7 +34,7 @@ semantics (see `zephyr-system`), or bringing up a dead board (see
 | Root | Registered by | Boards |
 |------|---------------|--------|
 | `boards/<vendor>/<board>/` | this repo's `zephyr/module.yml` (`board_root: .`) | `robotis_openrb_150`, `adafruit_qt_py_esp32c3` |
-| `deps/modules/lib/rosterloh-drivers/boards/<vendor>/<board>/` | that module's `zephyr/module.yml` (`board_root: .`, `dts_root: .`) | `ros_driver`, `esp32p4_nano`, `waveshare_esp32_s3_eth` + `boards/shields/*` |
+| `deps/modules/lib/rosterloh-drivers/boards/<vendor>/<board>/` | that module's `zephyr/module.yml` (`board_root: .`, `dts_root: .`) | `ros_driver`, `esp32p4_nano`, `esp32p4_wifi6_poe_eth`, `waveshare_esp32_s3_eth` + `boards/shields/*` |
 
 Everything else (`adafruit_qt_py_esp32s3`, `rpi_pico`, `xiao_esp32c5`,
 `arduino_nicla_vision`, `native_sim`) is in-tree under `deps/zephyr/boards/`.

@@ -16,7 +16,7 @@ description: >
 
 # Zephyr Kernel
 
-Validated against: Zephyr 4.4.99 (cee159bb557d, 2026-08-07). Re-check with `mise run check-skills`.
+Validated against: Zephyr 4.4.99 (3062245d5980, 2026-09-01). Re-check with `mise run check-skills`.
 
 ## Scope
 
