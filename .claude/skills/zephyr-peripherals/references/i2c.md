@@ -1672,12 +1672,13 @@ their timeout:
 };
 ```
 
-When absent it falls back to `CONFIG_I2C_TRANSFER_TIMEOUT_MS`. The remaining
-driver-specific Kconfigs:
+When absent it falls back to `CONFIG_I2C_TRANSFER_TIMEOUT_MS` (default 500 ms,
+gated on `CONFIG_I2C_TRANSFER_TIMEOUT_SUPPORTED`). DesignWare used to carry its
+own `CONFIG_I2C_DW_RW_TIMEOUT_MS`; that was replaced by the generic option in
+4.5. The remaining driver-specific Kconfigs:
 
 | Option | Driver | Default | Description |
 |--------|--------|---------|-------------|
-| `CONFIG_I2C_DW_RW_TIMEOUT_MS` | DesignWare | 100 | Read/write timeout |
 | `CONFIG_I2C_SILABS_TIMEOUT` | Silabs | 1000 | Transfer timeout (ms) |
 | `CONFIG_I2C_SAM0_TRANSFER_TIMEOUT` | SAM0 | 500 | Transfer timeout |
 | `CONFIG_I2C_NXP_TRANSFER_TIMEOUT` | NXP FlexComm | 0 | Transfer timeout (0=forever) |

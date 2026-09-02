@@ -52,3 +52,10 @@ NANOPB*                     # nanopb not in west.yml allowlist; see protobuf.md
 
 # --- Core-specific SoC symbols ------------------------------------------------
 SOC_STM32H745XX             # troubleshooting.md cites it to contrast with _M7/_M4
+
+# --- Removed upstream, named deliberately so old code can be migrated ---------
+# These no longer exist in deps/ and that is the point: the skills cite them to
+# say what replaced them. Someone grepping an old prj.conf needs to find the
+# name here, so do not "fix" these by deleting the mention.
+BT_FIXED_PASSKEY            # removed in 4.5 (deprecated 4.3); use CONFIG_BT_APP_PASSKEY + bt_conn_auth_cb.app_passkey
+I2C_DW_RW_TIMEOUT_MS        # replaced in 4.5 by CONFIG_I2C_TRANSFER_TIMEOUT_MS

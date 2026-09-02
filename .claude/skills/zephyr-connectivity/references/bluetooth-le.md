@@ -1021,18 +1021,16 @@ CONFIG_BT_RPA_TIMEOUT=900            # RPA rotation interval (seconds)
 #### Fixed / application-provided Passkey
 
 There is no `CONFIG_BT_PASSKEY` — the passkey is set at runtime, not in
-Kconfig. `CONFIG_BT_FIXED_PASSKEY` is **deprecated**; use
-`CONFIG_BT_APP_PASSKEY` (the two are mutually exclusive).
+Kconfig. `CONFIG_BT_FIXED_PASSKEY`, `bt_passkey_set()` and `BT_PASSKEY_INVALID`
+were deprecated in 4.3 and **removed in 4.5**. Use `CONFIG_BT_APP_PASSKEY` and
+the `bt_conn_auth_cb.app_passkey` callback.
 
 ```
 CONFIG_BT_APP_PASSKEY=y
 ```
 
 ```c
-/* Deprecated path: one fixed passkey for all pairings */
-bt_passkey_set(123456);   /* needs CONFIG_BT_FIXED_PASSKEY */
-
-/* Preferred: supply a passkey per pairing via the app_passkey callback.
+/* Supply a passkey per pairing via the app_passkey callback.
  * Return BT_PASSKEY_RAND to have the Host generate a random one.
  * If you return your own, you are responsible for it being random and unique.
  */
@@ -1398,8 +1396,8 @@ Exposes device manufacturer, model, serial number, and other info.
 
 ```
 CONFIG_BT_DIS=y
-CONFIG_BT_DIS_MANUF="My Company"
-CONFIG_BT_DIS_MODEL="My Product"
+CONFIG_BT_DIS_MANUF_NAME_STR="My Company"
+CONFIG_BT_DIS_MODEL_NUMBER_STR="My Product"
 CONFIG_BT_DIS_SERIAL_NUMBER=y
 CONFIG_BT_DIS_FW_REV=y
 CONFIG_BT_DIS_HW_REV=y
