@@ -26,8 +26,16 @@ __pycache__/
 # environment
 .env
 
-# claude code local settings (machine-specific)
-.claude/settings.local.json
+# Claude Code. The global ~/.gitignore ignores /.claude/ wholesale, but this
+# project tracks shared skills and commands, so un-ignore the directory here
+# and re-include only the shared parts. Order matters, and so does un-ignoring
+# .claude/ itself first: git never descends into an excluded directory, so
+# contents of one cannot be re-included. Without this, `git add` needs -f and,
+# worse, brand-new skill files are silently skipped by `git add .`.
+!/.claude/
+/.claude/*
+!/.claude/commands/
+!/.claude/skills/
 
 # misc
 *.pdf
