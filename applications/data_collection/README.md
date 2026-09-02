@@ -1,8 +1,17 @@
 # data_collection
 
-Networked data-collection application for the Waveshare **ESP32-P4-Nano**
-(`esp32p4_nano/esp32p4/hpcore`). Brings up wired Ethernet with DHCPv4 and
-exposes an MCUmgr/SMP management surface over UDP, plus a UART shell.
+Networked data-collection application for Waveshare ESP32-P4 boards. Brings up
+wired Ethernet with DHCPv4 and exposes an MCUmgr/SMP management surface over
+UDP, plus a UART shell.
+
+Two boards are supported, and the app is identical on both — each carries the
+on-chip RMII EMAC, PSRAM, and a Raspberry Pi 15-pin CSI connector wired to the
+`csi_*` labels the camera shields bind to:
+
+| Board | Notes |
+|---|---|
+| `esp32p4_nano/esp32p4/hpcore` | Default. 16 MB PSRAM. |
+| `esp32p4_wifi6_poe_eth/esp32p4/hpcore` | **ESP32-P4-WIFI6-POE-ETH.** 32 MB PSRAM, PoE-powered RJ45, on-board ESP32-C6 radio over SDIO. |
 
 ## Features
 
@@ -24,6 +33,9 @@ exposes an MCUmgr/SMP management surface over UDP, plus a UART shell.
 ```bash
 uv run poe app data_collection --sysbuild   # MCUboot + app; board defaults to esp32p4_nano/esp32p4/hpcore
 uv run poe flash data_collection
+
+# ESP32-P4-WIFI6-POE-ETH, with the Arducam ToF camera instead of the default IMX219
+mise run app data_collection -b esp32p4_wifi6_poe_eth/esp32p4/hpcore -s arducam_tof_camera --sysbuild
 ```
 
 Build **with `--sysbuild`**: that is what produces the MCUboot bootloader and a
