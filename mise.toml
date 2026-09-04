@@ -332,6 +332,7 @@ usage = '''
 arg "<app>" help="App name (motor_controller, joystick_controller, embedded_vision, force_sensor, bt_keys, powerbread, pico_fw, pt_mcp, rasprover, data_collection)"
 flag "-b --board <board>" help="Override target board (must be in app's allowed list)"
 flag "--sysbuild" help="Build with sysbuild (e.g. for MCUboot integration)"
+flag "-s --shield <shield>" help="Board shield, e.g. arducam_tof_camera for data_collection"
 '''
 run = """
 set -e
@@ -345,7 +346,7 @@ case "${usage_app}" in
     pico_fw)              ALLOWED="rpi_pico/rp2040/w"; DEFAULT="rpi_pico/rp2040/w" ;;
     pt_mcp)               ALLOWED="xiao_esp32c5/esp32c5/hpcore"; DEFAULT="xiao_esp32c5/esp32c5/hpcore" ;;
     rasprover)            ALLOWED="ros_driver/esp32/procpu native_sim/native/64"; DEFAULT="ros_driver/esp32/procpu" ;;
-    data_collection)      ALLOWED="esp32p4_nano/esp32p4/hpcore"; DEFAULT="esp32p4_nano/esp32p4/hpcore" ;;
+    data_collection)      ALLOWED="esp32p4_nano/esp32p4/hpcore esp32p4_wifi6_poe_eth/esp32p4/hpcore"; DEFAULT="esp32p4_nano/esp32p4/hpcore" ;;
     *) echo "unknown app: ${usage_app}" >&2; exit 2 ;;
 esac
 
@@ -358,6 +359,7 @@ fi
 
 EXTRA=""
 [ "${usage_sysbuild}" = "true" ] && EXTRA="--sysbuild"
+[ -n "${usage_shield}" ] && EXTRA="$EXTRA --shield ${usage_shield}"
 
 west build -b "$BOARD" -p always $EXTRA --build-dir builds/${usage_app} applications/${usage_app}
 """
@@ -383,6 +385,7 @@ usage = '''
 arg "<app>" help="App name (e.g. motor_controller)"
 flag "-b --board <board>" help="Override target board"
 flag "--sysbuild" help="Build with sysbuild"
+flag "-s --shield <shield>" help="Board shield, passed through to the app task"
 '''
 run = """
 set -e
@@ -394,6 +397,7 @@ LOG="logs/${usage_app}-build.log"
 ARGS=""
 [ -n "${usage_board}" ] && ARGS="$ARGS --board ${usage_board}"
 [ "${usage_sysbuild}" = "true" ] && ARGS="$ARGS --sysbuild"
+[ -n "${usage_shield}" ] && ARGS="$ARGS --shield ${usage_shield}"
 
 if mise run app $ARGS ${usage_app} > "$LOG" 2>&1; then
     echo "Build succeeded"
