@@ -26,16 +26,21 @@ __pycache__/
 # environment
 .env
 
-# Claude Code. The global ~/.gitignore ignores /.claude/ wholesale, but this
-# project tracks shared skills and commands, so un-ignore the directory here
-# and re-include only the shared parts. Order matters, and so does un-ignoring
-# .claude/ itself first: git never descends into an excluded directory, so
-# contents of one cannot be re-included. Without this, `git add` needs -f and,
-# worse, brand-new skill files are silently skipped by `git add .`.
+# Claude Code. The skills themselves live in /.agents/skills/, which Codex
+# discovers natively; /.claude/skills is a symlink to them so Claude Code sees
+# the same tree. The symlink still has to be tracked, or a fresh clone has no
+# skills for Claude.
+#
+# The global ~/.gitignore ignores /.claude/ wholesale, so un-ignore the
+# directory here and re-include only the shared part. Order matters, and so
+# does un-ignoring .claude/ itself first: git never descends into an excluded
+# directory, so contents of one cannot be re-included.
+#
+# No trailing slash on the last rule: it matches a symlink, not a directory,
+# and `!/.claude/skills/` would silently fail to re-include it.
 !/.claude/
 /.claude/*
-!/.claude/commands/
-!/.claude/skills/
+!/.claude/skills
 
 # misc
 *.pdf

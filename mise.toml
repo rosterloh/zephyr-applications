@@ -373,7 +373,7 @@ run = "west flash --build-dir builds/${usage_app}"
 
 [tasks."check-skills"]
 run = "python scripts/check_skill_symbols.py"
-description = "Validate CONFIG_* symbols cited in .claude/skills/ against deps/, check reference routing, and flag stale skill validation stamps."
+description = "Validate CONFIG_* symbols cited in .agents/skills/ against deps/, check reference routing, and flag stale skill validation stamps."
 
 [tasks."run-rasprover-sim"]
 run = "west build -b native_sim/native/64 --build-dir builds/rasprover -t run applications/rasprover"

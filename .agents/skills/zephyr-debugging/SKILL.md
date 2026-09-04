@@ -21,7 +21,7 @@ description: >
 
 # Zephyr Debugging
 
-Validated against: Zephyr 4.4.99 (3062245d5980, 2026-09-01). Re-check with `mise run check-skills`.
+Validated against: Zephyr 4.4.99 (62acbd571c72, 2026-09-04). Re-check with `mise run check-skills`.
 
 Debugging a flashed Zephyr board spans several transports and tools. They're
 not interchangeable — each answers a different question. Pick by **what you

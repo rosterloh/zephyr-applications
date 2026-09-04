@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate that every CONFIG_* symbol cited in .claude/skills/ exists in deps/.
+"""Validate that every CONFIG_* symbol cited in .agents/skills/ exists in deps/.
 
 The Zephyr skill references are large hand/LLM-authored documents. The failure
 mode that matters is a Kconfig symbol that was renamed or removed upstream.
@@ -34,7 +34,7 @@ import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-SKILLS = REPO / ".claude" / "skills"
+SKILLS = REPO / ".agents" / "skills"
 DEPS = REPO / "deps"
 ZEPHYR = DEPS / "zephyr"
 ALLOWLIST = SKILLS / ".symbol-allowlist.txt"

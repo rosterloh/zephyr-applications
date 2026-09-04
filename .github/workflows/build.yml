@@ -13,12 +13,14 @@ on:
     branches: [main]
     paths-ignore:
       - 'docs/**'
+      - '.agents/**'
       - '.claude/**'
       - '**/*.md'
       - 'LICENSE'
   pull_request:
     paths-ignore:
       - 'docs/**'
+      - '.agents/**'
       - '.claude/**'
       - '**/*.md'
       - 'LICENSE'
