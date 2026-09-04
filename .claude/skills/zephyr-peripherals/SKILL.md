@@ -19,7 +19,7 @@ description: >
 
 # Zephyr Peripherals
 
-Validated against: Zephyr 4.4.99 (3062245d5980, 2026-09-01). Re-check with `mise run check-skills`.
+Validated against: Zephyr 4.4.99 (62acbd571c72, 2026-09-04). Re-check with `mise run check-skills`.
 
 ## Scope
 
