@@ -70,5 +70,5 @@ manifest:
     - name: zenoh
       repo-path: zenoh-pico
       remote: eclipse-zenoh
-      revision: 1.10.0
+      revision: 1.10.1
       path: deps/modules/lib/zenoh

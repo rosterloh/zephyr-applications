@@ -57,12 +57,34 @@ run = "find . \\( -path ./deps -o -path ./.venv \\) -prune -o -type d -name 'twi
 description = "Remove all twister-out* directories anywhere in the tree"
 
 [tasks.setup]
-run = "mise run west-update && mise run sdk-install && mise run blobs-fetch && mise run patch-zenoh"
+run = "mise run west-update && mise run sdk-install && mise run blobs-fetch"
 description = "First-time workspace setup: fetch west deps, install Zephyr SDK, fetch binary blobs, apply patches. Safe to re-run."
 
 [tasks."west-update"]
-run = "west update --narrow"
-description = "Fetch/update all west dependencies into deps/"
+description = "Fetch/update all west dependencies into deps/, re-applying the zenoh patches afterwards"
+run = '''
+set -e
+ZENOH_DIR="${MISE_PROJECT_ROOT}/deps/modules/lib/zenoh"
+
+# patch-zenoh edits tracked files in place, so a zenoh revision bump aborts with
+# "local changes would be overwritten by checkout". Restore just the files that
+# task rewrites -- patch-zenoh regenerates them below. Anything else modified in
+# that checkout (PR work) is left alone and will still stop the update.
+# (skipped on a fresh clone, where west has not created the checkout yet)
+if [ -d "${ZENOH_DIR}/.git" ]; then
+    # zephyr/CMakeLists.txt is no longer patched (1.10.1 upstreamed the glob),
+    # but any checkout or CI cache created by an older patch-zenoh still carries
+    # that edit and would block the checkout just the same.
+    git -C "$ZENOH_DIR" checkout -- \
+        include/zenoh-pico/system/platform/zephyr.h \
+        src/system/zephyr/system.c \
+        src/link/transport/serial/uart_zephyr.c \
+        zephyr/CMakeLists.txt
+fi
+
+west update --narrow
+mise run patch-zenoh
+'''
 
 [tasks."blobs-fetch"]
 run = "west blobs fetch hal_espressif hal_infineon"
@@ -100,11 +122,10 @@ west sdk install --version "$SDK_VER" \
 """
 
 [tasks."patch-zenoh"]
-description = "Patch zenoh-pico Zephyr integration: add src/runtime sources, generate include/zenoh-pico/config.h from CONFIG_APP_ZENOH_*. Idempotent."
+description = "Patch zenoh-pico Zephyr integration: fix legacy <version.h> includes, generate include/zenoh-pico/config.h from CONFIG_APP_ZENOH_*. Idempotent."
 run = '''
 set -e
 ZENOH_DIR="${MISE_PROJECT_ROOT}/deps/modules/lib/zenoh"
-CMAKE="${ZENOH_DIR}/zephyr/CMakeLists.txt"
 CONFIG_H="${ZENOH_DIR}/include/zenoh-pico/config.h"
 
 # 0. Zephyr removed the legacy generated-include path (bare <version.h>);
@@ -116,19 +137,7 @@ for f in include/zenoh-pico/system/platform/zephyr.h \
     rm -f "${ZENOH_DIR}/${f}.bak"
 done
 
-# 1. Add src/runtime/*.c to the Zephyr module's source glob. Upstream's
-# zephyr/CMakeLists.txt omits it even though the root CMakeLists globs it, so
-# the executor sources (src/runtime/{executor,background_executor}.c, whose
-# symbols are referenced across src/api, src/net, src/session, src/transport)
-# go undefined at link time; tracked in eclipse-zenoh/zenoh-pico#1232. Every
-# other part of that file now matches upstream, so we inject only the one
-# missing glob line rather than rewriting the whole file. Idempotent.
-grep -q 'src/runtime/\*\.c' "$CMAKE" || sed -i.bak 's|\(  "\.\./src/protocol/\*\.c"\)|\1\
-  "../src/runtime/*.c"|' "$CMAKE"
-rm -f "$CMAKE.bak"
-echo "zenoh zephyr/CMakeLists.txt: src/runtime glob ensured"
-
-# 2. Generate include/zenoh-pico/config.h. Upstream's zephyr/CMakeLists.txt
+# 1. Generate include/zenoh-pico/config.h. Upstream's zephyr/CMakeLists.txt
 # does not run configure_file(config.h.in config.h), so the header that
 # system/platform.h includes is missing on the west-module path (upstream bug
 # eclipse-zenoh/zenoh-pico#1227; the configure_file flow is the subject of the
@@ -319,6 +328,11 @@ cat > "$CONFIG_H" <<'EOF'
 #define Z_RX_CACHE_SIZE 10
 #define Z_GET_TIMEOUT_DEFAULT 10000
 #define Z_LISTEN_MAX_CONNECTION_NB 10
+#if Z_FEATURE_SCOUTING == 1
+#define Z_MAX_NUM_SCOUT_INTERFACES 10
+#else
+#define Z_MAX_NUM_SCOUT_INTERFACES 0
+#endif
 #define ZP_ASM_NOP __asm__("nop")
 
 #endif /* INCLUDE_ZENOH_PICO_CONFIG_H */
