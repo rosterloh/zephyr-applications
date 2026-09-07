@@ -72,10 +72,14 @@ ZENOH_DIR="${MISE_PROJECT_ROOT}/deps/modules/lib/zenoh"
 # that checkout (PR work) is left alone and will still stop the update.
 # (skipped on a fresh clone, where west has not created the checkout yet)
 if [ -d "${ZENOH_DIR}/.git" ]; then
+    # zephyr/CMakeLists.txt is no longer patched (1.10.1 upstreamed the glob),
+    # but any checkout or CI cache created by an older patch-zenoh still carries
+    # that edit and would block the checkout just the same.
     git -C "$ZENOH_DIR" checkout -- \
         include/zenoh-pico/system/platform/zephyr.h \
         src/system/zephyr/system.c \
-        src/link/transport/serial/uart_zephyr.c
+        src/link/transport/serial/uart_zephyr.c \
+        zephyr/CMakeLists.txt
 fi
 
 west update --narrow
