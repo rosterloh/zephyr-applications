@@ -1,0 +1,32 @@
+# Patches applied to west modules after `west update`, via `west patch apply`
+# (run for you by `mise run west-update`). See `west patch --help`.
+#
+# `west patch clean` reverts only the files listed in checkout-command, so PR
+# work in progress inside a module checkout is left alone and will still stop
+# the next `west update` -- which is what we want. The schema default
+# ("git checkout ." plus "git clean -d -f -x") would silently destroy it.
+checkout-command: >-
+  git checkout --
+  include/zenoh-pico/system/platform/zephyr.h
+  src/link/transport/serial/uart_zephyr.c
+  src/system/zephyr/system.c
+  zephyr/CMakeLists.txt
+clean-command: ""
+
+patches:
+  - path: zenoh/0001-include-zephyr-version-h.patch
+    sha256sum: 6060d3bc5bcc45cdef2a45dbe55727ad1ae803418c673ae333520fa222b98d62
+    # Workspace-relative path, not the module name: zenoh-pico's zephyr/module.yml
+    # calls itself "zenoh-pico", and a name that resolves to nothing makes
+    # `west patch apply` silently report "0 patches applied successfully".
+    module: deps/modules/lib/zenoh
+    author: Richard Osterloh
+    email: richard.osterloh@gmail.com
+    date: 2026-09-07
+    upstreamable: true
+    issue: https://github.com/eclipse-zenoh/zenoh-pico/issues/1227
+    comments: |
+      zephyr/CMakeLists.txt is not touched by this patch -- zenoh-pico 1.10.1
+      upstreamed the glob fix -- but it stays in checkout-command because any
+      checkout or CI cache created by the older mise `patch-zenoh` task still
+      carries that edit and would block the next `west update` just the same.

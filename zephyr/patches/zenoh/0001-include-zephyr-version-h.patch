@@ -1,0 +1,41 @@
+From: Richard Osterloh <richard.osterloh@gmail.com>
+Subject: [PATCH] zephyr: include <zephyr/version.h> instead of <version.h>
+
+Zephyr removed the legacy generated-include path that made the bare
+<version.h> form resolve, so the zenoh-pico Zephyr platform files that use
+it fail to compile against current Zephyr. Rewrite them to the namespaced
+<zephyr/version.h> form, valid since Zephyr 3.x.
+---
+--- a/include/zenoh-pico/system/platform/zephyr.h
++++ b/include/zenoh-pico/system/platform/zephyr.h
+@@ -15,7 +15,7 @@
+ #ifndef ZENOH_PICO_SYSTEM_ZEPHYR_TYPES_H
+ #define ZENOH_PICO_SYSTEM_ZEPHYR_TYPES_H
+ 
+-#include <version.h>
++#include <zephyr/version.h>
+ 
+ #if KERNEL_VERSION_MAJOR == 2
+ #include <kernel.h>
+--- a/src/link/transport/serial/uart_zephyr.c
++++ b/src/link/transport/serial/uart_zephyr.c
+@@ -16,7 +16,7 @@
+ 
+ #if Z_FEATURE_LINK_SERIAL == 1 && defined(ZENOH_ZEPHYR)
+ 
+-#include <version.h>
++#include <zephyr/version.h>
+ 
+ #if KERNEL_VERSION_MAJOR == 2
+ #include <drivers/uart.h>
+--- a/src/system/zephyr/system.c
++++ b/src/system/zephyr/system.c
+@@ -16,7 +16,7 @@
+ 
+ #if defined(ZENOH_ZEPHYR)
+ 
+-#include <version.h>
++#include <zephyr/version.h>
+ 
+ #if KERNEL_VERSION_MAJOR == 2
+ #include <random/rand32.h>

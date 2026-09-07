@@ -1,6 +1,9 @@
 default_language_version:
   python: python3.14
-exclude: \.vscode/svd/.*\.svd$ # vendor-supplied SVDs, don't reformat
+# SVDs: vendor-supplied, don't reformat.
+# Patches: byte-exact artifacts, sha256'd in zephyr/patches.yml -- and stripping
+# trailing whitespace eats the leading space on a blank diff context line.
+exclude: (\.vscode/svd/.*\.svd|zephyr/patches/.*\.patch)$
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
