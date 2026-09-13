@@ -74,9 +74,16 @@ manifest:
       path: deps/modules/lib/zenoh
 
     # pstop_c: the Apache-2.0 protective-stop protocol library. Pinned to a
-    # SHA, not main: this is safety-relevant code and an upstream change to
-    # the state machine must be a deliberate, reviewed bump.
+    # SHA, not a branch: this is safety-relevant code and a change to the
+    # state machine must be a deliberate, reviewed bump.
+    #
+    # TEMPORARILY sourced from our fork. The pinned commit is upstream's
+    # 4ce8094 plus the Zephyr module support in
+    # polymathrobotics/protective-stop#121 -- applications/protective_stop
+    # selects CONFIG_PSTOP, which does not exist upstream yet. Point this
+    # back at polymathrobotics and bump to the merge commit once #121 lands;
+    # nothing else needs to change.
     - name: protective-stop
-      url: https://github.com/polymathrobotics/protective-stop.git
-      revision: 4ce8094a060544ca8a2be1084c711a41445af221
+      url: https://github.com/rosterloh/protective-stop.git
+      revision: 1b9fe90366481e406cf5d53ade667501df3b6d7a
       path: deps/modules/lib/protective-stop
