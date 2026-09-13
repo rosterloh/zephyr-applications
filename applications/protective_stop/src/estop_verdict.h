@@ -53,11 +53,15 @@ void estop_state_init(estop_state_t *st);
  *
  * core_id selects a DIVERSE expression of the same decision: core 0 by
  * arithmetic image, core 1 by boolean. They are logically identical when
- * correct, so lockstep does not diverge in normal operation -- but a
- * systematic bug in either expression makes only that core wrong, the
- * comparator's memcmp diverges, nothing is sent, and the machine stops on
- * heartbeat liveness. This turns lockstep from mere redundancy (identical
- * code, identical error) into real diversity.
+ * correct, so this guards against a common-mode misinterpretation of the
+ * physical reads -- the two expressions are unlikely to misread rb_hi/rb_lo
+ * the same wrong way. It does NOT mean a fault in either expression reaches
+ * the comparator as a mismatch: the STOP-only override below fully
+ * determines msg whenever the channel is not actually closed and settled, so
+ * a bug that makes this expression emit OK when it should emit STOP is
+ * masked toward STOP rather than surfaced as a lockstep divergence. Masking
+ * toward STOP is the safe direction; it is just not the same thing as
+ * detection.
  */
 uint8_t estop_decide(estop_state_t *st, int core_id, int rb_hi, int rb_lo);
 

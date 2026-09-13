@@ -41,7 +41,7 @@
 
 /* Each sampler must publish within this long of the tick, leaving the
  * comparator slack to drain replies and re-align. A missed deadline is
- * treated as a mismatch.
+ * counted separately from a mismatch -- see pstop_lockstep_missed_deadlines().
  */
 #define PSTOP_SAMPLER_DEADLINE_MS 80U
 
@@ -64,6 +64,12 @@ uint32_t pstop_lockstep_mismatches(void);
  * stop-switch channels have not both primed yet.
  */
 uint32_t pstop_lockstep_gated_ticks(void);
+
+/* Lifetime count of ticks where a sampler missed its generation and was never
+ * compared -- distinct from mismatches, which counts only a genuine
+ * byte-comparison disagreement between the two encodings.
+ */
+uint32_t pstop_lockstep_missed_deadlines(void);
 
 /* Read a slot's session, or NULL if the slot is out of range. */
 const struct pstop_session *pstop_lockstep_session(int slot);

@@ -22,6 +22,7 @@ __pycache__/
 /logs/
 **/build
 /twister-out*
+/flash.bin
 
 # environment
 .env
