@@ -12,6 +12,7 @@ target_sources(app PRIVATE
   src/main.c
   src/pstop_time.c
   src/estop_verdict.c
+  src/estop_gpio.c
   ${PSTOP_C_SRCS}
 )
 
