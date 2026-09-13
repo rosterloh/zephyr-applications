@@ -60,6 +60,11 @@ int pstop_lockstep_start(void);
 /* Lifetime count of ticks where the two encodings disagreed. */
 uint32_t pstop_lockstep_mismatches(void);
 
+/* Lifetime count of ticks where transmission was held back because the
+ * stop-switch channels have not both primed yet.
+ */
+uint32_t pstop_lockstep_gated_ticks(void);
+
 /* Read a slot's session, or NULL if the slot is out of range. */
 const struct pstop_session *pstop_lockstep_session(int slot);
 

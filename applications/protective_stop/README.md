@@ -21,3 +21,8 @@ port is `src/pstop_time.c`.
 ## Tests
 
     mise x -- west twister -T applications/protective_stop -p native_sim --inline-logs
+
+## Interop
+
+See `tests/interop/README.md` for running this remote against upstream's own
+`machine_app`.
