@@ -1,0 +1,12 @@
+tests:
+  protective_stop.gpio:
+    tags:
+      - protective_stop
+      - pstop
+      - safety
+      - gpio
+    # gpio_emul is the simulated DPST wire, so this is native_sim-only.
+    platform_allow:
+      - native_sim/native/64
+    integration_platforms:
+      - native_sim/native/64
