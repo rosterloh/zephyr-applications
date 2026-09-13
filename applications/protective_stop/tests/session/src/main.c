@@ -13,6 +13,7 @@
 
 #include "app_settings.h"
 #include "pstop/pstop_msg.h"
+#include "pstop_aux_channel.h"
 #include "session.h"
 
 static struct pstop_session sess;
@@ -190,6 +191,117 @@ ZTEST(pstop_session, test_rebond_watchdog_does_not_overflow_on_hostile_hb_ms)
 	sess.hb_ms = 0xFFFFFFFFU;
 	zassert_true(pstop_session_rebond_after_ms(&sess) > ((uint64_t)sess.hb_ms * 5U),
 		     "watchdog must still outlast the machine's timeout at the top of the range");
+}
+
+ZTEST(pstop_session, test_bond_frame_carries_stop_only_role)
+{
+	uint8_t buf[PSTOP_MESSAGE_SIZE];
+	pstop_msg_t msg;
+
+	(void)app_settings_set_operator(false);
+
+	pstop_session_build(&sess, PSTOP_MESSAGE_OK, 1000ULL, buf);
+	pstop_message_decode(&msg, buf);
+
+	zassert_equal(msg.message, PSTOP_MESSAGE_BOND, "unbonded session must send a BOND frame");
+	zassert_equal(pstop_aux_decode_role(&msg), PSTOP_AUX_ROLE_STOP_ONLY,
+		      "BOND frame must announce stop-only when not an operator");
+}
+
+ZTEST(pstop_session, test_bond_frame_carries_operator_role)
+{
+	uint8_t buf[PSTOP_MESSAGE_SIZE];
+	pstop_msg_t msg;
+
+	(void)app_settings_set_operator(true);
+
+	pstop_session_build(&sess, PSTOP_MESSAGE_OK, 1000ULL, buf);
+	pstop_message_decode(&msg, buf);
+
+	zassert_equal(msg.message, PSTOP_MESSAGE_BOND, "unbonded session must send a BOND frame");
+	zassert_equal(pstop_aux_decode_role(&msg), PSTOP_AUX_ROLE_OPERATOR,
+		      "BOND frame must announce operator role once claimed -- the machine latches "
+		      "this at bond time and never re-reads it");
+}
+
+ZTEST(pstop_session, test_heartbeat_frame_carries_stop_only_role)
+{
+	uint8_t buf[PSTOP_MESSAGE_SIZE];
+	pstop_msg_t msg;
+
+	sess.state = PSTOP_SESS_BONDED;
+	(void)app_settings_set_operator(false);
+
+	pstop_session_build(&sess, PSTOP_MESSAGE_OK, 1000ULL, buf);
+	pstop_message_decode(&msg, buf);
+
+	zassert_equal(pstop_aux_decode_role(&msg), PSTOP_AUX_ROLE_STOP_ONLY,
+		      "heartbeat frame must announce stop-only when not an operator");
+}
+
+ZTEST(pstop_session, test_heartbeat_frame_carries_operator_role)
+{
+	uint8_t buf[PSTOP_MESSAGE_SIZE];
+	pstop_msg_t msg;
+
+	sess.state = PSTOP_SESS_BONDED;
+	(void)app_settings_set_operator(true);
+
+	pstop_session_build(&sess, PSTOP_MESSAGE_OK, 1000ULL, buf);
+	pstop_message_decode(&msg, buf);
+
+	zassert_equal(pstop_aux_decode_role(&msg), PSTOP_AUX_ROLE_OPERATOR,
+		      "heartbeat frame must announce operator role");
+}
+
+ZTEST(pstop_session, test_poll_ignores_reply_from_non_peer_source)
+{
+	uint8_t buf[PSTOP_MESSAGE_SIZE];
+	pstop_msg_t msg;
+	device_id_t me;
+	device_id_t machine;
+	uint64_t last_reply_before;
+	int stray_sock;
+	struct sockaddr_in stray_local;
+	struct sockaddr_in dest;
+	ssize_t n;
+
+	device_id_set(&me, app_settings_device_id());
+	device_id_set(&machine, peer.id);
+
+	/* A well-formed, correct-CRC frame -- indistinguishable from a real
+	 * reply except for where it came from.
+	 */
+	pstop_create_ok_message(&msg, 1000ULL, 0ULL, &machine, &me, 1U, 0U);
+	msg.heartbeat_timeout = 400U;
+	pstop_message_encode(&msg, buf);
+
+	stray_sock = zsock_socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+	zassert_true(stray_sock >= 0, "stray socket");
+
+	(void)memset(&stray_local, 0, sizeof(stray_local));
+	stray_local.sin_family = AF_INET;
+	stray_local.sin_port = htons(19999U); /* anything but the bonded peer's port */
+	stray_local.sin_addr.s_addr = htonl(INADDR_ANY);
+	zassert_ok(zsock_bind(stray_sock, (struct sockaddr *)&stray_local, sizeof(stray_local)),
+		   "bind stray");
+
+	(void)memset(&dest, 0, sizeof(dest));
+	dest.sin_family = AF_INET;
+	dest.sin_port = htons((uint16_t)(PSTOP_LOCAL_PORT + sess.slot));
+	dest.sin_addr.s_addr = htonl(peer.ip);
+
+	n = zsock_sendto(stray_sock, buf, sizeof(buf), 0, (struct sockaddr *)&dest, sizeof(dest));
+	zassert_equal(n, (ssize_t)PSTOP_MESSAGE_SIZE, "stray send");
+	(void)zsock_close(stray_sock);
+
+	k_msleep(50);
+
+	last_reply_before = sess.last_reply_ms;
+	pstop_session_poll(&sess, 5000ULL);
+
+	zassert_equal(sess.state, PSTOP_SESS_IDLE, "must not bond from a non-peer source");
+	zassert_equal(sess.last_reply_ms, last_reply_before, "must not adopt a non-peer reply");
 }
 
 ZTEST_SUITE(pstop_session, NULL, suite_setup, test_before, test_after, NULL);

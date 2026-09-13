@@ -20,7 +20,7 @@ port is `src/pstop_time.c`.
 
 ## Tests
 
-    mise x -- west twister -T applications/protective_stop -p native_sim --inline-logs
+    mise x -- west twister -T applications/protective_stop -p native_sim/native/64 --inline-logs
 
 ## Interop
 
