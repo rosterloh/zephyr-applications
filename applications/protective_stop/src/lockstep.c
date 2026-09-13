@@ -52,6 +52,12 @@ static atomic_t sampler_gen[ESTOP_CHANNELS];
 
 static uint32_t mismatches;
 
+/* Ticks where a sampler missed its generation and was never compared -- a
+ * distinct fault from a genuine byte-comparison disagreement, and must stay
+ * distinct so neither counter is muddied with the other's cause.
+ */
+static uint32_t missed_deadlines;
+
 /* Ticks where the comparator was gated by estop_channels_primed() rather than
  * actually comparing anything -- a stuck-open or chattering channel can hold
  * this indefinitely, which otherwise looks identical to "nothing to report".
@@ -95,7 +101,18 @@ int pstop_lockstep_init(void)
 		opened++;
 	}
 
-	LOG_INF("lockstep ready: %d session(s)", opened);
+	if (opened == 0) {
+		/* Total muteness: the most complete form of the failure this
+		 * design exists to make visible, and counted by neither
+		 * mismatches nor gated_ticks. An unprovisioned remote booting
+		 * is legitimate (slice 3's HTTP layer is how it gets
+		 * configured), so this stays a warning, not a return failure.
+		 */
+		LOG_WRN("lockstep ready: 0 session(s) -- nothing is configured, nothing will "
+			"transmit");
+	} else {
+		LOG_INF("lockstep ready: %d session(s)", opened);
+	}
 	return 0;
 }
 
@@ -182,12 +199,19 @@ static void comparator_pass(void)
  */
 static uint32_t begin_tick(uint64_t now_ms)
 {
-	uint32_t gen = (uint32_t)atomic_add(&tick_gen, 1) + 1U;
+	uint32_t gen;
 
+	/* Snapshot before minting the generation: atomic_add() is the release
+	 * that publishes this snapshot, so a sampler that observes the new
+	 * generation is guaranteed to see these writes, not a stale snapshot
+	 * from the prior tick.
+	 */
 	tick_now_ms = now_ms;
 	for (int slot = 0; slot < PSTOP_MAX_MACHINES; slot++) {
 		tick_due[slot] = slot_active[slot] && pstop_session_due(&sessions[slot], now_ms);
 	}
+
+	gen = (uint32_t)atomic_add(&tick_gen, 1) + 1U;
 	return gen;
 }
 
@@ -201,7 +225,7 @@ static void run_tick_body(uint64_t now_ms, uint32_t gen)
 		comparator_pass();
 	} else {
 		LOG_WRN("sampler(s) missed tick %u", gen);
-		mismatches++;
+		missed_deadlines++;
 	}
 
 	for (int slot = 0; slot < PSTOP_MAX_MACHINES; slot++) {
@@ -231,6 +255,11 @@ uint32_t pstop_lockstep_mismatches(void)
 uint32_t pstop_lockstep_gated_ticks(void)
 {
 	return gated_ticks;
+}
+
+uint32_t pstop_lockstep_missed_deadlines(void)
+{
+	return missed_deadlines;
 }
 
 const struct pstop_session *pstop_lockstep_session(int slot)

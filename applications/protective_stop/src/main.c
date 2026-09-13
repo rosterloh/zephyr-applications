@@ -80,18 +80,22 @@ int main(void)
 
 	uint32_t last_mismatches = 0;
 	uint32_t last_gated_ticks = 0;
+	uint32_t last_missed_deadlines = 0;
 
 	while (true) {
 		k_sleep(K_MSEC(COUNTER_LOG_PERIOD_MS));
 
 		uint32_t mismatches = pstop_lockstep_mismatches();
 		uint32_t gated_ticks = pstop_lockstep_gated_ticks();
+		uint32_t missed_deadlines = pstop_lockstep_missed_deadlines();
 
-		if ((mismatches != last_mismatches) || (gated_ticks != last_gated_ticks)) {
-			LOG_INF("lockstep health: mismatches=%u gated_ticks=%u", mismatches,
-				gated_ticks);
+		if ((mismatches != last_mismatches) || (gated_ticks != last_gated_ticks) ||
+		    (missed_deadlines != last_missed_deadlines)) {
+			LOG_INF("lockstep health: mismatches=%u gated_ticks=%u missed_deadlines=%u",
+				mismatches, gated_ticks, missed_deadlines);
 			last_mismatches = mismatches;
 			last_gated_ticks = gated_ticks;
+			last_missed_deadlines = missed_deadlines;
 		}
 	}
 }

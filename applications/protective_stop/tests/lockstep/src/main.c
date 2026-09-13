@@ -19,9 +19,10 @@
  *
  * The ordering is intentional rather than incidental. This suite models one
  * device across successive ticks -- unsettled at boot, then settled and
- * transmitting, then split, then healed -- and that progression is the
- * behaviour under test. Only test_01 requires pristine state (sent == 0,
- * channels unprimed); the rest settle and snapshot their own baseline first.
+ * transmitting, then split, then healed, then a real stop-and-recover cycle
+ * -- and that progression is the behaviour under test. Only test_01 requires
+ * pristine state (sent == 0, channels unprimed); the rest settle and snapshot
+ * their own baseline first.
  *
  * test_00 is the one exception to all of the above: it is a pure white-box
  * unit test of the generation-stamp completion check (see lockstep.h), and it
@@ -47,6 +48,21 @@
 #define FAKE_MACHINE_ID    0x01020304U
 
 static int fake_machine_sock;
+
+/* Every message type the fake machine has actually received, in order --
+ * i.e. what really reached the wire, not what the remote intended to send.
+ * test_05 decodes this to pin the arming gesture (STOP->OK) at the message
+ * level, which byte-count assertions like test_04's cannot: a count only
+ * proves something was sent, never what.
+ */
+#define RECORDED_MESSAGES_MAX 64
+static uint8_t recorded_messages[RECORDED_MESSAGES_MAX];
+static size_t recorded_count;
+
+static void recorded_reset(void)
+{
+	recorded_count = 0U;
+}
 
 /* A minimal fake machine: it acks a BOND request with a heartbeat_timeout,
  * because pstop_session_poll() only reaches PSTOP_SESS_BONDED on a decoded
@@ -74,6 +90,10 @@ static void fake_machine_service(void)
 	}
 
 	pstop_message_decode(&req, buf);
+
+	if (recorded_count < RECORDED_MESSAGES_MAX) {
+		recorded_messages[recorded_count++] = req.message;
+	}
 
 	device_id_set(&machine_id, FAKE_MACHINE_ID);
 	pstop_create_ok_message(&reply, req.stamp, req.stamp, &machine_id, &req.id,
@@ -251,6 +271,117 @@ ZTEST(lockstep, test_04_recovers_when_the_split_heals)
 	}
 
 	zassert_true(s->sent > sent_before, "transmission must resume once the channels agree");
+}
+
+/* Count STOP->OK transitions in the recorded sequence, and confirm no OK
+ * precedes the first STOP. A transition is an OK immediately following a
+ * STOP -- consecutive repeats of either message do not add one.
+ */
+static void assert_exactly_one_arming_edge(void)
+{
+	bool seen_stop = false;
+	int transitions = 0;
+
+	zassert_true(recorded_count > 0U, "the fake machine must have received something");
+
+	for (size_t i = 0U; i < recorded_count; i++) {
+		if (recorded_messages[i] == PSTOP_MESSAGE_STOP) {
+			seen_stop = true;
+		} else if (recorded_messages[i] == PSTOP_MESSAGE_OK) {
+			zassert_true(seen_stop, "an OK must never reach the wire before a STOP");
+			if ((i > 0U) && (recorded_messages[i - 1U] == PSTOP_MESSAGE_STOP)) {
+				transitions++;
+			}
+		}
+	}
+
+	zassert_equal(transitions, 1, "exactly one STOP->OK arming edge must reach the wire");
+}
+
+/* test_04 leaves both channels agreeing and closed (transmitting OK). Both
+ * are driven to STOP together here -- an agreed STOP, unlike test_03/04's
+ * channel split, which never puts an agreed STOP on the wire at all (a
+ * mismatch is silence, not a transmitted STOP). This is the scenario the
+ * arming gesture actually depends on: a machine reads STOP->OK as "the
+ * operator did something", so the wire must carry exactly one such edge
+ * across a real stop-and-recover cycle, even with a mechanical bounce during
+ * the reclose.
+ *
+ * A transmission only happens on a "due" tick -- once bonded, that is every
+ * hb_ms/2 (500 ms = 5 ticks at the 100 ms step used throughout this file),
+ * not every physical sample -- so a one-tick bounce cannot just be dropped in
+ * anywhere and trusted to land on the wire. The physical debounce state
+ * still advances every tick regardless of whether that tick transmits, so
+ * the bounce is placed to land ON a due tick deliberately: that is the one
+ * placement where a debounce bug is guaranteed to be visible on the wire,
+ * and where correct debounce is guaranteed to still show STOP.
+ */
+ZTEST(lockstep, test_05_wire_carries_exactly_one_arming_edge)
+{
+	const struct pstop_session *s = pstop_lockstep_session(0);
+	uint64_t now = 11000ULL; /* small step past test_04's end: no rebond */
+	uint32_t sent_before;
+	unsigned int i;
+
+	recorded_reset();
+
+	/* Agreed STOP, held until it actually reaches the wire (T). */
+	estop_sim_set_pole(0, false);
+	estop_sim_set_pole(1, false);
+	sent_before = s->sent;
+	for (i = 0U; i < 20U; i++) {
+		pstop_lockstep_tick(now);
+		fake_machine_service();
+		now += 100ULL;
+		if (s->sent > sent_before) {
+			break;
+		}
+	}
+	zassert_true(s->sent > sent_before, "an agreed STOP must reach the wire");
+
+	/* T+1..T+4: still open, nothing changes. The next due tick is exactly
+	 * T+5 -- nothing else resets last_send_ms in between.
+	 */
+	for (i = 0U; i < 4U; i++) {
+		pstop_lockstep_tick(now);
+		fake_machine_service();
+		now += 100ULL;
+	}
+
+	/* T+5: the one-tick mechanical bounce, landing exactly on the due
+	 * tick. The release debounce exists to absorb exactly this without
+	 * producing a premature OK.
+	 */
+	estop_sim_set_pole(0, true);
+	estop_sim_set_pole(1, true);
+	pstop_lockstep_tick(now);
+	fake_machine_service();
+	now += 100ULL;
+	estop_sim_set_pole(0, false);
+	estop_sim_set_pole(1, false);
+
+	/* T+6..T+14: held open well past the next due tick (T+10), so it
+	 * samples an unambiguous STOP -- confirming the bounce did not latch.
+	 */
+	for (i = 0U; i < 9U; i++) {
+		pstop_lockstep_tick(now);
+		fake_machine_service();
+		now += 100ULL;
+	}
+
+	/* T+15 onward: the real reclose, held closed continuously well past
+	 * the debounce and the next due tick (T+20), so the wire settles on
+	 * OK for good.
+	 */
+	estop_sim_set_pole(0, true);
+	estop_sim_set_pole(1, true);
+	for (i = 0U; i < 9U; i++) {
+		pstop_lockstep_tick(now);
+		fake_machine_service();
+		now += 100ULL;
+	}
+
+	assert_exactly_one_arming_edge();
 }
 
 ZTEST_SUITE(lockstep, NULL, suite_setup, NULL, NULL, NULL);
