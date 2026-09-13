@@ -11,6 +11,7 @@
 #include <zephyr/net/socket.h>
 #include <zephyr/sys/byteorder.h>
 
+#include "pstop_aux_channel.h"
 #include "session.h"
 
 LOG_MODULE_REGISTER(pstop_session, LOG_LEVEL_INF);
@@ -129,6 +130,7 @@ void pstop_session_build(struct pstop_session *s, uint8_t verdict, uint64_t now_
 	pstop_msg_t msg;
 	device_id_t me;
 	uint8_t type;
+	pstop_aux_role_t role;
 
 	device_id_set(&me, app_settings_device_id());
 
@@ -146,6 +148,13 @@ void pstop_session_build(struct pstop_session *s, uint8_t verdict, uint64_t now_
 					     &s->proto.remote_id, s->proto.msg_counter + 1U,
 					     s->proto.last_received_counter);
 	}
+
+	/* The role is latched by the machine at bond time, so it must be
+	 * carried on the BOND frame too -- there is no later chance to
+	 * correct it.
+	 */
+	role = app_settings_is_operator() ? PSTOP_AUX_ROLE_OPERATOR : PSTOP_AUX_ROLE_STOP_ONLY;
+	pstop_aux_encode_role(&msg, role);
 
 	pstop_message_encode(&msg, out48);
 }
@@ -186,12 +195,25 @@ void pstop_session_poll(struct pstop_session *s, uint64_t now_ms)
 {
 	uint8_t buf[PSTOP_MESSAGE_SIZE];
 	pstop_msg_t msg;
+	struct sockaddr_in from;
+	socklen_t from_len;
 	ssize_t n;
 
 	for (;;) {
-		n = zsock_recvfrom(s->sock, buf, sizeof(buf), ZSOCK_MSG_DONTWAIT, NULL, NULL);
+		from_len = sizeof(from);
+		n = zsock_recvfrom(s->sock, buf, sizeof(buf), ZSOCK_MSG_DONTWAIT,
+				   (struct sockaddr *)&from, &from_len);
 		if (n != (ssize_t)PSTOP_MESSAGE_SIZE) {
 			return;
+		}
+
+		/* A stray sender must not be able to feed counters into a
+		 * safety session: only the bonded peer's address is trusted.
+		 */
+		if ((from.sin_addr.s_addr != s->peer_addr.sin_addr.s_addr) ||
+		    (from.sin_port != s->peer_addr.sin_port)) {
+			LOG_WRN("slot %d reply from unexpected source", s->slot);
+			continue;
 		}
 
 		pstop_message_decode(&msg, buf);

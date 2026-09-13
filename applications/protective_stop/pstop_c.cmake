@@ -28,4 +28,4 @@ set(PSTOP_C_SRCS
   "${PSTOP_C}/pstop/src/pstop/pstop_msg.c"
 )
 
-set(PSTOP_C_INCLUDE "${PSTOP_C}/pstop/include")
+set(PSTOP_C_INCLUDE "${PSTOP_C}/pstop/include" "${PSTOP_C}/../common")
