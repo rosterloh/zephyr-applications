@@ -72,3 +72,11 @@ manifest:
       remote: eclipse-zenoh
       revision: 1.10.1
       path: deps/modules/lib/zenoh
+
+    # pstop_c: the Apache-2.0 protective-stop protocol library. Pinned to a
+    # SHA, not main: this is safety-relevant code and an upstream change to
+    # the state machine must be a deliberate, reviewed bump.
+    - name: protective-stop
+      url: https://github.com/polymathrobotics/protective-stop.git
+      revision: 4ce8094a060544ca8a2be1084c711a41445af221
+      path: deps/modules/lib/protective-stop
