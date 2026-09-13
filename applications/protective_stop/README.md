@@ -14,9 +14,9 @@ Design: `docs/superpowers/specs/2026-09-13-protective-stop-design.md`
 ## Protocol library
 
 The pstop protocol is **not reimplemented here**. `pstop_c` is vendored via
-west at `deps/modules/lib/protective-stop`, pinned to a SHA, and its
-remote-side sources are compiled directly (see `pstop_c.cmake`). Our entire
-port is `src/pstop_time.c`.
+west at `deps/modules/lib/protective-stop`, pinned to a SHA, and consumed as a
+Zephyr module (`CONFIG_PSTOP=y` in `prj.conf`). The Zephyr port of
+`time_get_now()` lives in the module itself, not in this app.
 
 ## Tests
 
