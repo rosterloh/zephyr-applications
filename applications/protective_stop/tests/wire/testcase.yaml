@@ -8,7 +8,7 @@ tests:
     # native_sim for the same reason as rasprover.ros_cdr: ztest registration
     # uses ELF iterable sections, so unit_testing does not build on macOS.
     platform_allow:
-      - native_sim
+      - native_sim/native/64
       - qemu_cortex_m3
     integration_platforms:
-      - native_sim
+      - native_sim/native/64
