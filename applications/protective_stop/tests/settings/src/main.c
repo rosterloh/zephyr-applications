@@ -89,4 +89,44 @@ ZTEST(app_settings, test_device_id_round_trips)
 	zassert_equal(app_settings_device_id(), 0xC0A80105U, "read back");
 }
 
+/*
+ * The tests above only prove the in-memory statics agree with what the
+ * setters just wrote into them -- they would pass even if settings_save_one()
+ * were a no-op. Reloading via app_settings_init() forces a real read back
+ * from the ZMS backend: init() zeroes the statics before calling
+ * settings_load_subtree(), so a value that survives the round trip really
+ * came off flash.
+ */
+ZTEST(app_settings, test_peer_survives_reload)
+{
+	zassert_ok(app_settings_set_peer(3, 0xC0A80101U, 8890U, 0x99U), "set");
+
+	zassert_ok(app_settings_init(), "reload");
+
+	const struct pstop_peer *p = app_settings_peer(3);
+
+	zassert_true(p->configured, "configured after reload");
+	zassert_equal(p->ip, 0xC0A80101U, "ip after reload");
+	zassert_equal(p->port, 8890U, "port after reload");
+	zassert_equal(p->id, 0x99U, "machine id after reload");
+}
+
+ZTEST(app_settings, test_operator_survives_reload)
+{
+	zassert_ok(app_settings_set_operator(true), "set");
+
+	zassert_ok(app_settings_init(), "reload");
+
+	zassert_true(app_settings_is_operator(), "operator after reload");
+}
+
+ZTEST(app_settings, test_device_id_survives_reload)
+{
+	zassert_ok(app_settings_set_device_id(0xDEADBEEFU), "set");
+
+	zassert_ok(app_settings_init(), "reload");
+
+	zassert_equal(app_settings_device_id(), 0xDEADBEEFU, "device id after reload");
+}
+
 ZTEST_SUITE(app_settings, NULL, suite_setup, NULL, NULL, NULL);

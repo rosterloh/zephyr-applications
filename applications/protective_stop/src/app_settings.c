@@ -90,36 +90,55 @@ const struct pstop_peer *app_settings_peer(int slot)
 	return &peers[slot];
 }
 
-static int save_peer(int slot)
+static int save_peer(int slot, const struct pstop_peer *peer)
 {
 	char key[32];
 
 	(void)snprintf(key, sizeof(key), PSTOP_SETTINGS_ROOT "/peers/%d", slot);
-	return settings_save_one(key, &peers[slot], sizeof(peers[slot]));
+	return settings_save_one(key, peer, sizeof(*peer));
 }
 
 int app_settings_set_peer(int slot, uint32_t ip, uint16_t port, uint32_t id)
 {
+	struct pstop_peer peer;
+	int ret;
+
 	if ((slot < 0) || (slot >= PSTOP_MAX_MACHINES)) {
 		return -EINVAL;
 	}
 
-	peers[slot].ip = ip;
-	peers[slot].port = port;
-	peers[slot].id = id;
-	peers[slot].configured = true;
+	peer.ip = ip;
+	peer.port = port;
+	peer.id = id;
+	peer.configured = true;
 
-	return save_peer(slot);
+	ret = save_peer(slot, &peer);
+	if (ret != 0) {
+		return ret;
+	}
+
+	peers[slot] = peer;
+	return 0;
 }
 
 int app_settings_clear_peer(int slot)
 {
+	struct pstop_peer peer;
+	int ret;
+
 	if ((slot < 0) || (slot >= PSTOP_MAX_MACHINES)) {
 		return -EINVAL;
 	}
 
-	(void)memset(&peers[slot], 0, sizeof(peers[slot]));
-	return save_peer(slot);
+	(void)memset(&peer, 0, sizeof(peer));
+
+	ret = save_peer(slot, &peer);
+	if (ret != 0) {
+		return ret;
+	}
+
+	peers[slot] = peer;
+	return 0;
 }
 
 uint32_t app_settings_device_id(void)
@@ -129,8 +148,15 @@ uint32_t app_settings_device_id(void)
 
 int app_settings_set_device_id(uint32_t id)
 {
+	int ret;
+
+	ret = settings_save_one(PSTOP_SETTINGS_ROOT "/device_id", &id, sizeof(id));
+	if (ret != 0) {
+		return ret;
+	}
+
 	device_id = id;
-	return settings_save_one(PSTOP_SETTINGS_ROOT "/device_id", &device_id, sizeof(device_id));
+	return 0;
 }
 
 bool app_settings_is_operator(void)
@@ -140,7 +166,13 @@ bool app_settings_is_operator(void)
 
 int app_settings_set_operator(bool op)
 {
+	int ret;
+
+	ret = settings_save_one(PSTOP_SETTINGS_ROOT "/operator", &op, sizeof(op));
+	if (ret != 0) {
+		return ret;
+	}
+
 	is_operator = op;
-	return settings_save_one(PSTOP_SETTINGS_ROOT "/operator", &is_operator,
-				 sizeof(is_operator));
+	return 0;
 }
