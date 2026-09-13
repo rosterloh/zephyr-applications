@@ -228,6 +228,11 @@ uint32_t pstop_lockstep_mismatches(void)
 	return mismatches;
 }
 
+uint32_t pstop_lockstep_gated_ticks(void)
+{
+	return gated_ticks;
+}
+
 const struct pstop_session *pstop_lockstep_session(int slot)
 {
 	if ((slot < 0) || (slot >= PSTOP_MAX_MACHINES)) {
