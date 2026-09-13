@@ -7,6 +7,7 @@
 
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/sys/atomic.h>
 
 #include "app_settings.h"
 #include "estop_gpio.h"
@@ -39,7 +40,23 @@ static uint8_t frames[ESTOP_CHANNELS][PSTOP_MAX_MACHINES][PSTOP_MESSAGE_SIZE];
 static uint64_t tick_now_ms;
 static bool tick_due[PSTOP_MAX_MACHINES];
 
+/* Which tick generation is in flight, and which generation each sampler last
+ * completed. A counting semaphore cannot carry this: see the header comment
+ * for why a stale completion must be caught by generation, not by counting.
+ * atomic_t is load-bearing under CONFIG_SMP -- a plain store could be
+ * reordered ahead of the frame writes in sampler_pass(), reintroducing the
+ * torn-buffer read this stamp exists to prevent.
+ */
+static atomic_t tick_gen;
+static atomic_t sampler_gen[ESTOP_CHANNELS];
+
 static uint32_t mismatches;
+
+/* Ticks where the comparator was gated by estop_channels_primed() rather than
+ * actually comparing anything -- a stuck-open or chattering channel can hold
+ * this indefinitely, which otherwise looks identical to "nothing to report".
+ */
+static uint32_t gated_ticks;
 
 static K_SEM_DEFINE(go_sem_0, 0, 1);
 static K_SEM_DEFINE(go_sem_1, 0, 1);
@@ -84,8 +101,10 @@ int pstop_lockstep_init(void)
 
 /* Sample one channel and encode every due slot's frame into that channel's
  * buffer. Runs on the sampler thread, or inline from pstop_lockstep_tick().
+ * Writes sampler_gen[channel] LAST, so that under CONFIG_SMP no reader can
+ * observe the generation stamp before the frame writes it guards.
  */
-static void sampler_pass(int channel)
+static void sampler_pass(int channel, uint32_t gen)
 {
 	uint8_t verdict = estop_channel_sample(channel, &estop[channel]);
 
@@ -95,10 +114,31 @@ static void sampler_pass(int channel)
 					    frames[channel][slot]);
 		}
 	}
+
+	atomic_set(&sampler_gen[channel], (atomic_val_t)gen);
 }
 
-/* Compare and transmit. Returns true if every due slot agreed. */
-static bool comparator_pass(void)
+/* True iff every sampler's last completion belongs to generation `gen`. A
+ * sampler stuck on a stale (older) generation means its frame was not
+ * produced for this tick, so it must not be trusted for comparison.
+ */
+static bool samplers_published(uint32_t gen)
+{
+	for (int c = 0; c < ESTOP_CHANNELS; c++) {
+		if ((uint32_t)atomic_get(&sampler_gen[c]) != gen) {
+			return false;
+		}
+	}
+	return true;
+}
+
+/* Compare every due slot's pair of encodings, then transmit only if ALL of
+ * them agreed. A fault that reached one slot's buffer had no respect for slot
+ * boundaries, so a single mismatch silences every session at once -- and
+ * which slots transmit must not depend on loop order, so nothing is sent
+ * until every slot has been checked.
+ */
+static void comparator_pass(void)
 {
 	bool all_agreed = true;
 
@@ -107,45 +147,62 @@ static bool comparator_pass(void)
 	 * STOP->OK as the arming gesture and would arm with no operator action.
 	 */
 	if (!estop_channels_primed(estop)) {
-		return true;
+		gated_ticks++;
+		return;
 	}
 
 	for (int slot = 0; slot < PSTOP_MAX_MACHINES; slot++) {
 		if (!slot_active[slot] || !tick_due[slot]) {
 			continue;
 		}
-
 		if (memcmp(frames[0][slot], frames[1][slot], PSTOP_MESSAGE_SIZE) != 0) {
-			/* Silence is the safe action: every bonded machine
-			 * heartbeat-times-out and stops.
-			 */
 			all_agreed = false;
-			continue;
+			break;
 		}
-
-		(void)pstop_session_commit_send(&sessions[slot], frames[0][slot], tick_now_ms);
 	}
 
 	if (!all_agreed) {
+		/* Silence is the safe action: every bonded machine
+		 * heartbeat-times-out and stops.
+		 */
 		mismatches++;
+		return;
 	}
 
-	return all_agreed;
+	for (int slot = 0; slot < PSTOP_MAX_MACHINES; slot++) {
+		if (slot_active[slot] && tick_due[slot]) {
+			(void)pstop_session_commit_send(&sessions[slot], frames[0][slot],
+							tick_now_ms);
+		}
+	}
 }
 
-void pstop_lockstep_tick(uint64_t now_ms)
+/* Snapshot this tick's shared inputs and mint its generation. Shared by the
+ * synchronous and threaded paths so they cannot silently diverge again.
+ */
+static uint32_t begin_tick(uint64_t now_ms)
 {
-	tick_now_ms = now_ms;
+	uint32_t gen = (uint32_t)atomic_add(&tick_gen, 1) + 1U;
 
+	tick_now_ms = now_ms;
 	for (int slot = 0; slot < PSTOP_MAX_MACHINES; slot++) {
 		tick_due[slot] = slot_active[slot] && pstop_session_due(&sessions[slot], now_ms);
 	}
+	return gen;
+}
 
-	for (int c = 0; c < ESTOP_CHANNELS; c++) {
-		sampler_pass(c);
+/* Compare-or-decline, then poll and watchdog every active session. Shared by
+ * the synchronous and threaded paths: the only difference between them is how
+ * the samplers ran, not what happens once they have (or have not).
+ */
+static void run_tick_body(uint64_t now_ms, uint32_t gen)
+{
+	if (samplers_published(gen)) {
+		comparator_pass();
+	} else {
+		LOG_WRN("sampler(s) missed tick %u", gen);
+		mismatches++;
 	}
-
-	(void)comparator_pass();
 
 	for (int slot = 0; slot < PSTOP_MAX_MACHINES; slot++) {
 		if (slot_active[slot]) {
@@ -153,6 +210,17 @@ void pstop_lockstep_tick(uint64_t now_ms)
 			pstop_session_watchdog(&sessions[slot], now_ms);
 		}
 	}
+}
+
+void pstop_lockstep_tick(uint64_t now_ms)
+{
+	uint32_t gen = begin_tick(now_ms);
+
+	for (int c = 0; c < ESTOP_CHANNELS; c++) {
+		sampler_pass(c, gen);
+	}
+
+	run_tick_body(now_ms, gen);
 }
 
 uint32_t pstop_lockstep_mismatches(void)
@@ -177,7 +245,10 @@ static void sampler_thread(void *p1, void *p2, void *p3)
 
 	for (;;) {
 		k_sem_take(go_sem[channel], K_FOREVER);
-		sampler_pass(channel);
+		/* The generation was minted by begin_tick() before this thread
+		 * was woken, so it is already current.
+		 */
+		sampler_pass(channel, (uint32_t)atomic_get(&tick_gen));
 		k_sem_give(done_sem[channel]);
 	}
 }
@@ -191,45 +262,36 @@ static void comparator_thread(void *p1, void *p2, void *p3)
 	ARG_UNUSED(p3);
 
 	for (;;) {
-		bool published = true;
+		uint64_t now_ms;
+		uint32_t gen;
 
 		next += PSTOP_TICK_MS;
 
-		/* Snapshot the tick's shared inputs BEFORE waking the samplers,
-		 * so both encode identical stamps and the same due-set.
+		/* Snapshot the tick's shared inputs and mint its generation
+		 * BEFORE waking the samplers, so both encode identical stamps
+		 * and the same due-set, and so a late completion from a prior
+		 * tick can never be mistaken for this one's.
 		 */
-		tick_now_ms = (uint64_t)k_uptime_get();
-		for (int slot = 0; slot < PSTOP_MAX_MACHINES; slot++) {
-			tick_due[slot] = slot_active[slot] &&
-					 pstop_session_due(&sessions[slot], tick_now_ms);
-		}
+		now_ms = (uint64_t)k_uptime_get();
+		gen = begin_tick(now_ms);
 
 		for (int c = 0; c < ESTOP_CHANNELS; c++) {
 			k_sem_give(go_sem[c]);
 		}
 
+		/* The semaphore only carries wakeup here, not correctness: a
+		 * timed-out take just means don't wait longer, not that the
+		 * sampler's own generation stamp (checked in run_tick_body()
+		 * via samplers_published()) is untrustworthy. A sampler that
+		 * gives late still cannot make its stale frame look current.
+		 */
 		for (int c = 0; c < ESTOP_CHANNELS; c++) {
 			if (k_sem_take(done_sem[c], K_MSEC(PSTOP_SAMPLER_DEADLINE_MS)) != 0) {
-				/* A sampler missed its deadline. Treat it as a
-				 * mismatch: we cannot know its frame is current.
-				 */
 				LOG_WRN("sampler %d missed its deadline", c);
-				published = false;
 			}
 		}
 
-		if (published) {
-			(void)comparator_pass();
-		} else {
-			mismatches++;
-		}
-
-		for (int slot = 0; slot < PSTOP_MAX_MACHINES; slot++) {
-			if (slot_active[slot]) {
-				pstop_session_poll(&sessions[slot], tick_now_ms);
-				pstop_session_watchdog(&sessions[slot], tick_now_ms);
-			}
-		}
+		run_tick_body(now_ms, gen);
 
 		k_sleep(K_TIMEOUT_ABS_MS(next));
 	}
@@ -262,3 +324,20 @@ int pstop_lockstep_start(void)
 	LOG_INF("lockstep threads started");
 	return 0;
 }
+
+#ifdef CONFIG_ZTEST
+void pstop_lockstep_test_set_sampler_gen(int channel, uint32_t gen)
+{
+	atomic_set(&sampler_gen[channel], (atomic_val_t)gen);
+}
+
+uint32_t pstop_lockstep_test_tick_gen(void)
+{
+	return (uint32_t)atomic_get(&tick_gen);
+}
+
+bool pstop_lockstep_test_samplers_published(void)
+{
+	return samplers_published((uint32_t)atomic_get(&tick_gen));
+}
+#endif /* CONFIG_ZTEST */

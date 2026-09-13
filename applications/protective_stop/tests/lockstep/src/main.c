@@ -22,6 +22,13 @@
  * transmitting, then split, then healed -- and that progression is the
  * behaviour under test. Only test_01 requires pristine state (sent == 0,
  * channels unprimed); the rest settle and snapshot their own baseline first.
+ *
+ * test_00 is the one exception to all of the above: it is a pure white-box
+ * unit test of the generation-stamp completion check (see lockstep.h), and it
+ * neither depends on nor disturbs the device-model progression -- any real
+ * tick immediately overwrites whatever it pokes into the sampler generations.
+ * It sorts before test_01 by construction, which is convenient but not
+ * load-bearing the way test_01..test_04's ordering is.
  */
 
 #include <string.h>
@@ -104,6 +111,32 @@ static void *suite_setup(void)
 		   "fake machine bind");
 
 	return NULL;
+}
+
+ZTEST(lockstep, test_00_samplers_published_rejects_stale_generation)
+{
+	uint32_t gen;
+
+	/* Manufacture the exact defect the generation stamp exists to catch: a
+	 * sampler's last completion belongs to a stale generation, meaning it
+	 * did not run for the tick under comparison. This is expressible as
+	 * pure state -- no threads, no timing, and unlike a thread-timing test
+	 * it does not self-heal on a uniprocessor.
+	 */
+	gen = pstop_lockstep_test_tick_gen();
+	pstop_lockstep_test_set_sampler_gen(0, gen);
+	pstop_lockstep_test_set_sampler_gen(1, gen);
+	zassert_true(pstop_lockstep_test_samplers_published(),
+		     "both channels at the current generation must publish");
+
+	pstop_lockstep_test_set_sampler_gen(1, gen - 1U);
+	zassert_false(pstop_lockstep_test_samplers_published(),
+		      "a channel stuck on a stale generation must not publish");
+
+	/* Leave both channels at the current generation: the next real tick
+	 * overwrites this regardless, but there is no reason to leave it torn.
+	 */
+	pstop_lockstep_test_set_sampler_gen(1, gen);
 }
 
 ZTEST(lockstep, test_01_silent_until_both_channels_settle)

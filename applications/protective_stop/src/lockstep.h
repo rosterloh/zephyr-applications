@@ -14,11 +14,22 @@
  * Threads, not pinned cores: the safety property is two independent samplers
  * whose encodings must agree, which threads satisfy. This maps onto CONFIG_SMP
  * pinned cores on hardware with no change to the comparator.
+ *
+ * Completion is tracked by a per-tick GENERATION STAMP, not by semaphore
+ * counting. A counting semaphore cannot carry which tick a completion belongs
+ * to: if a sampler misses its deadline, the comparator moves on, but the
+ * sampler still finishes and gives its "done" semaphore -- crediting the
+ * NEXT tick's wait with a completion nothing produced this tick's frame for.
+ * On a uniprocessor this self-heals (the late sampler always finishes before
+ * the comparator's own take, because it runs at a higher priority and never
+ * blocks), which is exactly why it must not be trusted: under CONFIG_SMP
+ * those incidental properties fail, and a stale frame could reach the wire.
  */
 
 #ifndef PROTECTIVE_STOP_LOCKSTEP_H
 #define PROTECTIVE_STOP_LOCKSTEP_H
 
+#include <stdbool.h>
 #include <stdint.h>
 
 #include "session.h"
@@ -51,5 +62,20 @@ uint32_t pstop_lockstep_mismatches(void);
 
 /* Read a slot's session, or NULL if the slot is out of range. */
 const struct pstop_session *pstop_lockstep_session(int slot);
+
+#ifdef CONFIG_ZTEST
+/* Test-only: white-box access to the generation-stamp completion check.
+ *
+ * A sampler's k_sem_give() landing a tick late must not be mistaken for
+ * "this tick's frame is current" -- that stale-completion defect is invisible
+ * to any thread-timing test (it self-heals on a uniprocessor and only
+ * manifests under CONFIG_SMP), so it is pinned here as pure state instead:
+ * manufacture a stale generation directly and assert the comparator refuses
+ * to publish it.
+ */
+void pstop_lockstep_test_set_sampler_gen(int channel, uint32_t gen);
+uint32_t pstop_lockstep_test_tick_gen(void);
+bool pstop_lockstep_test_samplers_published(void);
+#endif /* CONFIG_ZTEST */
 
 #endif /* PROTECTIVE_STOP_LOCKSTEP_H */
