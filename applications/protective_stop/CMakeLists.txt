@@ -15,6 +15,7 @@ target_sources(app PRIVATE
   src/estop_gpio.c
   src/app_settings.c
   src/session.c
+  src/lockstep.c
   ${PSTOP_C_SRCS}
 )
 
