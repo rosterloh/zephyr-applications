@@ -262,20 +262,50 @@ equivalent is the board's boot button plus `esptool`.
    `zephyr/scripts/coredump/`. This is documented in the app README so nobody
    points the wrong decoder at it.
 
-## Board definition
+## Board
 
-New out-of-tree HWMv2 board, `boards/waveshare/esp32s3_eth/`, following the
-existing `boards/adafruit/qt_py_esp32c3/` and `boards/robotis/openrb_150/`
-pattern.
+**The board already exists** in the `rosterloh-drivers` module as
+`boards/waveshare/esp32_s3_eth/`, board name `waveshare_esp32_s3_eth`,
+qualifier `waveshare_esp32_s3_eth/esp32s3/procpu`. No new board definition is
+needed. The variant is ESP32-S3-WROOM-1U-**N16R8** — 16 MB flash, 8 MB PSRAM,
+i.e. twice the flash of upstream's 8 MB build.
 
-Hardware: ESP32-S3, 8 MB flash, 8 MB octal PSRAM.
+Already provided, and matching upstream's pinout exactly:
 
-Devicetree must provide: the W5500 node on SPI2 (MOSI 11, MISO 12, SCLK 13, CS
-14, INT 10, RST 9; 20 MHz — conservative, the part tolerates ~33 MHz), an
-`espressif,esp32-rmt` controller with pinctrl routing TX0→GPIO17 and TX1→GPIO21,
-two `worldsemi,ws2812-pulse-io` nodes (16 pixels and 1 pixel), a `fixed-partitions`
-layout with a storage partition for ZMS, and MCUboot slot headroom so OTA is
-additive later rather than a reflash-and-lose-settings migration.
+| Item | State |
+|---|---|
+| W5500 on SPI2 — MOSI 11, MISO 12, SCLK 13, CS 14, INT 10, RST 9 | present, `spi-max-frequency = <40000000>` |
+| WiFi, BT HCI, TRNG, WDT | enabled |
+| Console on native USB-Serial/JTAG (UART0 is not broken out) | `zephyr,console = &usb_serial` |
+| `storage_partition` — 192 K @ `0xfb0000` | present, for ZMS |
+| `coredump_partition` — 4 K @ `0xfff000` | present |
+| MCUboot `boot_partition` + `slot0`/`slot1` (5952 K each) + `scratch` | present, from `partitions_0x0_amp_16M.dtsi` |
+| `rmt@60016000`, `compatible = "espressif,esp32-rmt"`, `#pulse-io-cells = <1>` | present in `esp32s3_common.dtsi`, `status = "disabled"` |
+
+Two gaps, belonging in different places:
+
+- **Board PR to `rosterloh-drivers`:** the onboard WS2812 status pixel on
+  GPIO21. It is soldered to the board, so it belongs in the board definition,
+  not an app overlay. Needs `&rmt` enabled with pinctrl routing TX0→GPIO21, and
+  a 1-pixel `worldsemi,ws2812-pulse-io` node.
+- **App overlay:** the external 16-LED ring on GPIO17 (RMT TX1) and the four
+  DPST loopback GPIOs (39/40, 41/42). These are part of the pstop enclosure
+  wiring, not the board, so they are app-specific.
+
+Per the workspace's module policy, the board change is committed and PR'd in
+`rosterloh-drivers` and picked up here by `mise run west-update` — not vendored
+into this repo.
+
+Two consequences worth recording:
+
+- **OTA needs no partition rework.** The layout is already MCUboot-shaped with
+  two app slots and a scratch area, so slice 1's original "leave headroom for
+  OTA" requirement is already satisfied. Whichever of mcumgr or hawkbit is
+  chosen is purely additive.
+- **`coredump_partition` is 4 K.** That is enough for Zephyr's default coredump
+  (registers plus stack), not for a full RAM image. If `/api/coredump` needs to
+  carry more, the partition has to grow — which is a board change, so it should
+  be decided before fielding units rather than after.
 
 ## Layout
 
@@ -283,8 +313,8 @@ additive later rather than a reflash-and-lose-settings migration.
 applications/protective_stop/
   CMakeLists.txt  Kconfig  prj.conf  VERSION  README.md  tests.yaml
   boards/native_sim_native_64.conf
-  boards/esp32s3_eth_esp32s3_procpu.conf
-  boards/esp32s3_eth_esp32s3_procpu.overlay
+  boards/waveshare_esp32_s3_eth_esp32s3_procpu.conf
+  boards/waveshare_esp32_s3_eth_esp32s3_procpu.overlay   # ring + DPST pins
   src/main.c            init, thread spawn
   src/pstop_time.c      the port
   src/estop_verdict.c   pure verdict/debounce/priming logic, no HAL
@@ -336,10 +366,14 @@ depends on all three.
 
 | # | Slice | Done when |
 |---|---|---|
-| 1 | Board definition | `west boards` lists it; `hello_world` and `dhcpv4_client` build and the W5500 gets a lease |
+| 1 | Board gap — PR the onboard GPIO21 status pixel + `&rmt` enable to `rosterloh-drivers` | `blinky`-equivalent lights the onboard pixel on real hardware |
 | 2 | Safety core on `native_sim` — `pstop_c` project, time port, lockstep, `gpio_emul` channels, sessions, ZMS Settings | ztests green **and** the sim remote bonds, heartbeats and arms against upstream's `machine_app` |
 | 3 | Control plane on `native_sim` — HTTP server, `/state.json`, `/api/*`, admin auth | upstream's Python tooling drives the sim unmodified |
-| 4 | Hardware bring-up — real GPIO loopback, W5500, both WS2812 chains, WiFi routes, coredump routes | a physical press stops a real machine; the ring shows per-slot state |
+| 4 | Hardware bring-up — app overlay for the ring and DPST pins, real GPIO loopback, W5500, WiFi routes, coredump routes | a physical press stops a real machine; the ring shows per-slot state |
+
+Slice 1 was originally scoped as writing a board definition from scratch. It
+is now a small additive PR, because the board already exists with the W5500,
+partitions and MCUboot layout in place.
 
 ## Deferred decisions
 
@@ -349,7 +383,8 @@ depends on all three.
   upstream's direct `POST /admin/api/ota` upload; hawkbit is device-initiated
   polling, which matches upstream's `fleet-ota/check` + interval model. Both
   need MCUboot and sysbuild, which `rasprover` already demonstrates in this
-  workspace. No abstraction seam will be built speculatively — slice 1's
-  partition layout is the only thing that must anticipate it.
+  workspace, and the board's partition table is already MCUboot-shaped — so
+  nothing in the earlier slices has to anticipate the choice, and no
+  abstraction seam will be built speculatively.
 - **Contributing `zephyr/module.yml` upstream**, after which the west project
   becomes a conventional Zephyr module.
