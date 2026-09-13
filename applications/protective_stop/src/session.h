@@ -94,9 +94,12 @@ void pstop_session_close(struct pstop_session *s);
 uint32_t pstop_session_send_period_ms(const struct pstop_session *s);
 
 /* How long without a reply before this session re-bonds. Always greater than
- * the machine's own hb_ms * max_missed bond-drop timeout.
+ * the machine's own hb_ms * max_missed bond-drop timeout. hb_ms is adopted
+ * unclamped from the wire, so this widens to uint64_t rather than clamping it
+ * -- a 32-bit accumulator would wrap and could undercut the machine's own
+ * timeout.
  */
-uint32_t pstop_session_rebond_after_ms(const struct pstop_session *s);
+uint64_t pstop_session_rebond_after_ms(const struct pstop_session *s);
 
 /* Is this session due to transmit on this tick? */
 bool pstop_session_due(const struct pstop_session *s, uint64_t now_ms);
