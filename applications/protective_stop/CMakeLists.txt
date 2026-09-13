@@ -6,17 +6,13 @@ project(protective_stop)
 
 zephyr_compile_options(-fdiagnostics-color=always)
 
-include(${CMAKE_CURRENT_SOURCE_DIR}/pstop_c.cmake)
-
 target_sources(app PRIVATE
   src/main.c
-  src/pstop_time.c
   src/estop_verdict.c
   src/estop_gpio.c
   src/app_settings.c
   src/session.c
   src/lockstep.c
-  ${PSTOP_C_SRCS}
 )
 
-target_include_directories(app PRIVATE ${PSTOP_C_INCLUDE} src)
+target_include_directories(app PRIVATE src)
