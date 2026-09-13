@@ -72,6 +72,13 @@ ZTEST(pstop_session, test_counter_advances_only_on_commit)
 {
 	uint8_t a[PSTOP_MESSAGE_SIZE];
 	uint8_t b[PSTOP_MESSAGE_SIZE];
+	uint32_t counter_before;
+	uint64_t last_send_before;
+	uint32_t sent_before;
+
+	counter_before = sess.proto.msg_counter;
+	last_send_before = sess.last_send_ms;
+	sent_before = sess.sent;
 
 	/* Building twice without committing must produce identical bytes --
 	 * this is exactly what the two lockstep samplers do, and if build()
@@ -80,6 +87,14 @@ ZTEST(pstop_session, test_counter_advances_only_on_commit)
 	pstop_session_build(&sess, PSTOP_MESSAGE_OK, 5000ULL, a);
 	pstop_session_build(&sess, PSTOP_MESSAGE_OK, 5000ULL, b);
 	zassert_mem_equal(a, b, PSTOP_MESSAGE_SIZE, "two builds must agree");
+
+	/* Pin the property at the state level too, not just at the output:
+	 * build() must not mutate any session field, even one that happens
+	 * not to reach the encoding.
+	 */
+	zassert_equal(sess.proto.msg_counter, counter_before, "build must not advance the counter");
+	zassert_equal(sess.last_send_ms, last_send_before, "build must not touch last_send_ms");
+	zassert_equal(sess.sent, sent_before, "build must not touch the sent counter");
 }
 
 ZTEST(pstop_session, test_committed_sends_have_contiguous_counters)
