@@ -21,6 +21,10 @@ int pstop_session_open(struct pstop_session *s, int slot, const struct pstop_pee
 	int sock;
 	int ret;
 
+	if (s != NULL) {
+		s->sock = -1;
+	}
+
 	if ((s == NULL) || (peer == NULL) || (slot < 0) || (slot >= PSTOP_MAX_MACHINES)) {
 		return -EINVAL;
 	}
@@ -101,10 +105,10 @@ uint32_t pstop_session_send_period_ms(const struct pstop_session *s)
 	return period;
 }
 
-uint32_t pstop_session_rebond_after_ms(const struct pstop_session *s)
+uint64_t pstop_session_rebond_after_ms(const struct pstop_session *s)
 {
-	uint32_t derived =
-		(s->hb_ms * PSTOP_REBOND_MACHINE_MAX_MISSED) + PSTOP_REBOND_JITTER_MARGIN_MS;
+	uint64_t derived = ((uint64_t)s->hb_ms * (uint64_t)PSTOP_REBOND_MACHINE_MAX_MISSED) +
+			   PSTOP_REBOND_JITTER_MARGIN_MS;
 
 	return (derived < PSTOP_REBOND_FLOOR_MS) ? PSTOP_REBOND_FLOOR_MS : derived;
 }

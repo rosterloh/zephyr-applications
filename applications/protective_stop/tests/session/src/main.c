@@ -165,4 +165,16 @@ ZTEST(pstop_session, test_rebond_watchdog_has_a_floor)
 		     "pre-reply watchdog must still have a sane floor");
 }
 
+ZTEST(pstop_session, test_rebond_watchdog_does_not_overflow_on_hostile_hb_ms)
+{
+	/* hb_ms is adopted unclamped from the wire, so it is hostile input.
+	 * hb_ms * 5 must not wrap a 32-bit accumulator and undercut the
+	 * machine's own bond-drop timeout -- that would invert the invariant
+	 * this function exists to guarantee.
+	 */
+	sess.hb_ms = 0xFFFFFFFFU;
+	zassert_true(pstop_session_rebond_after_ms(&sess) > ((uint64_t)sess.hb_ms * 5U),
+		     "watchdog must still outlast the machine's timeout at the top of the range");
+}
+
 ZTEST_SUITE(pstop_session, NULL, suite_setup, test_before, test_after, NULL);
