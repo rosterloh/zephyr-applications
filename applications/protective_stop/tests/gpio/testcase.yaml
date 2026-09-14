@@ -5,8 +5,13 @@ tests:
       - pstop
       - safety
       - gpio
-    # gpio_emul is the simulated DPST wire, so this is native_sim-only.
+    # gpio_emul stands in for the DPST wire, and it is not tied to an
+    # architecture -- CONFIG_GPIO_EMUL only needs a devicetree node. So this
+    # also runs on qemu_cortex_m3, which matters because native_sim is
+    # Linux-only and this is one of the suites a macOS host can run.
+    # Each platform supplies its own controller via boards/*.overlay.
     platform_allow:
       - native_sim/native/64
+      - qemu_cortex_m3
     integration_platforms:
       - native_sim/native/64
