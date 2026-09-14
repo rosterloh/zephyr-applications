@@ -1,0 +1,23 @@
+# This file is provided so that the application can be compiled using Twister,
+# the Zephyr testing tool. In this file, multiple combinations can be specified,
+# so that you can easily test all of them locally or in CI.
+#
+# The hardware entry matters as much as the native_sim one. The unit suites
+# under tests/ all run on native_sim, so nothing exercised the ESP32-S3 target
+# even though mise.toml advertised it -- and that build was broken for some
+# time without anyone noticing, because estop_gpio.c reads its loopback pins
+# from a zephyr,user node that only existed in the native_sim overlay.
+# Build-testing both boards here is what stops that recurring.
+sample:
+  description: Protective-stop remote for the Polymath pstop protocol
+  name: protective-stop
+common:
+  build_only: true
+  platform_allow:
+    - native_sim/native/64
+    - waveshare_esp32_s3_eth/esp32s3/procpu
+  integration_platforms:
+    - native_sim/native/64
+    - waveshare_esp32_s3_eth/esp32s3/procpu
+tests:
+  app.protective_stop.default: {}
