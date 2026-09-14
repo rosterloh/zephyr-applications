@@ -96,5 +96,5 @@ manifest:
     # in the application changes.
     - name: protective-stop
       url: https://github.com/rosterloh/protective-stop.git
-      revision: 767512670e2fb478afa44bc9c5ca37727faa1d97
+      revision: b6020db7993a5b0e5abfc834072451ebf0113bac
       path: deps/modules/lib/protective-stop
