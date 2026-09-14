@@ -78,12 +78,23 @@ manifest:
     # state machine must be a deliberate, reviewed bump.
     #
     # TEMPORARILY sourced from our fork. The pinned commit is upstream's
-    # 4ce8094 plus the Zephyr module support in
-    # polymathrobotics/protective-stop#121 -- applications/protective_stop
-    # selects CONFIG_PSTOP, which does not exist upstream yet. Point this
-    # back at polymathrobotics and bump to the merge commit once #121 lands;
-    # nothing else needs to change.
+    # 4ce8094 plus two changes, each open as its own upstream PR:
+    #
+    #   #121  zephyr/module.yml + Kconfig + CMakeLists, so pstop_c builds as
+    #         a Zephyr module. applications/protective_stop selects
+    #         CONFIG_PSTOP, which does not exist upstream yet.
+    #   #129  endian.c reads and writes little-endian fields byte-wise.
+    #         Upstream casts a uint8_t* at an unaligned offset to
+    #         uint32_t*/uint64_t* -- every multi-byte field in the 48-byte
+    #         frame is unaligned, so decoding faults on any target that traps
+    #         it. x86 and Xtensa absorb it; Cortex-M3 does not, which is what
+    #         blocks running the unit suites on macOS via qemu_cortex_m3.
+    #
+    # They touch disjoint trees (#121 only zephyr/, #129 only pstop_c/) and
+    # the fork's zephyr-integration branch carries both. Point this back at
+    # polymathrobotics and bump to the merge commit once they land; nothing
+    # in the application changes.
     - name: protective-stop
       url: https://github.com/rosterloh/protective-stop.git
-      revision: 1b9fe90366481e406cf5d53ade667501df3b6d7a
+      revision: 767512670e2fb478afa44bc9c5ca37727faa1d97
       path: deps/modules/lib/protective-stop
