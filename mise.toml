@@ -1,3 +1,11 @@
+[settings]
+# Record the concrete versions/checksums these `latest` selectors resolve to in
+# mise.lock (committed). Without it the toolchain floats: a cmake or ccache
+# release changes CI behaviour with no commit in this repo, while uv.lock pins
+# every Python package exactly. Refresh deliberately with `mise lock --bump`
+# (Dependabot has no mise ecosystem — see .github/dependabot.yml).
+lockfile = true
+
 [tools]
 python = "3.14"
 uv = "latest"
@@ -6,7 +14,10 @@ ninja = "latest"
 ccache = "latest"
 # nanopb's generator shells out to a real protoc (deps/modules/lib/nanopb's
 # generator/protoc is only a wrapper), needed by esp-hosted-mcu's protobuf RPC.
-protoc = "latest"
+# Lazy: only data_collection's protobuf RPC pulls it in, so every `mise run fmt`
+# or `sync` shouldn't pay for the download. The shim stays on PATH, so
+# `mise x -- protoc` still works and installs on first use.
+protoc = { version = "latest", lazy = true }
 
 [env]
 _.python.venv = { path = ".venv", create = true }
@@ -40,6 +51,11 @@ description = "Format Python (ruff, line-length 120)"
 
 [tasks.compdb]
 description = "Merge every builds/**/compile_commands.json into ./compile_commands.json for clangd. clangd walks up from each source file and finds it at the workspace root, so no per-app .clangd is needed. A source compiled by several apps keeps whichever build's flags come first; re-run after building the app you are working on to put its flags in front."
+# Skip the merge when no build database has changed since the last run. Building
+# an app rewrites its compile_commands.json, so the reorder-by-rebuilding
+# workflow above still triggers a re-merge.
+sources = ["builds/*/compile_commands.json"]
+outputs = ["compile_commands.json"]
 run = """
 set -e
 files=$(find builds -name compile_commands.json 2>/dev/null)
@@ -55,6 +71,7 @@ echo "merged $(printf '%s\\n' "$files" | wc -l | tr -d ' ') databases -> compile
 [tasks."clean-twister"]
 run = "find . \\( -path ./deps -o -path ./.venv \\) -prune -o -type d -name 'twister-out*' -prune -exec rm -rf {} +"
 description = "Remove all twister-out* directories anywhere in the tree"
+confirm = "Recursively delete every twister-out* directory in the workspace?"
 
 [tasks.setup]
 run = "mise run west-update && mise run sdk-install && mise run blobs-fetch"
@@ -387,6 +404,30 @@ description = "Validate CONFIG_* symbols cited in .agents/skills/ against deps/,
 [tasks."run-rasprover-sim"]
 run = "west build -b native_sim/native/64 --build-dir builds/rasprover -t run applications/rasprover"
 description = "Run an already-built native_sim rasprover image."
+
+# Run with `mise doctor project`. These check the workspace preconditions whose
+# absence surfaces as a confusing build failure rather than a clear error — a
+# missing SDK reads as a toolchain error, a missing zenoh config.h as a failed
+# #include deep in a module.
+[doctor.checks.west-deps]
+description = "west dependencies are cloned into deps/"
+run = "test -d deps/zephyr/.git"
+hint = "Run `mise run setup` (first time) or `mise run west-update`."
+
+[doctor.checks.venv]
+description = ".venv exists with the pinned Python"
+run = "test -x .venv/bin/python"
+hint = "Run `mise run sync`."
+
+[doctor.checks.zephyr-sdk]
+description = "Zephyr SDK matching deps/zephyr/SDK_VERSION is installed"
+run = 'test -d "${HOME}/zephyr-sdk-$(cat deps/zephyr/SDK_VERSION)"'
+hint = "Run `mise run sdk-install` (needs deps/ present first)."
+
+[doctor.checks.zenoh-config]
+description = "zenoh-pico config.h has been generated"
+run = "test -f deps/modules/lib/zenoh/include/zenoh-pico/config.h"
+hint = "Run `mise run patch-zenoh`. Without it, zenoh apps fail on a missing include."
 
 [tasks."agent-build"]
 description = "Build with tail-truncated log output. Usage: [TAIL_S=5] [TAIL_F=50] mise run agent-build [--board <board>] [--sysbuild] <app>"

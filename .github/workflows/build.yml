@@ -26,6 +26,13 @@ on:
       - 'LICENSE'
   workflow_dispatch:
 
+# Install tools strictly from mise.lock: fail if a tool has no pre-resolved
+# entry for linux-x64 rather than silently reaching out to GitHub/aqua and
+# resolving `latest` to whatever shipped today. Keeps CI on the same toolchain
+# versions as a local checkout.
+env:
+  MISE_LOCKED: 1
+
 # A newer push supersedes whatever is in flight for the same ref.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
