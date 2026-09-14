@@ -1,0 +1,42 @@
+/*
+ * Copyright (c) 2026 Richard Osterloh <richard.osterloh@gmail.com>
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * Same dual-channel stop-switch loopback as the native_sim overlay, on an
+ * emulated GPIO controller this board does not otherwise have.
+ *
+ * Why this exists: native_sim is Linux-only, so on a macOS host none of this
+ * application's suites could run. gpio_emul is not tied to an architecture --
+ * CONFIG_GPIO_EMUL only depends on DT_HAS_ZEPHYR_GPIO_EMUL_ENABLED -- so
+ * declaring a controller here is enough to make the HAL-glue tests run
+ * anywhere the Zephyr SDK does, qemu_cortex_m3 included.
+ *
+ * The board's own gpio0..gpio6 are real ti,stellaris-gpio controllers, which
+ * cannot be driven by gpio_emul_input_set_dt(). Hence a separate emulated
+ * controller rather than an override of one of those.
+ *
+ * Unlike the native_sim overlay, this one includes the GPIO dt-bindings
+ * header: native_sim.dts already pulls it in, the lm3s6965 tree does not.
+ */
+
+#include <zephyr/dt-bindings/gpio/gpio.h>
+
+/ {
+	gpio_emul0: gpio_emul {
+		status = "okay";
+		compatible = "zephyr,gpio-emul";
+		rising-edge;
+		falling-edge;
+		high-level;
+		low-level;
+		gpio-controller;
+		#gpio-cells = <2>;
+	};
+
+	zephyr,user {
+		estop-a-out-gpios = <&gpio_emul0 0 GPIO_ACTIVE_HIGH>;
+		estop-a-in-gpios  = <&gpio_emul0 1 GPIO_ACTIVE_HIGH>;
+		estop-b-out-gpios = <&gpio_emul0 2 GPIO_ACTIVE_HIGH>;
+		estop-b-in-gpios  = <&gpio_emul0 3 GPIO_ACTIVE_HIGH>;
+	};
+};
