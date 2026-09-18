@@ -10,7 +10,28 @@ LOG_MODULE_REGISTER(main, LOG_LEVEL_DBG);
 #include "app_time.h"
 #include "app_watchdog.h"
 #include "app_zenoh.h"
+#include <zephyr/drivers/i2c.h>
+#include <zephyr/init.h>
 #include <zephyr/kernel.h>
+
+/* i2c0 comes up busy from a cold boot, so the SSD1306, ICM-20948 and INA219 all
+ * fail their init with -EBUSY and stay DISABLED for the life of the boot --
+ * Zephyr never retries a failed driver init. i2c_esp32 provides .recover_bus
+ * but nothing calls it, so clear the bus here, after the controller
+ * (I2C_INIT_PRIORITY=50) and before its children (DISPLAY=85, SENSOR=90).
+ */
+static int recover_i2c0(void)
+{
+	const struct device *i2c0 = DEVICE_DT_GET(DT_NODELABEL(i2c0));
+
+	if (!device_is_ready(i2c0)) {
+		return -ENODEV;
+	}
+
+	return i2c_recover_bus(i2c0);
+}
+
+SYS_INIT(recover_i2c0, POST_KERNEL, 60);
 
 static k_tid_t _system_thread = 0;
 
