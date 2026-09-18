@@ -1,0 +1,6 @@
+west-commands:
+  - file: scripts/west_commands/flash_small_blocks.py
+    commands:
+      - name: flash-small-blocks
+        class: FlashSmallBlocks
+        help: flash an Espressif image in small blocks (CH343 bridge workaround)
