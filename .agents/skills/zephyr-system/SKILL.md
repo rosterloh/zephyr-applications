@@ -23,7 +23,7 @@ description: >
 
 # Zephyr System
 
-Validated against: Zephyr 4.4.99 (558fdf2ce48b, 2026-09-07). Re-check with `mise run check-skills`.
+Validated against: Zephyr 4.4.99 (47ea4fd92683, 2026-09-18). Re-check with `mise run check-skills`.
 
 ## Scope
 
