@@ -15,16 +15,27 @@ Board: `ros_driver/esp32/procpu` (defined in [rosterloh-drivers](https://github.
 
 ## Flash layout
 
-MCUboot is the bootloader. The partition table is defined in the board DTS:
+MCUboot is the bootloader. The board DTS includes Espressif's standard AMP
+table, `partitions_0x0_amp_4M.dtsi`:
 
 | Partition | Offset | Size | Purpose |
 |-----------|--------|------|---------|
-| `mcuboot` | 0x1000 | 60 KB | Bootloader |
-| `slot0` | 0x10000 | 1 MB | Primary application image |
-| `slot1` | 0x110000 | 1 MB | OTA update image |
-| `storage` | 0x250000 | 24 KB | Zephyr settings (ZMS) |
+| `mcuboot` | 0x0 | 64 KB | Bootloader |
+| `sys` | 0x10000 | 64 KB | Reserved |
+| `slot0` | 0x20000 | 1344 KB | Primary application image |
+| `slot1` | 0x170000 | 1344 KB | OTA update image |
+| `slot0_appcpu` | 0x2C0000 | 448 KB | APPCPU image |
+| `slot1_appcpu` | 0x330000 | 448 KB | APPCPU OTA image |
+| `storage` | 0x3B0000 | 192 KB | Zephyr settings (ZMS) |
+| `coredump` | 0x3FF000 | 4 KB | Coredump area |
 
 MCUboot is configured in **swap-using-move** mode (the ESP32 default): on reboot after an OTA upload, MCUboot moves the new image from slot1 into slot0 before booting it.
+
+> **This layout changed.** The board previously carried a hand-rolled table with
+> `mcuboot` at 0x1000 and `slot0` at 0x10000. Units flashed with that layout
+> cannot take an OTA update to this one — they need a wired reflash. The change
+> was made so the board has an APPCPU slot at all; without one the
+> `ros_driver/esp32/appcpu` target could not be configured.
 
 ## Building
 

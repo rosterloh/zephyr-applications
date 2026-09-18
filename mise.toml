@@ -21,6 +21,10 @@ protoc = { version = "latest", lazy = true }
 
 [env]
 _.python.venv = { path = ".venv", create = true }
+# Espressif's QEMU fork, installed by `mise run qemu-install`. The Zephyr
+# espressif_qemu emu platform probes this at CMake configure time; pointing at
+# it unconditionally is harmless when it is not installed (configure just warns).
+ESPRESSIF_QEMU_PATH = "{{config_root}}/tools/qemu-espressif/bin"
 
 # Remaining Ubuntu host deps from deps/zephyr/doc/develop/getting_started/index.rst
 # that have no mise dev-tool backend (no upstream GitHub releases / not
@@ -129,6 +133,48 @@ fi
 west sdk install --version "$SDK_VER" \
   ${GITHUB_TOKEN:+--personal-access-token "$GITHUB_TOKEN"} \
   -t $TOOLCHAINS
+"""
+
+[tasks."qemu-install"]
+description = "Install Espressif's QEMU fork (xtensa) into tools/qemu-espressif, for the /qemu board variants (waveshare_esp32_s3_eth/esp32s3/procpu/qemu). Idempotent."
+run = """
+set -e
+REL="esp-develop-9.2.2-20260417"
+VER="esp_develop_9.2.2_20260417"
+DEST="${MISE_PROJECT_ROOT}/tools/qemu-espressif"
+
+# Only the xtensa build is fetched: esp32s3 (and esp32) are Xtensa. Add the
+# qemu-riscv32-softmmu asset here if a /qemu variant is ever added for a
+# RISC-V SoC (esp32c3/c6).
+case "$(uname -m)" in
+  x86_64)  ARCH="x86_64-linux-gnu" ;;
+  aarch64) ARCH="aarch64-linux-gnu" ;;
+  *) echo "no Espressif QEMU build for $(uname -m)" >&2; exit 1 ;;
+esac
+TARBALL="qemu-xtensa-softmmu-${VER}-${ARCH}.tar.xz"
+
+if [ -x "${DEST}/bin/qemu-system-xtensa" ]; then
+    echo "Espressif QEMU already at ${DEST}"
+    "${DEST}/bin/qemu-system-xtensa" --version | head -1
+    exit 0
+fi
+
+TMP=$(mktemp -d)
+trap 'rm -rf "$TMP"' EXIT
+echo "Fetching ${TARBALL} (${REL})"
+gh release download "$REL" --repo espressif/qemu -p "$TARBALL" -p '*checksum.sha256' -D "$TMP"
+
+# Verify before extracting: this is a prebuilt binary off the network.
+(cd "$TMP" && grep -F " *${TARBALL}" ./*checksum.sha256 | sha256sum -c -)
+
+mkdir -p "$(dirname "$DEST")"
+rm -rf "$DEST"
+# The tarball unpacks to a single top-level qemu/ directory.
+tar -xf "${TMP}/${TARBALL}" -C "$TMP"
+mv "${TMP}/qemu" "$DEST"
+
+"${DEST}/bin/qemu-system-xtensa" --version | head -1
+echo "Installed to ${DEST}; ESPRESSIF_QEMU_PATH already points there via mise.toml [env]."
 """
 
 [tasks."patch-zenoh"]

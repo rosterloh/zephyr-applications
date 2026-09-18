@@ -222,10 +222,10 @@ void ring_buf_init(struct ring_buf *buf, uint32_t size, uint8_t *data);
 uint32_t ring_buf_put(struct ring_buf *buf, const uint8_t *data, uint32_t size);
 uint32_t ring_buf_get(struct ring_buf *buf, uint8_t *data, uint32_t size);
 uint32_t ring_buf_peek(struct ring_buf *buf, uint8_t *data, uint32_t size);
-uint32_t ring_buf_put_claim(struct ring_buf *buf, uint8_t **data, uint32_t size);
-int ring_buf_put_finish(struct ring_buf *buf, uint32_t size);
-uint32_t ring_buf_get_claim(struct ring_buf *buf, uint8_t **data, uint32_t size);
-int ring_buf_get_finish(struct ring_buf *buf, uint32_t size);
+uint32_t ring_buf_put_ptr(struct ring_buf *buf, uint8_t **data, size_t offset);
+void ring_buf_commit(struct ring_buf *buf, size_t size);
+uint32_t ring_buf_get_ptr(struct ring_buf *buf, uint8_t **data, size_t offset);
+void ring_buf_consume(struct ring_buf *buf, size_t size);
 uint32_t ring_buf_space_get(struct ring_buf *buf);
 uint32_t ring_buf_size_get(struct ring_buf *buf);
 bool ring_buf_is_empty(struct ring_buf *buf);
@@ -684,7 +684,23 @@ Also available: `sys_ringq_peek()`, `sys_ringq_empty()`, `sys_ringq_full()`,
 
 ### Kconfig
 
-Ring buffers are always available (part of core library). No specific Kconfig needed.
+Ring buffers are always available (part of core library). No specific Kconfig
+needed for the byte API shown below.
+
+`CONFIG_RING_BUFFER=y` is only a **compatibility switch**: it selects the legacy
+ring buffer header, restoring the deprecated claim/finish API, the whole item API
+(`ring_buf_item_put`/`ring_buf_item_get`, `RING_BUF_ITEM_DECLARE*`,
+`RING_BUF_ITEM_SIZEOF`) and `ring_buf_internal_reset()`. Code using any of those
+fails to compile with no other hint until this is enabled. Treat it as a
+migration aid, not a feature to turn on for new code.
+
+`ring_buf_get()` also no longer accepts a `NULL` destination to discard data in
+the default (slim) build. To drop bytes without a destination buffer, advance the
+read index directly:
+
+```c
+ring_buf_consume(rb, MIN(count, ring_buf_size_get(rb)));
+```
 
 ### Implementation
 
@@ -726,22 +742,59 @@ uint32_t read = ring_buf_get(&my_ring_buf, rx_data, sizeof(rx_data));
 
 #### Zero-Copy Access (Advanced)
 
-For high-performance scenarios, claim buffer space directly:
+For high-performance scenarios, address the buffer's storage directly. As of
+Zephyr 4.5 this is the `_ptr` API; the old `ring_buf_put_claim()` /
+`ring_buf_put_finish()` pair is deprecated and only compiles with
+`CONFIG_RING_BUFFER=y`.
+
+The `offset` argument is the number of bytes past the current index that you have
+already tentatively reserved — pass `0` for a fresh reservation. The return value
+is the *contiguous* space available, which may be less than you want because the
+region wraps at the end of the buffer, so always check it.
 
 ```c
-/* Producer: claim space */
+/* Producer: reserve space, then commit what was actually written */
 uint8_t *ptr;
-uint32_t space = ring_buf_put_claim(&my_ring_buf, &ptr, 100);
-/* Write directly to ptr (up to 'space' bytes) */
-memcpy(ptr, source_data, actual_len);
-ring_buf_put_finish(&my_ring_buf, actual_len);
+uint32_t space = ring_buf_put_ptr(&my_ring_buf, &ptr, 0);
+uint32_t len = MIN(space, source_len);
 
-/* Consumer: get data pointer */
+memcpy(ptr, source_data, len);
+ring_buf_commit(&my_ring_buf, len);   /* advances the write index */
+
+/* Consumer: read in place, then release */
 uint8_t *ptr;
-uint32_t available = ring_buf_get_claim(&my_ring_buf, &ptr, 100);
-/* Read directly from ptr */
+uint32_t available = ring_buf_get_ptr(&my_ring_buf, &ptr, 0);
+
 process_data(ptr, available);
-ring_buf_get_finish(&my_ring_buf, available);
+ring_buf_consume(&my_ring_buf, available);   /* advances the read index */
+```
+
+Nothing is published until `ring_buf_commit()` (or consumed until
+`ring_buf_consume()`), so a **speculative write you decide to abandon** needs no
+cancel call — just return without committing. That replaces the old
+`ring_buf_put_finish(rb, 0)` idiom.
+
+To **backfill** — lay out a header, write the payload, then fill the header in
+before publishing — reserve each region with an increasing `offset` and commit
+once at the end:
+
+```c
+struct hdr *h;
+uint8_t *payload;
+
+if (ring_buf_put_ptr(&rb, (uint8_t **)&h, 0) < sizeof(*h)) {
+    return -ENOMEM;              /* nothing committed, nothing to undo */
+}
+uint32_t avail = ring_buf_put_ptr(&rb, &payload, sizeof(*h));
+if (avail == 0) {
+    return -ENOMEM;
+}
+
+uint32_t len = MIN(avail, payload_size);
+memcpy(payload, source_data, len);
+h->len = len;                    /* header still unpublished, safe to fill in */
+
+ring_buf_commit(&rb, sizeof(*h) + len);
 ```
 
 #### Querying State
@@ -761,8 +814,8 @@ ring_buf_reset(&my_ring_buf);  /* Clear buffer */
 | `ring_buf_init` | Runtime initialization |
 | `ring_buf_put` | Write bytes (copy) |
 | `ring_buf_get` | Read bytes (copy) |
-| `ring_buf_put_claim` / `ring_buf_put_finish` | Zero-copy write |
-| `ring_buf_get_claim` / `ring_buf_get_finish` | Zero-copy read |
+| `ring_buf_put_ptr` / `ring_buf_commit` | Zero-copy write (claim/finish is deprecated) |
+| `ring_buf_get_ptr` / `ring_buf_consume` | Zero-copy read (claim/finish is deprecated) |
 | `ring_buf_peek` | Read without consuming |
 | `ring_buf_space_get` | Get free space |
 | `ring_buf_size_get` | Get used space |
@@ -777,7 +830,7 @@ ring_buf_reset(&my_ring_buf);  /* Clear buffer */
 | **ISR Safe** | Yes (no blocking calls) | Yes (with K_NO_WAIT) |
 | **Overhead** | Minimal | Higher (kernel object) |
 | **Use Case** | Drivers, low-level | Application-level streams |
-| **Zero-Copy** | Yes (claim/finish) | No |
+| **Zero-Copy** | Yes (`_ptr` + commit/consume) | No |
 | **Thread Safety** | SPSC lock-free; MPMC needs external lock | Built-in |
 
 ### Common Patterns
