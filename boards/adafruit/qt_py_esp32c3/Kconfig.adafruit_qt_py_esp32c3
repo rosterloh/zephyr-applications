@@ -3,4 +3,4 @@
 # Copyright (c) 2025 Richard Osterloh
 
 config BOARD_ADAFRUIT_QT_PY_ESP32C3
-	select SOC_ESP32C3_FN4
+	select SOC_ESP32C3

@@ -6,7 +6,7 @@
 
 /dts-v1/;
 
-#include <espressif/esp32c3/esp32c3_fx4.dtsi>
+#include <espressif/esp32c3/esp32c3.dtsi>
 // #include <zephyr/dt-bindings/led/led.h>
 #include <zephyr/dt-bindings/input/input-event-codes.h>
 #include "adafruit_qt_py_esp32c3-pinctrl.dtsi"
@@ -51,6 +51,15 @@
 		gpio-map = <0 0 &gpio0 6 0>, /* SCL */
 			   <1 0 &gpio0 5 0>; /* SDA */
 	};
+};
+
+/* 4MB flash on the QT Py ESP32-C3; the SoC dtsi no longer sets reg or ranges.
+ * Partitions come from partitions_0x0_default.dtsi, included above.
+ */
+&flash0 {
+	reg = <0x0 DT_SIZE_M(4)>;
+	ranges = <0x0 0x0 DT_SIZE_M(4)>;
+	status = "okay";
 };
 
 &uart0 {
