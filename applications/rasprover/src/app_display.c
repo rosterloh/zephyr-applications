@@ -88,6 +88,7 @@ void app_display_update_power(double v, double i, double p)
 	char buf[32];
 
 	snprintf(buf, sizeof(buf), "%.2fV  %.3fA  %.2fW", v, i, p);
+
 	lv_label_set_text(power_label, buf);
 }
 
@@ -135,9 +136,14 @@ K_WORK_DEFINE(init_work, initialise_display_cb);
 int app_display_init(void)
 {
 #if IS_ENABLED(CONFIG_APP_DISPLAY_WORK_QUEUE_DEDICATED)
+	/* Named so its stack shows up identifiably in `kernel thread list`,
+	 * which is how the stack budget above is checked.
+	 */
+	static const struct k_work_queue_config cfg = {.name = "display"};
+
 	k_work_queue_start(&display_work_q, display_work_stack_area,
 			   K_THREAD_STACK_SIZEOF(display_work_stack_area),
-			   CONFIG_APP_DISPLAY_DEDICATED_THREAD_PRIORITY, NULL);
+			   CONFIG_APP_DISPLAY_DEDICATED_THREAD_PRIORITY, &cfg);
 #endif
 	k_work_submit_to_queue(app_display_work_q(), &init_work);
 	return 0;
