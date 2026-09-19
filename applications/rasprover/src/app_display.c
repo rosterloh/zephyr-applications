@@ -8,6 +8,7 @@ LOG_MODULE_REGISTER(app_display, LOG_LEVEL_DBG);
 #include <zephyr/init.h>
 #include <zephyr/kernel.h>
 #include <lvgl.h>
+#include <lvgl_zephyr.h>
 
 #include <zephyr/app_version.h>
 
@@ -21,9 +22,14 @@ static lv_obj_t *status_label;
 
 /* --- tick / work --------------------------------------------------------- */
 
+/* LVGL is not thread-safe and app_display_update_power() is called from the
+ * main thread, so every LVGL call is taken under the module's mutex.
+ */
 static void display_tick_cb(struct k_work *work)
 {
+	lvgl_lock();
 	lv_timer_handler();
+	lvgl_unlock();
 }
 
 K_WORK_DEFINE(display_tick_work, display_tick_cb);
@@ -88,7 +94,10 @@ void app_display_update_power(double v, double i, double p)
 	char buf[32];
 
 	snprintf(buf, sizeof(buf), "%.2fV  %.3fA  %.2fW", v, i, p);
+
+	lvgl_lock();
 	lv_label_set_text(power_label, buf);
+	lvgl_unlock();
 }
 
 /* --- screen build -------------------------------------------------------- */
@@ -123,7 +132,9 @@ static void initialise_display_cb(struct k_work *work)
 		return;
 	}
 
+	lvgl_lock();
 	lv_scr_load(build_screen());
+	lvgl_unlock();
 	initialised = true;
 
 	k_work_submit_to_queue(app_display_work_q(), &unblank_work);
@@ -135,9 +146,14 @@ K_WORK_DEFINE(init_work, initialise_display_cb);
 int app_display_init(void)
 {
 #if IS_ENABLED(CONFIG_APP_DISPLAY_WORK_QUEUE_DEDICATED)
+	/* Named so its stack shows up identifiably in `kernel thread list`,
+	 * which is how the stack budget above is checked.
+	 */
+	static const struct k_work_queue_config cfg = {.name = "display"};
+
 	k_work_queue_start(&display_work_q, display_work_stack_area,
 			   K_THREAD_STACK_SIZEOF(display_work_stack_area),
-			   CONFIG_APP_DISPLAY_DEDICATED_THREAD_PRIORITY, NULL);
+			   CONFIG_APP_DISPLAY_DEDICATED_THREAD_PRIORITY, &cfg);
 #endif
 	k_work_submit_to_queue(app_display_work_q(), &init_work);
 	return 0;
