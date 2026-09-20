@@ -43,21 +43,31 @@ static void wdt_timeout_cb(int channel_id, void *user_data)
 	LOG_ERR("Task watchdog timeout: '%s' (channel %d) stalled - rebooting",
 		(const char *)user_data, channel_id);
 
-	/* A stall produces no fatal error, so nothing else would dump. The
-	 * logging backend puts the log subsystem in panic mode itself and
-	 * writes from a static buffer, which is why this is callable from here;
-	 * a backend that needs the network stack would not be. There is no
-	 * exception frame to pass — the CPU never faulted — so the dump carries
-	 * thread and memory state without a register block.
+	/* A stall produces no fatal error, so nothing else would dump -- but
+	 * only a backend that is safe from an interrupt may run here, and only
+	 * the logging one is. It puts the log subsystem in panic mode itself and
+	 * writes from a static buffer.
 	 *
-	 * k_current_get() here is the thread the timer interrupted, which is not
-	 * necessarily the stalled one: the stalled thread is typically blocked,
-	 * not running. Under CONFIG_DEBUG_COREDUMP_MEMORY_DUMP_MIN that makes the
-	 * dumped stack a lead rather than an answer. Build with
-	 * CONFIG_DEBUG_COREDUMP_MEMORY_DUMP_THREADS=y to dump every thread's
-	 * stack instead -- slower over the console, but it shows which one is
-	 * wedged and where. */
-	if (IS_ENABLED(CONFIG_DEBUG_COREDUMP)) {
+	 * The flash-partition backend is deliberately excluded even though both
+	 * it and Zephyr's ESP32 flash driver degrade their semaphore waits to
+	 * K_NO_WAIT in ISR context. Two things still break it there: the driver's
+	 * synchronous write and erase are not IRAM-resident, so writing flash
+	 * from an ISR on an XIP part risks executing from a disabled cache, and a
+	 * sector erase does not fit inside CONFIG_TASK_WDT_HW_FALLBACK_DELAY
+	 * (20 ms by default) before the hardware watchdog resets the SoC
+	 * mid-dump. A handler meant to recover the board must not be the thing
+	 * that hangs it.
+	 *
+	 * Dumping a stall to flash needs the write deferred to a high-priority
+	 * thread this handler wakes, plus a fallback delay long enough for the
+	 * erase. Worth doing if stall post-mortems are wanted; not done here.
+	 *
+	 * k_current_get() is also the thread the timer interrupted rather than
+	 * the stalled one, which is typically blocked, so what survives a stall
+	 * today is the channel name logged above -- and that is the diagnostic
+	 * that actually identifies it.
+	 */
+	if (IS_ENABLED(CONFIG_DEBUG_COREDUMP_BACKEND_LOGGING)) {
 		coredump(K_ERR_KERNEL_OOPS, NULL, k_current_get());
 	}
 

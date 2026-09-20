@@ -17,5 +17,6 @@ config APP_WATCHDOG
 	  See applications/common/watchdog/app_watchdog.h for the two usage
 	  shapes and their trade-offs.
 
-	  With CONFIG_DEBUG_COREDUMP enabled, a timeout also emits a coredump
-	  before rebooting.
+	  With the console coredump backend, a timeout also emits a coredump
+	  before rebooting; the flash-partition backend cannot be written from
+	  the timeout handler and is skipped.

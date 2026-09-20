@@ -24,8 +24,10 @@
  *     (data_collection's capture path). A wedged operation then never reaches
  *     its delete and the timeout fires.
  *
- * With CONFIG_DEBUG_COREDUMP enabled, the timeout also emits a coredump before
- * rebooting, so a silent stall produces the same post-mortem a fault would.
+ * With the console coredump backend the timeout also emits a coredump before
+ * rebooting. It is skipped for the flash-partition backend, which cannot
+ * safely write from the timeout handler's ISR context -- see the comment on
+ * wdt_timeout_cb() in app_watchdog.c.
  */
 
 #ifndef APP_WATCHDOG_H

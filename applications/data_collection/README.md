@@ -122,14 +122,28 @@ On a timeout the log names the channel before the board reboots:
 <err> app_watchdog: Task watchdog timeout: 'capture' (channel 1) stalled - rebooting
 ```
 
-**Coredump** (`CONFIG_DEBUG_COREDUMP`) fires on a fault automatically, and from
-the watchdog handler before it reboots — so a silent stall leaves the same
-evidence a fault would. It goes to the console as `#CD:` hex lines.
+**Coredump** (`CONFIG_DEBUG_COREDUMP`) fires on a fault and writes to the
+`coredump` flash partition, so the dump **survives the reboot that follows it**.
+Both boards inherit `partitions_0x2000_default_16M.dtsi`, which already carries
+`coredump_partition` — 4 KB at `0xfff000` — so no devicetree change was needed.
 
-To decode one, capture the console output to a file, then:
+Retrieve it on the next boot, over the shell:
+
+```
+uart:~$ coredump find
+Stored coredump found
+uart:~$ coredump print
+#CD:BEGIN#
+#CD:5a4501000...
+...
+#CD:END#
+uart:~$ coredump erase          # free the partition for the next one
+```
+
+Save that console output to a file, then decode it on the host:
 
 ```bash
-# Strip the dump out of a console capture and rebuild the binary
+# Rebuild the binary from the #CD: lines
 mise x -- python deps/zephyr/scripts/coredump/coredump_serial_log_parser.py \
     console.log coredump.bin
 
@@ -146,20 +160,31 @@ mise x -- python deps/zephyr/scripts/coredump/coredump_gdbserver.py \
 The `.elf` must match the running image exactly. A dump opened against a
 different build resolves to plausible-looking nonsense rather than failing.
 
-Two deliberate choices in `prj.conf`, both worth knowing before changing them:
+`coredump verify` checks the stored dump's integrity, and `coredump error get`
+reports a write that failed or was truncated — a truncated dump is never
+silent.
 
-- **Backend is `LOGGING`, not `LOGGING_UDP`.** UDP would suit a headless box,
-  but it needs a peer address fixed at build time
-  (`CONFIG_DEBUG_COREDUMP_LOGGING_UDP_HOST`) which cannot be committed, and it
-  cannot run from the watchdog handler at all — that is ISR context, and the
-  network stack is not reachable from there. The logging backend enters panic
-  mode and writes from a static buffer, which is. For a one-off headless
-  capture of a *fault* (not a stall), build with
-  `--extra-conf` setting the UDP backend and host, and receive with
-  `deps/zephyr/scripts/coredump/coredump_udp_receiver.py`.
-- **`MEMORY_DUMP_MIN`, not the `LINKER_RAM` default.** The dump is hex over a
-  115200 console; this board's RAM region would take minutes. `MIN` carries the
-  faulting stack, which is what a backtrace needs.
+Three sizing and safety notes, all worth knowing before changing the config:
+
+- **`MEMORY_DUMP_MIN` with a bounded stack top.** The partition is one 4 KB
+  sector. `MIN` enables `THREAD_STACK_TOP` automatically, but its limit
+  defaults to `-1` — unbounded, stack pointer to end of region — so
+  `CONFIG_DEBUG_COREDUMP_THREAD_STACK_TOP_LIMIT_FOR_CURRENT=2048` caps it.
+  2 KB of stack plus the thread struct, register block and header leaves
+  headroom in 4 KB, and 2 KB of frames is a deep backtrace.
+- **A stall does not produce a dump.** The watchdog timeout handler runs in ISR
+  context, and the flash backend cannot safely be driven from there: Zephyr's
+  ESP32 sync flash write and erase are not IRAM-resident, so writing from an
+  ISR on an XIP part risks running with the cache disabled, and a sector erase
+  does not fit inside the 20 ms `CONFIG_TASK_WDT_HW_FALLBACK_DELAY` before the
+  hardware watchdog resets the SoC mid-write. What a stall leaves is the
+  channel name in the log. Dumping one would need the write deferred to a
+  high-priority thread plus a longer fallback delay.
+- **The console backend is the alternative**, and it *can* dump a stall — but
+  it loses everything if nobody is attached when the board reboots, which for a
+  headless box is most of the time. `LOGGING_UDP` needs a peer address fixed at
+  build time that cannot be committed; pass it with `--extra-conf` for a one-off
+  headless capture of a fault.
 
 ## OTA / MCUboot
 
