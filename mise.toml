@@ -178,7 +178,7 @@ echo "Installed to ${DEST}; ESPRESSIF_QEMU_PATH already points there via mise.to
 """
 
 [tasks."patch-zenoh"]
-description = "Patch zenoh-pico Zephyr integration: apply zephyr/patches.yml, generate include/zenoh-pico/config.h from CONFIG_APP_ZENOH_*. Idempotent."
+description = "Patch zenoh-pico Zephyr integration: apply zephyr/patches.yml, generate include/zenoh-pico/config.h from CONFIG_PICOROS_*. Idempotent."
 run = '''
 set -e
 ZENOH_DIR="${MISE_PROJECT_ROOT}/deps/modules/lib/zenoh"
@@ -200,7 +200,7 @@ git -C "$ZENOH_DIR" diff --quiet && \
 # system/platform.h includes is missing on the west-module path (upstream bug
 # eclipse-zenoh/zenoh-pico#1227; the configure_file flow is the subject of the
 # pending PR #1083). We synthesise a minimal version that pulls numeric tunables
-# from the application's Kconfig (CONFIG_APP_ZENOH_*); Z_FEATURE_* macros are
+# from applications/common/picoros/Kconfig (CONFIG_PICOROS_*); Z_FEATURE_* macros are
 # still injected via -D from zephyr/CMakeLists.txt. Always overwritten so it
 # tracks Kconfig renames.
 cat > "$CONFIG_H" <<'EOF'
@@ -323,15 +323,15 @@ cat > "$CONFIG_H" <<'EOF'
 #define Z_FEATURE_ADMIN_SPACE 0
 #endif
 
-#define Z_FRAG_MAX_SIZE                 CONFIG_APP_ZENOH_FRAG_MAX_SIZE
-#define Z_BATCH_UNICAST_SIZE            CONFIG_APP_ZENOH_BATCH_UNICAST_SIZE
-#define Z_BATCH_MULTICAST_SIZE          CONFIG_APP_ZENOH_BATCH_MULTICAST_SIZE
-#define Z_CONFIG_SOCKET_TIMEOUT         CONFIG_APP_ZENOH_SOCKET_TIMEOUT_MS
-#define Z_TRANSPORT_LEASE               CONFIG_APP_ZENOH_TRANSPORT_LEASE_MS
-#define Z_TRANSPORT_LEASE_EXPIRE_FACTOR CONFIG_APP_ZENOH_TRANSPORT_LEASE_EXPIRE_FACTOR
-#define Z_RUNTIME_MAX_TASKS             CONFIG_APP_ZENOH_RUNTIME_MAX_TASKS
-#define Z_TRANSPORT_ACCEPT_TIMEOUT      CONFIG_APP_ZENOH_TRANSPORT_ACCEPT_TIMEOUT_MS
-#define Z_TRANSPORT_CONNECT_TIMEOUT     CONFIG_APP_ZENOH_TRANSPORT_CONNECT_TIMEOUT_MS
+#define Z_FRAG_MAX_SIZE                 CONFIG_PICOROS_FRAG_MAX_SIZE
+#define Z_BATCH_UNICAST_SIZE            CONFIG_PICOROS_BATCH_UNICAST_SIZE
+#define Z_BATCH_MULTICAST_SIZE          CONFIG_PICOROS_BATCH_MULTICAST_SIZE
+#define Z_CONFIG_SOCKET_TIMEOUT         CONFIG_PICOROS_SOCKET_TIMEOUT_MS
+#define Z_TRANSPORT_LEASE               CONFIG_PICOROS_TRANSPORT_LEASE_MS
+#define Z_TRANSPORT_LEASE_EXPIRE_FACTOR CONFIG_PICOROS_TRANSPORT_LEASE_EXPIRE_FACTOR
+#define Z_RUNTIME_MAX_TASKS             CONFIG_PICOROS_RUNTIME_MAX_TASKS
+#define Z_TRANSPORT_ACCEPT_TIMEOUT      CONFIG_PICOROS_TRANSPORT_ACCEPT_TIMEOUT_MS
+#define Z_TRANSPORT_CONNECT_TIMEOUT     CONFIG_PICOROS_TRANSPORT_CONNECT_TIMEOUT_MS
 
 #define Z_RUNTIME_IDLE_READ_TASK_SLEEP  0
 

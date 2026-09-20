@@ -5,11 +5,11 @@ LOG_MODULE_REGISTER(main, LOG_LEVEL_DBG);
 #include "app_gimbal.h"
 #include "app_motors.h"
 #include "app_network.h"
+#include "app_picoros.h"
 #include "app_sensors.h"
 #include "app_settings.h"
 #include "app_time.h"
 #include "app_watchdog.h"
-#include "app_zenoh.h"
 #include <zephyr/drivers/i2c.h>
 #include <zephyr/init.h>
 #include <zephyr/kernel.h>
@@ -54,7 +54,8 @@ int main(void)
 	 * app_net_connect(), bounded at NET_CONNECT_TIMEOUT (30 s) by its
 	 * k_sem_take(). Everything else is either non-blocking (app_time_start()
 	 * and app_display_init() only submit work) or bounded well under it
-	 * (z_open() by APP_ZENOH_TRANSPORT_CONNECT_TIMEOUT_MS, 10 s; the locator
+	 * (picoros_interface_init()'s z_open() by
+	 * PICOROS_TRANSPORT_CONNECT_TIMEOUT_MS, 10 s; the locator
 	 * is an IP literal, so no DNS resolve). 60 s is 2x that worst step,
 	 * leaving room for a driver that overruns its own bound. */
 	app_watchdog_init();
@@ -73,9 +74,9 @@ int main(void)
 	if (app_net_ipv4_ready()) {
 		app_watchdog_feed(wdt_channel);
 		app_time_start();
-		app_zenoh_init();
+		app_picoros_init();
 	} else {
-		LOG_WRN("Network unavailable; skipping time sync and zenoh");
+		LOG_WRN("Network unavailable; skipping time sync and pico-ros");
 	}
 
 	app_watchdog_feed(wdt_channel);
@@ -93,7 +94,7 @@ int main(void)
 	 * is ever added, re-register (unregister + register) when it changes.
 	 *
 	 * 3x the loop period plus 10 s of headroom tolerates a slow sensor read
-	 * or a blocked zenoh publish while still catching a real stall. */
+	 * or a blocked pico-ros publish while still catching a real stall. */
 	app_watchdog_unregister(wdt_channel);
 	wdt_channel = app_watchdog_register("main", get_loop_delay_s() * 3000 + 10000);
 

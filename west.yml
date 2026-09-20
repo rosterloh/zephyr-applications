@@ -12,6 +12,10 @@ manifest:
       url-base: https://github.com/golioth
     - name: eclipse-zenoh
       url-base: https://github.com/eclipse-zenoh
+    - name: pico-ros
+      url-base: https://github.com/Pico-ROS
+    - name: eprosima
+      url-base: https://github.com/eProsima
 
   projects:
     - name: zephyr
@@ -66,10 +70,39 @@ manifest:
     #   url: https://github.com/golioth/pouch.git
 
     # Pin to a release tag, not main: zenoh-pico must match the zenoh version
-    # of the router it talks to (zenohd + zenoh-plugin-ros2dds on the host).
-    # Bump this in lockstep with the host's zenohd, then re-run patch-zenoh.
+    # of the router it talks to (rmw_zenohd on the ROS 2 host).
+    # Bump this in lockstep with the host's rmw_zenohd, then re-run patch-zenoh.
     - name: zenoh
       repo-path: zenoh-pico
       remote: eclipse-zenoh
       revision: 1.10.1
       path: deps/modules/lib/zenoh
+
+    # Pico-ROS: the ROS 2 client layer (node / publisher / subscriber / service
+    # + rmw_zenoh key expressions, liveliness tokens and attachments) that sits
+    # on top of zenoh-pico. It is *not* a zenoh-pico replacement -- it depends
+    # on it, and on Micro-CDR below.
+    #
+    # Pinned to a commit, not a tag: upstream has cut no releases (version.txt
+    # says 0.3.0, but no tag carries it). Bump deliberately and re-run the
+    # rasprover picoserdes tests, because the rmw_zenoh wire conventions this
+    # encodes (key layout, liveliness token grammar, attachment struct) track
+    # rmw_zenoh and are not covered by any compatibility promise.
+    #
+    # Upstream vendors zenoh-pico and Micro-CDR as git submodules; we do not
+    # clone them (`submodules:` is absent) because this workspace already
+    # carries both as west projects. The zenoh-pico submodule in particular
+    # points at a personal fork over SSH, which west cannot fetch.
+    - name: picoros
+      repo-path: Pico-ROS-software
+      remote: pico-ros
+      revision: b739fc713da2ee1caa3d1c278c5ed9cc1702eaa2
+      path: deps/modules/lib/picoros
+
+    # Micro-CDR: the CDR codec picoserdes is written against. Upstream Pico-ROS
+    # pins v2.0.1+1 (a README-only commit); v2.0.2 adds no source changes.
+    - name: micro-cdr
+      repo-path: Micro-CDR
+      remote: eprosima
+      revision: v2.0.2
+      path: deps/modules/lib/micro-cdr

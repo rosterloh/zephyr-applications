@@ -7,6 +7,12 @@ project(rasprover)
 # Shared application code (see applications/common/).
 include(${CMAKE_CURRENT_LIST_DIR}/../common/watchdog/watchdog.cmake)
 
+# Pico-ROS generates serdes code for every type in this list, so it is a
+# rasprover-specific trim of upstream's examples/example_types.h rather than
+# the whole ROS type universe. Must be set before picoros.cmake is included.
+set(PICOROS_USER_TYPE_FILE "${CMAKE_CURRENT_LIST_DIR}/src/rasprover_types.h")
+include(${CMAKE_CURRENT_LIST_DIR}/../common/picoros/picoros.cmake)
+
 # We always want colored gcc output
 zephyr_compile_options(-fdiagnostics-color=always)
 
@@ -19,11 +25,10 @@ target_sources(app PRIVATE
 target_sources_ifdef(CONFIG_APP_DISPLAY app PRIVATE src/app_display.c)
 
 target_sources_ifdef(CONFIG_NETWORKING app PRIVATE src/app_network.c)
-target_sources_ifdef(CONFIG_APP_ZENOH  app PRIVATE src/app_zenoh.c)
+target_sources_ifdef(CONFIG_APP_PICOROS app PRIVATE src/app_picoros.c)
 target_sources_ifdef(CONFIG_APP_MOTORS app PRIVATE src/app_motors.c)
 target_sources_ifdef(CONFIG_APP_GIMBAL app PRIVATE src/app_gimbal.c)
 target_sources_ifdef(CONFIG_APP_TIME_SYNC app PRIVATE src/app_time.c)
-target_sources(app PRIVATE src/app_ros_cdr.c)
 
 # On Debian/Ubuntu, libsdl2-dev uses a multiarch include path that Zephyr's
 # build doesn't pick up automatically. Add it via pkg-config when present.

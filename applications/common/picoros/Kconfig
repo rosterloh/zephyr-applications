@@ -1,0 +1,107 @@
+# Copyright (c) 2026 Richard Osterloh
+# SPDX-License-Identifier: Apache-2.0
+
+menuconfig PICOROS
+	bool "Pico-ROS ROS 2 client layer"
+	select ZENOH_PICO
+	select ZENOH_PICO_MULTI_THREAD
+	select ZENOH_PICO_PUBLICATION
+	select ZENOH_PICO_SUBSCRIPTION
+	select ZENOH_PICO_QUERY
+	select ZENOH_PICO_QUERYABLE
+	select POSIX_API
+	help
+	  Build Pico-ROS (picoros + picoserdes) and Micro-CDR into the
+	  application. Pico-ROS speaks the rmw_zenoh wire conventions -- key
+	  expressions of the form <domain>/<topic>/<type>_/RIHS01_<hash>,
+	  @ros2_lv liveliness tokens for discovery, and the rmw attachment
+	  struct -- so a ROS 2 host running RMW_IMPLEMENTATION=rmw_zenoh_cpp
+	  sees the firmware as an ordinary ROS 2 node. It replaces the
+	  zenoh-bridge-ros2dds topology, in which the firmware published bare
+	  CDR under rt/<topic> and a host-side bridge did the ROS mapping.
+
+	  This does not replace zenoh-pico: picoros is a layer on top of it and
+	  selects it. What it replaces is hand-written rmw glue in the
+	  application.
+
+	  POSIX_API is selected because zenoh-pico's Zephyr platform layer
+	  calls clock_gettime(CLOCK_MONOTONIC), which picoros uses for the
+	  rmw attachment timestamp.
+
+	  ZENOH_PICO_QUERY and ZENOH_PICO_QUERYABLE are selected whether or not
+	  the application uses ROS services: picoros.c calls z_get(),
+	  z_declare_queryable() and friends from unguarded code, so building it
+	  against a zenoh-pico with those features off fails to compile rather
+	  than dropping the service support. See PICOROS_SERVICES.
+
+if PICOROS
+
+config PICOROS_SERVICES
+	bool "Application uses Pico-ROS services"
+	help
+	  Documentation only today: the underlying zenoh-pico query and
+	  queryable features are enabled unconditionally by PICOROS because
+	  picoros.c does not compile without them, so turning this off saves
+	  nothing. It exists so an application can state whether it declares
+	  services, and so a future upstream fix that guards picoros.c's
+	  service code has somewhere to hang.
+
+config PICOROS_PARAMS
+	bool "Pico-ROS parameter server"
+	select PICOROS_SERVICES
+	help
+	  Build picoparams, which exposes the standard ROS 2 parameter
+	  services (list/get/set/describe) backed by a user-supplied
+	  parameter table.
+
+# Numeric zenoh-pico tunables. These are read by the generated
+# include/zenoh-pico/config.h (see mise.toml: patch-zenoh) rather than by any
+# code here, which is why they live with the integration rather than in one
+# application's Kconfig: zenoh-pico fails to compile if the symbols the
+# generated header names do not exist.
+#
+# Defaults match upstream zenoh-pico's root CMakeLists.txt, except the lease
+# pair, which rmw_zenohd requires.
+
+config PICOROS_FRAG_MAX_SIZE
+	int "Zenoh: maximum size for fragmented messages (bytes)"
+	default 4096
+
+config PICOROS_BATCH_UNICAST_SIZE
+	int "Zenoh: maximum unicast batch size (bytes)"
+	default 2048
+
+config PICOROS_BATCH_MULTICAST_SIZE
+	int "Zenoh: maximum multicast batch size (bytes)"
+	default 2048
+
+config PICOROS_SOCKET_TIMEOUT_MS
+	int "Zenoh: default socket timeout (ms)"
+	default 100
+
+config PICOROS_TRANSPORT_LEASE_MS
+	int "Zenoh: link lease duration announced to peers (ms)"
+	default 60000
+	help
+	  60 s, not zenoh-pico's stock 10 s: rmw_zenohd runs with a 60 s lease
+	  and a x2 expire factor, and Pico-ROS's README requires the client to
+	  match. A shorter lease makes the router drop the session while the
+	  node still believes it is connected.
+
+config PICOROS_TRANSPORT_LEASE_EXPIRE_FACTOR
+	int "Zenoh: session lease expire factor"
+	default 2
+
+config PICOROS_RUNTIME_MAX_TASKS
+	int "Zenoh: maximum number of runtime tasks"
+	default 64
+
+config PICOROS_TRANSPORT_ACCEPT_TIMEOUT_MS
+	int "Zenoh: P2P link accept timeout (ms)"
+	default 1000
+
+config PICOROS_TRANSPORT_CONNECT_TIMEOUT_MS
+	int "Zenoh: P2P link connect timeout (ms)"
+	default 10000
+
+endif # PICOROS

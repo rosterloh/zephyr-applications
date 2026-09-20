@@ -5,8 +5,8 @@ LOG_MODULE_REGISTER(app_sensors, LOG_LEVEL_DBG);
 #include <zephyr/kernel.h>
 
 #include "app_display.h"
+#include "app_picoros.h"
 #include "app_sensors.h"
-#include "app_zenoh.h"
 
 #if DT_NODE_EXISTS(DT_NODELABEL(ina219))
 static const struct device *current_sensor = DEVICE_DT_GET_OR_NULL(DT_NODELABEL(ina219));
@@ -19,7 +19,7 @@ static void publish(double v, double i, double p)
 #if IS_ENABLED(CONFIG_APP_DISPLAY)
 	app_display_update_power(v, i, p);
 #endif
-	app_zenoh_publish_power(v, i, p);
+	app_picoros_publish_power(v, i, p);
 }
 
 void app_sensors_read_and_stream(void)

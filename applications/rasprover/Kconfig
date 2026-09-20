@@ -57,93 +57,77 @@ endif # APP_DISPLAY_WORK_QUEUE_DEDICATED
 
 endif # APP_DISPLAY
 
-menuconfig APP_ZENOH
-	bool "Enable zenoh-pico publisher"
-	select ZENOH_PICO
-	select ZENOH_PICO_LINK_TCP
-	select ZENOH_PICO_PUBLICATION
-	select ZENOH_PICO_SUBSCRIPTION
-	select ZENOH_PICO_MULTI_THREAD
+menuconfig APP_PICOROS
+	bool "Enable the Pico-ROS node"
+	select PICOROS
 	default y
+	help
+	  Publishes BatteryState and JointState and subscribes to Twist and
+	  JointState commands as an rmw_zenoh-compatible ROS 2 node. Replaces
+	  the previous raw zenoh-pico publisher, which produced bare CDR under
+	  rt/<topic> for a host-side zenoh-bridge-ros2dds.
 
-if APP_ZENOH
+if APP_PICOROS
 
-config APP_ZENOH_LOCATOR
+config APP_PICOROS_LOCATOR
 	string "Zenoh locator for the host router"
 	default "tcp/192.168.1.10:7447"
 	help
-	  Locator string passed to z_open() as the connect endpoint. Format is
-	  '<protocol>/<host>:<port>'. The host typically runs zenohd configured
-	  with a matching listen endpoint, e.g. `zenohd -l tcp/0.0.0.0:7447`.
+	  Locator string passed to picoros_interface_init() as the connect
+	  endpoint. Format is '<protocol>/<host>:<port>'. The host runs
+	  rmw_zenohd (the router that ships with rmw_zenoh), whose default
+	  listen endpoint is tcp/0.0.0.0:7447.
 
-config APP_ZENOH_KEY_PREFIX
-	string "Zenoh key expression prefix for all published topics"
-	default "rt/rasprover"
+config APP_PICOROS_NODE_NAME
+	string "ROS 2 node name"
+	default "rasprover"
 	help
-	  Key prefix for Rasprover-local zenoh publishers and subscribers. The
-	  'rt/' convention is required by the zenoh-ros2dds bridge to route
-	  topics into ROS2. The full key for the battery state topic will be
-	  <prefix>/battery_state, which maps to the ROS2 topic
-	  /<prefix_without_rt>/battery_state.
+	  Name this node announces in its @ros2_lv liveliness token, and the
+	  name `ros2 node list` shows. Service key expressions are prefixed
+	  with it; topic key expressions are not.
 
-# Numeric tunables consumed by the generated zenoh-pico/config.h (see
-# poe.toml: patch-zenoh). Defaults match the upstream zenoh-pico root
-# CMakeLists.txt so behaviour matches a stock build.
-config APP_ZENOH_FRAG_MAX_SIZE
-	int "Zenoh: maximum size for fragmented messages (bytes)"
-	default 4096
+config APP_PICOROS_DOMAIN_ID
+	int "ROS domain ID"
+	default 0
+	range 0 232
+	help
+	  Must match ROS_DOMAIN_ID on the host. It is the first segment of
+	  every key expression, so a mismatch shows up as a node that connects
+	  to the router but is invisible to ROS.
 
-config APP_ZENOH_BATCH_UNICAST_SIZE
-	int "Zenoh: maximum unicast batch size (bytes)"
-	default 2048
+config APP_PICOROS_BATTERY_STATE_TOPIC
+	string "ROS topic for sensor_msgs/BatteryState"
+	default "rasprover/battery_state"
+	help
+	  Fully qualified ROS topic name without the leading slash. Pico-ROS
+	  builds the rmw_zenoh key expression
+	  <domain>/<topic>/<type>_/RIHS01_<hash> from it, so unlike the old
+	  zenoh keys this must not carry an 'rt/' prefix.
 
-config APP_ZENOH_BATCH_MULTICAST_SIZE
-	int "Zenoh: maximum multicast batch size (bytes)"
-	default 2048
+config APP_PICOROS_CMD_VEL_TOPIC
+	string "ROS topic for geometry_msgs/Twist velocity commands"
+	default "rasprover/cmd_vel"
+	depends on APP_MOTORS
 
-config APP_ZENOH_SOCKET_TIMEOUT_MS
-	int "Zenoh: default socket timeout (ms)"
-	default 100
-
-config APP_ZENOH_TRANSPORT_LEASE_MS
-	int "Zenoh: link lease duration announced to peers (ms)"
-	default 10000
-
-config APP_ZENOH_TRANSPORT_LEASE_EXPIRE_FACTOR
-	int "Zenoh: session lease expire factor"
-	default 3
-
-config APP_ZENOH_RUNTIME_MAX_TASKS
-	int "Zenoh: maximum number of runtime tasks"
-	default 64
-
-config APP_ZENOH_TRANSPORT_ACCEPT_TIMEOUT_MS
-	int "Zenoh: P2P link accept timeout (ms)"
-	default 1000
-
-config APP_ZENOH_TRANSPORT_CONNECT_TIMEOUT_MS
-	int "Zenoh: P2P link connect timeout (ms)"
-	default 10000
-
-config APP_ZENOH_JOINT_STATE_KEY
-	string "Zenoh key expression for JointState"
-	default "rt/joint_states"
+config APP_PICOROS_JOINT_STATE_TOPIC
+	string "ROS topic for sensor_msgs/JointState feedback"
+	default "joint_states"
 	depends on APP_MOTORS
 	help
-	  Zenoh key used for sensor_msgs/JointState. The default maps through
-	  zenoh-ros2dds to the conventional ROS2 /joint_states topic.
+	  Unprefixed by default so it lands on the conventional ROS 2
+	  /joint_states that robot_state_publisher listens on.
 
-config APP_ZENOH_JOINT_STATE_PUBLISH_HZ
+config APP_PICOROS_JOINT_STATE_PUBLISH_HZ
 	int "JointState publish rate in Hz"
 	default 20
 	range 1 100
 	depends on APP_MOTORS
 
-endif # APP_ZENOH
+endif # APP_PICOROS
 
 menuconfig APP_TIME_SYNC
 	bool "Enable SNTP time synchronization"
-	default y if APP_ZENOH && NETWORKING
+	default y if APP_PICOROS && NETWORKING
 	depends on NETWORKING
 	depends on NET_SOCKETS
 	depends on DNS_RESOLVER
@@ -215,17 +199,18 @@ menuconfig APP_GIMBAL
 
 if APP_GIMBAL
 
-config APP_ZENOH_GIMBAL_CMD_KEY
-	string "Zenoh key expression for gimbal JointState commands"
-	default "rt/rasprover/gimbal_cmd"
-	depends on APP_ZENOH
+config APP_PICOROS_GIMBAL_CMD_TOPIC
+	string "ROS topic for gimbal JointState commands"
+	default "rasprover/gimbal_cmd"
+	depends on APP_PICOROS
 	help
-	  Zenoh key used for sensor_msgs/JointState gimbal position commands.
-	  Keep this aligned with APP_ZENOH_KEY_PREFIX unless intentionally
-	  routing the gimbal command topic elsewhere.
+	  sensor_msgs/JointState position setpoints for the pan/tilt head. A
+	  command must name both pan_joint and tilt_joint; partial commands are
+	  rejected.
 
 endif # APP_GIMBAL
 
+rsource "../common/picoros/Kconfig"
 rsource "../common/watchdog/Kconfig"
 
 source "Kconfig.zephyr"
