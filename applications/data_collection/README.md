@@ -90,6 +90,102 @@ Only one frame is buffered: it stays checked out of the video buffer pool (PSRAM
 ~2.5 MB per RAW10 frame) so `READ` serves it without a copy, and is released at
 the top of the next `CAPTURE`.
 
+## Watchdog and coredump
+
+Two mechanisms, covering the two ways this app has been seen to die.
+
+**Task watchdog** (`CONFIG_APP_WATCHDOG`, shared code in
+`applications/common/watchdog/`). The app is event driven — `main()` returns
+once the network and camera are up — so there is no superloop to feed a
+long-lived channel from. Coverage is a channel around each bounded operation
+instead:
+
+| Channel | Registered | Timeout | Covers |
+|---|---|---|---|
+| `boot` | start of `main()`, deleted before it returns | 60 s | DHCPv4, camera bring-up, the boot capture |
+| `capture` | entry to `cam_mgmt_capture()`, deleted on every exit path | 10 s | format negotiation, buffer enqueue, the 2 s dequeue |
+
+A `capture` channel is registered *before* `frame_lock` is taken, so a caller
+that queues behind an already-wedged capture is monitored rather than parked in
+an unmonitored `K_FOREVER` wait.
+
+Both boards alias the TIMG MWDT as `watchdog0`, so `CONFIG_TASK_WDT_HW_FALLBACK`
+has real hardware behind it. That matters more than the software layer here: the
+failure in
+[zephyr-drivers#43](https://github.com/rosterloh/zephyr-drivers/issues/43) takes
+the *whole system* quiet — no ISR, no system workqueue, no log processor — and
+only the hardware watchdog resets a board in that state.
+
+On a timeout the log names the channel before the board reboots:
+
+```
+<err> app_watchdog: Task watchdog timeout: 'capture' (channel 1) stalled - rebooting
+```
+
+**Coredump** (`CONFIG_DEBUG_COREDUMP`) fires on a fault and writes to the
+`coredump` flash partition, so the dump **survives the reboot that follows it**.
+Both boards inherit `partitions_0x2000_default_16M.dtsi`, which already carries
+`coredump_partition` — 4 KB at `0xfff000` — so no devicetree change was needed.
+
+Retrieve it on the next boot, over the shell:
+
+```
+uart:~$ coredump find
+Stored coredump found
+uart:~$ coredump print
+#CD:BEGIN#
+#CD:5a4501000...
+...
+#CD:END#
+uart:~$ coredump erase          # free the partition for the next one
+```
+
+Save that console output to a file, then decode it on the host:
+
+```bash
+# Rebuild the binary from the #CD: lines
+mise x -- python deps/zephyr/scripts/coredump/coredump_serial_log_parser.py \
+    console.log coredump.bin
+
+# Serve it to gdb, against the *exact* elf that was running
+mise x -- python deps/zephyr/scripts/coredump/coredump_gdbserver.py \
+    builds/data_collection/data_collection/zephyr/zephyr.elf coredump.bin
+
+# In another terminal
+~/zephyr-sdk-$(cat deps/zephyr/SDK_VERSION)/riscv64-zephyr-elf/bin/riscv64-zephyr-elf-gdb \
+    builds/data_collection/data_collection/zephyr/zephyr.elf \
+    -ex "target remote :1234" -ex "bt"
+```
+
+The `.elf` must match the running image exactly. A dump opened against a
+different build resolves to plausible-looking nonsense rather than failing.
+
+`coredump verify` checks the stored dump's integrity, and `coredump error get`
+reports a write that failed or was truncated — a truncated dump is never
+silent.
+
+Three sizing and safety notes, all worth knowing before changing the config:
+
+- **`MEMORY_DUMP_MIN` with a bounded stack top.** The partition is one 4 KB
+  sector. `MIN` enables `THREAD_STACK_TOP` automatically, but its limit
+  defaults to `-1` — unbounded, stack pointer to end of region — so
+  `CONFIG_DEBUG_COREDUMP_THREAD_STACK_TOP_LIMIT_FOR_CURRENT=2048` caps it.
+  2 KB of stack plus the thread struct, register block and header leaves
+  headroom in 4 KB, and 2 KB of frames is a deep backtrace.
+- **A stall does not produce a dump.** The watchdog timeout handler runs in ISR
+  context, and the flash backend cannot safely be driven from there: Zephyr's
+  ESP32 sync flash write and erase are not IRAM-resident, so writing from an
+  ISR on an XIP part risks running with the cache disabled, and a sector erase
+  does not fit inside the 20 ms `CONFIG_TASK_WDT_HW_FALLBACK_DELAY` before the
+  hardware watchdog resets the SoC mid-write. What a stall leaves is the
+  channel name in the log. Dumping one would need the write deferred to a
+  high-priority thread plus a longer fallback delay.
+- **The console backend is the alternative**, and it *can* dump a stall — but
+  it loses everything if nobody is attached when the board reboots, which for a
+  headless box is most of the time. `LOGGING_UDP` needs a peer address fixed at
+  build time that cannot be committed; pass it with `--extra-conf` for a one-off
+  headless capture of a fault.
+
 ## OTA / MCUboot
 
 MCUboot **works on this board**, including the rev v1.3 engineering sample

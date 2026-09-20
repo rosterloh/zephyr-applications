@@ -23,6 +23,7 @@
 #include <zcbor_decode.h>
 #include <mgmt/mcumgr/util/zcbor_bulk.h>
 
+#include "app_watchdog.h"
 #include "cam_mgmt.h"
 
 LOG_MODULE_REGISTER(cam_mgmt, LOG_LEVEL_INF);
@@ -48,6 +49,17 @@ LOG_MODULE_REGISTER(cam_mgmt, LOG_LEVEL_INF);
 #define CAM_MGMT_READ_MAX 1024
 
 #define CAPTURE_NBUFS 2
+
+/* Watchdog window for one capture. The longest bounded wait inside is the
+ * 2 s video_dequeue(); the rest is sensor register programming over I2C and
+ * the pool allocation. 10 s leaves room for a slow sensor without letting a
+ * wedged one sit indefinitely.
+ *
+ * This channel is what covers the steady state: main() has returned by the
+ * time an SMP client drives a capture, so nothing else is registered. A
+ * capture that never completes never reaches the delete below, and the
+ * timeout names "capture" in the log before rebooting. */
+#define CAPTURE_WDT_TIMEOUT_MS 10000
 
 /* The app's PSRAM budget, expressed as a resolution ceiling rather than a
  * format. A sensor advertising a stepwise range -- the IMX219 goes to
@@ -126,7 +138,13 @@ int cam_mgmt_capture(const struct device *cam)
 	struct video_format fmt;
 	struct video_buffer *vbuf = NULL;
 	struct video_buffer *drained;
+	int wdt_channel;
 	int ret;
+
+	/* Registered before the lock, not after: a capture already wedged while
+	 * holding frame_lock would otherwise park this caller in an unmonitored
+	 * K_FOREVER wait. */
+	wdt_channel = app_watchdog_register("capture", CAPTURE_WDT_TIMEOUT_MS);
 
 	k_mutex_lock(&frame_lock, K_FOREVER);
 
@@ -212,6 +230,7 @@ drain:
 	}
 out:
 	k_mutex_unlock(&frame_lock);
+	app_watchdog_unregister(wdt_channel);
 	return ret;
 }
 

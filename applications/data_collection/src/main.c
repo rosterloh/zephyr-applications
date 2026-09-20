@@ -9,9 +9,14 @@
 #include <zephyr/net/net_mgmt.h>
 #include <zephyr/net/net_event.h>
 
+#include "app_watchdog.h"
 #include "cam_mgmt.h"
 
 LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
+
+/* Generous: DHCPv4 and the camera's bring-up both sit inside this window, and
+ * a boot that is merely slow must not be mistaken for one that is stuck. */
+#define BOOT_WDT_TIMEOUT_MS 60000
 
 static struct net_mgmt_event_callback ipv4_cb;
 
@@ -38,14 +43,28 @@ static void on_ipv4_addr_add(struct net_mgmt_event_callback *cb, uint64_t mgmt_e
 int main(void)
 {
 	const struct device *cam = DEVICE_DT_GET(DT_CHOSEN(zephyr_camera));
+	int wdt_channel;
 
 	LOG_INF("data_collection starting (SMP/UDP management ready)");
+
+	/* Cover the boot path. Everything below can block on hardware -- the
+	 * camera's I2C bring-up, and the first capture through a CSI receiver
+	 * that is known to wedge (rosterloh/zephyr-drivers#43). The channel is
+	 * deleted before main() returns rather than left registered: from that
+	 * point the app is event driven, there is no loop left to feed from, and
+	 * a channel nobody feeds is a reboot timer. Steady-state coverage is
+	 * cam_mgmt_capture()'s own channel, registered per capture. */
+	app_watchdog_init();
+	wdt_channel = app_watchdog_register("boot", BOOT_WDT_TIMEOUT_MS);
 
 	net_mgmt_init_event_callback(&ipv4_cb, on_ipv4_addr_add, NET_EVENT_IPV4_ADDR_ADD);
 	net_mgmt_add_event_callback(&ipv4_cb);
 
+	app_watchdog_feed(wdt_channel);
+
 	if (!device_is_ready(cam)) {
 		LOG_ERR("Camera %s not ready", cam->name);
+		app_watchdog_unregister(wdt_channel);
 		return 0;
 	}
 
@@ -55,6 +74,8 @@ int main(void)
 			"capture again from the `video` shell");
 	}
 #endif
+
+	app_watchdog_unregister(wdt_channel);
 
 	return 0;
 }

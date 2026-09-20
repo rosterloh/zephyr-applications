@@ -4,6 +4,9 @@ find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 
 project(rasprover)
 
+# Shared application code (see applications/common/).
+include(${CMAKE_CURRENT_LIST_DIR}/../common/watchdog/watchdog.cmake)
+
 # We always want colored gcc output
 zephyr_compile_options(-fdiagnostics-color=always)
 
@@ -20,7 +23,6 @@ target_sources_ifdef(CONFIG_APP_ZENOH  app PRIVATE src/app_zenoh.c)
 target_sources_ifdef(CONFIG_APP_MOTORS app PRIVATE src/app_motors.c)
 target_sources_ifdef(CONFIG_APP_GIMBAL app PRIVATE src/app_gimbal.c)
 target_sources_ifdef(CONFIG_APP_TIME_SYNC app PRIVATE src/app_time.c)
-target_sources_ifdef(CONFIG_APP_WATCHDOG app PRIVATE src/app_watchdog.c)
 target_sources(app PRIVATE src/app_ros_cdr.c)
 
 # On Debian/Ubuntu, libsdl2-dev uses a multiarch include path that Zephyr's
