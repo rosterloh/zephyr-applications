@@ -79,6 +79,7 @@ The west.yml uses `name-allowlist` to clone only the modules these apps need; do
 ## Layout
 
 - `applications/<app>/` — Zephyr apps (`prj.conf`, `CMakeLists.txt`, `src/`, optional `boards/<board>.overlay`).
+- `applications/common/<module>/` — application code shared by more than one app, each module carrying its own `CMakeLists.txt` and `Kconfig`. An app opts in with `add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/../common/<module> <module>)` plus `rsource "../common/<module>/Kconfig"`. Not an app itself: nothing enumerates this directory.
 - `boards/<vendor>/<board>/` — out-of-tree board definitions.
 - `deps/zephyr/` — Zephyr tree (managed by west, gitignored).
 - `deps/modules/lib/rosterloh-drivers/` — out-of-tree drivers repo. Tracks `main` via west.yml. Local edits during PR development are fine; commit them in that repo, not this one.

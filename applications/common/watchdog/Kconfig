@@ -1,0 +1,21 @@
+# Copyright (c) 2026 Richard Osterloh
+# SPDX-License-Identifier: Apache-2.0
+
+config APP_WATCHDOG
+	bool "Enable task watchdog stall detection"
+	default y
+	select TASK_WDT
+	select WATCHDOG
+	help
+	  Monitors registered tasks with Zephyr's task watchdog and reboots the
+	  board if one stops being fed. The failure mode this catches is a hang
+	  rather than a CPU fault, which a fatal-error handler cannot see.
+
+	  Coverage is only as good as the channels an application registers: a
+	  thread that never registers is not monitored, and a hang inside a
+	  workqueue handler is invisible while the registrant keeps feeding.
+	  See applications/common/watchdog/app_watchdog.h for the two usage
+	  shapes and their trade-offs.
+
+	  With CONFIG_DEBUG_COREDUMP enabled, a timeout also emits a coredump
+	  before rebooting.

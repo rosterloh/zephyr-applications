@@ -8,19 +8,22 @@
 LOG_MODULE_REGISTER(app_watchdog, LOG_LEVEL_INF);
 
 #include <errno.h>
+#include <zephyr/debug/coredump.h>
 #include <zephyr/device.h>
+#include <zephyr/fatal_types.h>
+#include <zephyr/kernel.h>
 #include <zephyr/logging/log_ctrl.h>
 #include <zephyr/sys/reboot.h>
 #include <zephyr/task_wdt/task_wdt.h>
 
 #include "app_watchdog.h"
 
-/* ros_driver/esp32 aliases the TIMG0 MWDT as watchdog0, so the task watchdog
- * is backed by real hardware via CONFIG_TASK_WDT_HW_FALLBACK: the kernel timer
- * catches a stalled task, the hardware resets the SoC if the kernel itself
- * hangs. Targets without a watchdog0 alias (native_sim) pass NULL to
- * task_wdt_init(), which is the documented software-only fallback — stall
- * detection still works, but nothing catches a wedged kernel. */
+/* A board that aliases a hardware watchdog as watchdog0 gets the full
+ * arrangement via CONFIG_TASK_WDT_HW_FALLBACK: the kernel timer catches a
+ * stalled task, the hardware resets the SoC if the kernel itself hangs.
+ * Targets without the alias (native_sim) pass NULL to task_wdt_init(), which
+ * is the documented software-only fallback — stall detection still works, but
+ * nothing catches a wedged kernel. */
 #if DT_NODE_HAS_STATUS(DT_ALIAS(watchdog0), okay)
 #define APP_WDT_HW_DEV DEVICE_DT_GET(DT_ALIAS(watchdog0))
 #else
@@ -29,12 +32,34 @@ LOG_MODULE_REGISTER(app_watchdog, LOG_LEVEL_INF);
 
 static bool wdt_ready;
 
+/* Runs in ISR context: task_wdt drives it from a k_timer expiry. Everything
+ * here has to be safe from an interrupt and has to finish inside
+ * CONFIG_TASK_WDT_HW_FALLBACK_DELAY, or the hardware watchdog resets the SoC
+ * mid-way through. */
 static void wdt_timeout_cb(int channel_id, void *user_data)
 {
 	/* Synchronous logging so this reaches the console before the reset. */
 	LOG_PANIC();
 	LOG_ERR("Task watchdog timeout: '%s' (channel %d) stalled - rebooting",
 		(const char *)user_data, channel_id);
+
+	/* A stall produces no fatal error, so nothing else would dump. The
+	 * logging backend puts the log subsystem in panic mode itself and
+	 * writes from a static buffer, which is why this is callable from here;
+	 * a backend that needs the network stack would not be. There is no
+	 * exception frame to pass — the CPU never faulted — so the dump carries
+	 * thread and memory state without a register block.
+	 *
+	 * k_current_get() here is the thread the timer interrupted, which is not
+	 * necessarily the stalled one: the stalled thread is typically blocked,
+	 * not running. Under CONFIG_DEBUG_COREDUMP_MEMORY_DUMP_MIN that makes the
+	 * dumped stack a lead rather than an answer. Build with
+	 * CONFIG_DEBUG_COREDUMP_MEMORY_DUMP_THREADS=y to dump every thread's
+	 * stack instead -- slower over the console, but it shows which one is
+	 * wedged and where. */
+	if (IS_ENABLED(CONFIG_DEBUG_COREDUMP)) {
+		coredump(K_ERR_KERNEL_OOPS, NULL, k_current_get());
+	}
 
 	sys_reboot(SYS_REBOOT_COLD);
 }

@@ -11,6 +11,9 @@ find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 
 project(data_collection)
 
+# Shared application code (see applications/common/).
+add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/../common/watchdog watchdog)
+
 # We always want colored gcc output
 zephyr_compile_options(-fdiagnostics-color=always)
 
