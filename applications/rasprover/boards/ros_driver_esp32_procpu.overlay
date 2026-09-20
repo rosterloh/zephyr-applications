@@ -19,3 +19,45 @@
 		lsb-microamp = <1000>;
 	};
 };
+
+/*
+ * The pan/tilt head's measured geometry.
+ *
+ * The ros_driver board devicetree creates these two nodes -- the servo
+ * connector is on the board -- but carries no values for them, because what is
+ * bolted to the connector is not the board's to know. Everything the servos
+ * have in common with every other ST3215 (ticks-per-rev 4096, rad-zero-tick
+ * 2047, speed 300, accel 20) is already defaulted by
+ * rosterloh,actuator-bus-servo.yaml and is deliberately not restated here.
+ *
+ * Only what is measured on THIS rig belongs below. Both limits must be set:
+ * an absent one means unlimited travel, and rad_to_ticks() clamps silently in
+ * either direction, so a wrong value shows up as missing travel rather than as
+ * an error.
+ *
+ * The tilt minimum is the measured one, not the one ros_driver's devicetree
+ * used to carry. -785 mrad (-45 deg) was measured 2026-08-03 against a levelled
+ * bore-sight: the mechanical stop is at -51.0 deg (compliant from -50.0), so
+ * this leaves ~6 deg of margin. The board's old -524 gave away 15 deg of the
+ * travel that faces the ground once the head hangs inverted, and rad_to_ticks()
+ * clamped to it without a word. Same value as eit_firmware's
+ * dts/pt_control_head.dtsi, which drives the same head from three other boards.
+ */
+&gimbal_pan_servo {
+	/* +/-180 deg; pan has no mechanical stop, the limit is the cable loom. */
+	position-min-rad-milli = <(-3142)>;
+	position-max-rad-milli = <3142>;
+};
+
+&gimbal_tilt_servo {
+	position-min-rad-milli = <(-785)>;
+	/* Positive stop measured +96.1 deg (compliant from +95.4), so +90 deg
+	 * keeps ~5.4 deg of margin -- both ends carry a similar margin. */
+	position-max-rad-milli = <1571>;
+
+	/* The tilt servo faces the opposite way to the joint's positive sense.
+	 * A devicetree boolean cannot be un-set by a later fragment, so this is
+	 * asserted here rather than in the board: an application on different
+	 * mechanics would otherwise need /delete-property/ to get rid of it. */
+	invert-position;
+};
