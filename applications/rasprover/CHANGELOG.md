@@ -24,6 +24,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `picoserdes` over Micro-CDR, driven by `src/rasprover_types.h`. The wire
   bytes are unchanged -- `tests/picoserdes` asserts the same golden arrays
   the old encoder was tested against.
+- **WiFi is actually enabled** (`CONFIG_WIFI=y` and `&wifi` in the board
+  overlay); before this the firmware had no WiFi interface on hardware.
+  To fit it, the Bluetooth SMP transport and the OLED display are dropped on
+  hardware; OTA is over the shell UART. See "Memory budget" in the README for
+  the heap, stack and pool sizes this needs.
+- `CONFIG_LOG` is enabled; the application's log lines were previously
+  compiled out.
+
+### Fixed
+
+- Boot waited for any L4 connectivity, which an IPv6 address satisfies before
+  DHCP completes, so the one-shot Pico-ROS connect ran without IPv4. It now
+  waits for IPv4.
+- The gimbal never initialised on hardware: the servo bus's UART was never
+  configured (`bus_servo_init()`), so every gimbal call failed and
+  `/joint_states` was never published.
 
 ### Added
 

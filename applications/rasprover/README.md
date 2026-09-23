@@ -8,7 +8,7 @@ Firmware for the [Waveshare RaspRover](https://www.waveshare.com/wiki/RaspRover)
 |-----------|------|-----------|
 | MCU | ESP32 (Xtensa LX6, 240 MHz) | — |
 | Current/power monitor | INA219 | I2C @ 0x42 |
-| OLED display | SSD1306 128×32 | I2C @ 0x3C |
+| OLED display | SSD1306 128×32 | I2C @ 0x3C -- not driven on hardware, see [Memory budget](#memory-budget) |
 | Pan/tilt gimbal | Waveshare bus servos | UART1 @ GPIO19 TX / GPIO18 RX |
 
 Board: `ros_driver/esp32/procpu` (defined in [rosterloh-drivers](https://github.com/rosterloh/zephyr-drivers))
@@ -66,13 +66,9 @@ mise run flash rasprover
 
 ## OTA updates
 
-OTA is handled via [MCUmgr](https://docs.zephyrproject.org/latest/services/device_mgmt/mcumgr.html) using the SMP protocol.
-Two transports are enabled:
-
-| Transport | How to use |
-|-----------|------------|
-| **Bluetooth LE** | Connect with nRF Connect for Mobile or `mcumgr` CLI |
-| **Shell UART** | Use `mcumgr` CLI over the serial console |
+OTA is handled via [MCUmgr](https://docs.zephyrproject.org/latest/services/device_mgmt/mcumgr.html) using the SMP protocol
+over the shell UART. The Bluetooth transport was removed to make room for WiFi;
+see [Memory budget](#memory-budget).
 
 ### mcumgr CLI (UART example)
 
@@ -91,13 +87,6 @@ mcumgr --conntype serial --connstring "dev=/dev/ttyUSB0,baud=115200" \
   image test <hash-from-list>
 mcumgr --conntype serial --connstring "dev=/dev/ttyUSB0,baud=115200" \
   reset
-```
-
-### mcumgr CLI (Bluetooth example)
-
-```shell
-mcumgr --conntype ble --connstring "peer_name=rasprover" \
-  image upload builds/rasprover/rasprover/zephyr/zephyr.signed.bin
 ```
 
 > **Image signing**: `sysbuild/mcuboot.conf` currently uses `BOOT_SIGNATURE_TYPE_NONE` (unsigned)
@@ -278,8 +267,25 @@ match upstream zenoh-pico except the lease pair, which `rmw_zenohd` requires.
 
 `CONFIG_ZENOH_PICO_THREADS_NUM` (zenoh-pico's own Kconfig, default 4) sizes the
 preallocated pthread stack pool at `CONFIG_MAIN_STACK_SIZE` each. This
-application only starts the read and lease tasks, so it is the first lever to
-reach for if DRAM gets tight.
+application only starts the read and lease tasks, so `prj.conf` sets it to 2.
+
+### Memory budget
+
+The ESP32 here has no PSRAM, and WiFi, Bluetooth and the LVGL display do not
+fit together: with all three, `dram0_0_seg` overflows by 71.5 KB. The hardware
+build keeps WiFi and drops the other two (`CONFIG_BT=n`,
+`CONFIG_APP_DISPLAY=n`); native_sim turns the display back on for SDL.
+
+What the WiFi + Pico-ROS build needs, each value measured on the board:
+
+| Setting | Value | Why |
+|---------|-------|-----|
+| `HEAP_MEM_POOL_SIZE` | 72 KB | zenoh-pico's `z_malloc()` is `k_malloc()`, so it shares the system heap with the WiFi driver. Zephyr sizes that heap as the larger of this and the `HEAP_MEM_POOL_ADD_SIZE_*` sum (~56 KB), so anything smaller is ignored. Peak use is 56.5 KB. |
+| `SYSTEM_WORKQUEUE_STACK_SIZE` | 3072 | The WiFi reconnect path peaks at 1888 B. The stack sits directly above `main`'s, so overflowing it corrupts `main` rather than faulting. |
+| `MAX_PTHREAD_MUTEX_COUNT` / `_COND_COUNT` | 32 / 16 | The default 5 of each runs out right after the zenoh handshake. |
+| `NET_BUF_TX_COUNT` / `NET_PKT_TX_COUNT` | 64 / 24 | The startup burst of declarations failed to send with the defaults. |
+
+About 10 KB of libc heap is left over.
 
 ## What it does
 
@@ -289,14 +295,14 @@ On startup the firmware initialises the INA219 current sensor, brings up WiFi (u
 
 | Kconfig | Default | Description |
 |---------|---------|-------------|
-| `APP_DISPLAY` | y | Enable LVGL display subsystem |
+| `APP_DISPLAY` | n | Enable LVGL display subsystem (on for native_sim only) |
 | `APP_DISPLAY_WORK_QUEUE_DEDICATED` | n | Use a dedicated work queue for UI updates |
 
 Settings are persisted via the Zephyr settings subsystem (ZMS backend). Loop delay and WiFi credentials can be written at runtime using the shell `settings` commands.
 
 ## Planned
 
-- Re-enable WiFi and display once integration is stable
+- The OLED display, if DRAM can be found for it alongside WiFi
 - ROS 2 services and parameters (`CONFIG_PICOROS_SERVICES` /
   `CONFIG_PICOROS_PARAMS`) -- the zenoh-pico features they need are already
   compiled in, so this is application work only
