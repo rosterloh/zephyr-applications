@@ -14,7 +14,7 @@ description: >
 
 # Zephyr Connectivity
 
-Validated against: Zephyr 4.4.99 (47ea4fd92683, 2026-09-18). Re-check with `mise run check-skills`.
+Validated against: Zephyr 4.4.99 (64437be51c30, 2026-09-19). Re-check with `mise run check-skills`.
 
 ## Scope
 
@@ -38,6 +38,11 @@ configuration, or the `net_buf` primitive (see `zephyr-kernel`).
   needs to be enabled (e.g. `CONFIG_BT_HCI`, vendor WiFi driver).
 - **TLS credentials must be added with `tls_credential_add()` BEFORE
   the socket option `TLS_SEC_TAG_LIST` is set.** Order matters.
+- **mbedTLS 4.x: a clean build is not a working handshake.** SNI, PEM
+  parsing and RSA public-key verify are each off by default, and a small
+  handshake stack hangs silently. Start from the *TLS Client* config and
+  the *mbedTLS 4.x failure modes* table in `references/sockets.md`.
+  `MBEDTLS_SSL_MAX_CONTENT_LEN` is deprecated; use `IN_`/`OUT_CONTENT_LEN`.
 - **Pair every scan with a stop.** Orphaned scans (BT or WiFi) prevent
   subsequent connects with no obvious error.
 - **DTLS uses sockets** with `SOCK_DGRAM` + `IPPROTO_DTLS_1_2`, not a

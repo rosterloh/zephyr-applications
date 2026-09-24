@@ -691,12 +691,20 @@ int configure_dns_servers(void)
 | `CONFIG_MBEDTLS` | n | Enable mbedTLS library |
 | `CONFIG_MBEDTLS_BUILTIN` | y | Use builtin mbedTLS (vs external) |
 | `CONFIG_MBEDTLS_ENABLE_HEAP` | n | Enable mbedTLS heap (required for TLS) |
-| `CONFIG_MBEDTLS_HEAP_SIZE` | 0 | mbedTLS heap size (40000-60000 typical) |
-| `CONFIG_MBEDTLS_SSL_MAX_CONTENT_LEN` | 16384 | Max TLS record size |
-| `CONFIG_MBEDTLS_PEM_PARSE_C` | n | Enable PEM cert parsing |
+| `CONFIG_MBEDTLS_HEAP_SIZE` | 512 | Static `.bss` array (`_mbedtls_heap[]`), costs RAM at link time. 60000 for an HTTPS client |
+| `CONFIG_MBEDTLS_SSL_IN_CONTENT_LEN` | 1500 | Incoming record buffer. 16384 unless max-fragment-length is negotiated; a server cert chain exceeds 1500 |
+| `CONFIG_MBEDTLS_SSL_OUT_CONTENT_LEN` | 1500 | Outgoing record buffer. A client sending small requests can keep 1500 |
+| `CONFIG_MBEDTLS_PEM_PARSE_C` | n | Enable PEM cert parsing (X.509 parsing alone is DER-only) |
+| `CONFIG_MBEDTLS_SSL_SERVER_NAME_INDICATION` | n | Send SNI. `TLS_HOSTNAME` alone does not |
+| `CONFIG_MBEDTLS_HAVE_TIME_DATE` | n | Check cert validity dates. Off = dates ignored; on = needs wall-clock time before the handshake |
+| `CONFIG_PSA_WANT_KEY_TYPE_RSA_PUBLIC_KEY` | n | Needed to verify an RSA server cert; RSA ciphersuites only select the key-pair types |
 | `CONFIG_MBEDTLS_KEY_EXCHANGE_PSK_ENABLED` | n | Enable PSK ciphersuites |
 | `CONFIG_MBEDTLS_DEBUG` | n | Enable mbedTLS debug output |
-| `CONFIG_MBEDTLS_DEBUG_LEVEL` | 0 | Debug verbosity (0-4) |
+| `CONFIG_MBEDTLS_LOG_LEVEL_DBG` | n | Debug verbosity. `MBEDTLS_DEBUG_LEVEL` is promptless and derived from this. Don't assign it |
+
+`CONFIG_MBEDTLS_SSL_MAX_CONTENT_LEN` is deprecated (`Kconfig.deprecated`, selects
+`DEPRECATED`). Set the IN/OUT pair instead. Likewise `MBEDTLS_TLS_VERSION_1_2`/`_1_3`
+are deprecated aliases for `MBEDTLS_SSL_PROTO_TLS1_2`/`_1_3`.
 
 ### TLS Credential Storage
 
@@ -785,13 +793,21 @@ CONFIG_NET_TCP=y
 CONFIG_NET_IPV4=y
 
 CONFIG_NET_SOCKETS_SOCKOPT_TLS=y
+CONFIG_TLS_CREDENTIALS=y
+CONFIG_ENTROPY_GENERATOR=y
 CONFIG_MBEDTLS=y
 CONFIG_MBEDTLS_BUILTIN=y
 CONFIG_MBEDTLS_ENABLE_HEAP=y
 CONFIG_MBEDTLS_HEAP_SIZE=60000
-CONFIG_MBEDTLS_SSL_MAX_CONTENT_LEN=4096
+CONFIG_MBEDTLS_SSL_IN_CONTENT_LEN=16384
+CONFIG_MBEDTLS_PEM_PARSE_C=y
+CONFIG_MBEDTLS_SSL_SERVER_NAME_INDICATION=y
+CONFIG_MBEDTLS_CIPHERSUITE_TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256=y
+CONFIG_MBEDTLS_CIPHERSUITE_TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256=y
+CONFIG_PSA_WANT_KEY_TYPE_RSA_PUBLIC_KEY=y
 
-CONFIG_MAIN_STACK_SIZE=4096
+# Stack of whichever thread runs the handshake (4.4 KB measured for RSA-2048 verify + HTTP)
+CONFIG_MAIN_STACK_SIZE=8192
 CONFIG_NET_PKT_RX_COUNT=16
 CONFIG_NET_PKT_TX_COUNT=16
 CONFIG_NET_BUF_RX_COUNT=32
@@ -1904,16 +1920,47 @@ CONFIG_MBEDTLS_SSL_SESSION_TICKETS=y
 
 1. **Certificate errors**: Verify CA certificate matches server's issuer
 2. **Hostname mismatch**: Check `TLS_HOSTNAME` matches cert CN/SAN
-3. **Time sync**: mbedTLS validates cert dates; ensure RTC is set
+3. **Time sync**: only matters with `CONFIG_MBEDTLS_HAVE_TIME_DATE=y` (off by
+   default, so validity dates are ignored). If enabled, the clock reads 1970
+   until SNTP syncs, and every handshake before then fails
 4. **Memory**: Increase `CONFIG_MBEDTLS_HEAP_SIZE` (typically 60000+)
+
+First check a raw TCP connection (`net tcp connect <ip> 443` on the shell).
+If TCP connects but TLS fails, the problem is TLS config or certs, not the network.
+
+#### mbedTLS 4.x failure modes
+
+These were found debugging hawkBit over HTTPS on ESP32 / ESP32-P4 (mbedTLS 4.1, TF-PSA-Crypto).
+Each ciphersuite symbol `select`s its own PSA primitives, protocol and key
+exchange, so picking suites *is* the configuration. Configs written for 3.x
+(including the upstream hawkBit sample's `overlay-tls.conf`) do not apply.
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| `Failed to parse certificate on tag N, err: -0x2180` at `TLS_SEC_TAG_LIST` | PEM CA, but only DER parsing is built | `CONFIG_MBEDTLS_PEM_PARSE_C=y` or ship DER |
+| `-0x2700`, verify flags `0x0000000c` (CN_MISMATCH \| NOT_TRUSTED) behind a reverse proxy | No SNI in the ClientHello, so the proxy served its default cert. `TLS_HOSTNAME`/`mbedtls_ssl_set_hostname()` only sets the name to verify | `CONFIG_MBEDTLS_SSL_SERVER_NAME_INDICATION=y` |
+| TCP connects, handshake fails, RSA server | RSA suites select only `PSA_WANT_KEY_TYPE_RSA_KEY_PAIR_*` | `CONFIG_PSA_WANT_KEY_TYPE_RSA_PUBLIC_KEY=y` |
+| `implicit declaration of function 'mbedtls_ssl_get_session'` in `sockets_tls.c` | TLS sockets enabled with too little of mbedTLS | Enable the full client set from *TLS Client* above; you can't trim it piecemeal |
+| Silent hang mid-handshake, no fault | Thread stack overflow. Handshake + HTTP used 4392 B, so a 4096 stack falls short. Xtensa has no stack guard | ≥8192 on the handshake thread (often `SYSTEM_WORKQUEUE_STACK_SIZE`, default 1024); confirm with `kernel thread stacks` |
+| Hang in POST_KERNEL before the banner after changing IN/OUT_CONTENT_LEN | Unresolved: `IN=16384`+`OUT=4096` hung one ESP32 board, but each alone booted. Static footprint was identical | Keep OUT at 1500 for clients. Boot-test on hardware after any buffer change |
+
+Peer verification is on by default for clients (`TLS_PEER_VERIFY` defaults to
+required), so a wrong CA fails closed.
+
+Cost on ESP32 for an HTTPS client: ~60 KB `.bss` for the heap plus ~100 KB flash.
 
 #### Debug Logging
 
 ```
+CONFIG_LOG_MODE_IMMEDIATE=y
 CONFIG_MBEDTLS_DEBUG=y
-CONFIG_MBEDTLS_DEBUG_LEVEL=4
+CONFIG_MBEDTLS_LOG_LEVEL_DBG=y
+CONFIG_TLS_CREDENTIALS_LOG_LEVEL_DBG=y
 CONFIG_NET_SOCKETS_LOG_LEVEL_DBG=y
 ```
+
+`CONFIG_MBEDTLS_DEBUG_LEVEL` has no prompt. Assigning it in a fragment aborts
+the Kconfig stage.
 
 #### Common Errors
 
