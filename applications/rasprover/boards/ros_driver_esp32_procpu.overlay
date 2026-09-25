@@ -3,6 +3,11 @@
 	compatible = "solomon,ssd1306";
 };
 
+/* Zephyr's esp32 dtsi leaves the radio disabled; CONFIG_WIFI alone is not enough. */
+&wifi {
+	status = "okay";
+};
+
 &i2c0 {
 	/* Run the bus at 400 kHz (Fast-mode), matching the rasprover-rs firmware
 	 * that drives the SSD1306/INA219 correctly on this hardware. */

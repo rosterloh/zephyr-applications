@@ -24,11 +24,11 @@ static void l4_event_handler(struct net_mgmt_event_callback *cb, uint64_t mgmt_e
 			     struct net_if *iface)
 {
 	switch (mgmt_event) {
-	case NET_EVENT_L4_CONNECTED:
+	case NET_EVENT_L4_IPV4_CONNECTED:
 		atomic_set(&l4_connected, 1);
 		k_sem_give(&l4_connected_sem);
 		break;
-	case NET_EVENT_L4_DISCONNECTED:
+	case NET_EVENT_L4_IPV4_DISCONNECTED:
 		atomic_set(&l4_connected, 0);
 		break;
 	}
@@ -39,7 +39,7 @@ void app_net_connect(void)
 	int err;
 
 	net_mgmt_init_event_callback(&l4_cb, l4_event_handler,
-				     NET_EVENT_L4_CONNECTED | NET_EVENT_L4_DISCONNECTED);
+				     NET_EVENT_L4_IPV4_CONNECTED | NET_EVENT_L4_IPV4_DISCONNECTED);
 	net_mgmt_add_event_callback(&l4_cb);
 	conn_mgr_mon_resend_status();
 

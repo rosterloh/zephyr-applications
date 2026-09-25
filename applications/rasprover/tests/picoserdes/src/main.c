@@ -2,12 +2,19 @@
  * Copyright (c) 2026 Richard Osterloh <richard.osterloh@gmail.com>
  * SPDX-License-Identifier: Apache-2.0
  *
- * Golden-byte tests for the rasprover ROS 2 CDR encoders in app_ros_cdr.c.
+ * Golden-byte tests for the rasprover ROS 2 messages, now encoded by Pico-ROS's
+ * picoserdes from the type list in src/rasprover_types.h.
  *
  * Why golden bytes: a wrong pad byte does not fail the build, it fails at the
  * ROS 2 subscriber, which silently misparses. The expected arrays below are
  * derived by hand from the message IDL plus the CDR alignment rule, NOT by
  * running the code under test, so they actually pin the wire layout.
+ *
+ * They are also the same arrays the previous hand-rolled encoder
+ * (app_ros_cdr.c) was tested against, unchanged. That is the point of keeping
+ * them: they were validated against a live ROS 2 stack through
+ * zenoh-bridge-ros2dds, so byte-for-byte equality is direct evidence that
+ * moving to picoserdes did not change what goes on the wire.
  *
  * CDR rules used throughout:
  *   - 4-byte encapsulation header {0x00, 0x01, 0x00, 0x00} = CDR_LE, options 0.
@@ -24,7 +31,7 @@
 #include <string.h>
 #include <zephyr/ztest.h>
 
-#include "app_ros_cdr.h"
+#include <picoserdes.h>
 
 /*
  * sensor_msgs/BatteryState, encoded with stamp = {0x11223344, 0x55667788},
@@ -33,7 +40,7 @@
  * IEEE-754 single precision, little endian:
  *    12.5f = 1.5625 x 2^3     -> 0x41480000 -> 00 00 48 41
  *   -1.5f  = -1.5 x 2^0       -> 0xBFC00000 -> 00 00 C0 BF
- *   qNaN   = F32_QNAN_LE      -> 0x7FC00000 -> 00 00 C0 7F
+ *   qNaN                      -> 0x7FC00000 -> 00 00 C0 7F
  *
  * abs  rel  bytes           field
  * ---  ---  --------------  --------------------------------------------------
@@ -142,21 +149,74 @@ static const uint8_t joint_golden[] = {
 };
 /* clang-format on */
 
-static float f32_at(const uint8_t *buf, size_t off)
+/*
+ * ps_serialize() stores the encapsulation header through a uint32_t*, so every
+ * buffer handed to it must be 4-aligned. An unaligned store faults on Xtensa,
+ * which is the target this firmware actually runs on.
+ */
+static uint8_t buf[256] __aligned(4);
+
+static float f32_at(const uint8_t *b, size_t off)
 {
 	float v;
 
-	memcpy(&v, buf + off, sizeof(v));
+	memcpy(&v, b + off, sizeof(v));
 	return v;
 }
 
-ZTEST_SUITE(ros_cdr, NULL, NULL, NULL, NULL, NULL);
-
-ZTEST(ros_cdr, test_battery_state_golden_bytes)
+static size_t encode_battery(uint32_t sec, uint32_t nanosec, float voltage, float current)
 {
-	uint8_t buf[128];
-	const struct app_ros_time stamp = {.sec = 0x11223344u, .nanosec = 0x55667788u};
-	size_t len = app_ros_encode_battery_state(buf, sizeof(buf), stamp, 12.5f, -1.5f);
+	ros_BatteryState msg = {
+		.header =
+			{
+				.stamp = {.sec = (int32_t)sec, .nanosec = nanosec},
+				.frame_id = "",
+			},
+		.voltage = voltage,
+		.temperature = NAN,
+		.current = current,
+		.charge = NAN,
+		.capacity = NAN,
+		.design_capacity = NAN,
+		.percentage = NAN,
+		.power_supply_status = 2,
+		.power_supply_health = 1,
+		.power_supply_technology = 0,
+		.present = true,
+		.cell_voltage = {.data = NULL, .n_elements = 0},
+		.cell_temperature = {.data = NULL, .n_elements = 0},
+		.location = "",
+		.serial_number = "",
+	};
+
+	memset(buf, 0, sizeof(buf));
+	return ps_serialize(buf, &msg, sizeof(buf));
+}
+
+static size_t encode_joints(uint32_t sec, uint32_t nanosec, rstring *names, double *positions,
+			    double *velocities, uint32_t count)
+{
+	ros_JointState msg = {
+		.header =
+			{
+				.stamp = {.sec = (int32_t)sec, .nanosec = nanosec},
+				.frame_id = "",
+			},
+		.name = {.data = names, .n_elements = count},
+		.position = {.data = positions, .n_elements = count},
+		.velocity = {.data = velocities, .n_elements = count},
+		.effort = {.data = NULL, .n_elements = 0},
+	};
+
+	memset(buf, 0, sizeof(buf));
+	return ps_serialize(buf, &msg, sizeof(buf));
+}
+
+ZTEST_SUITE(picoserdes, NULL, NULL, NULL, NULL, NULL);
+
+ZTEST(picoserdes, test_battery_state_golden_bytes)
+{
+	size_t len = encode_battery(0x11223344u, 0x55667788u, 12.5f, -1.5f);
 
 	zassert_equal(len, sizeof(battery_golden), "encoded %zu bytes, expected %zu", len,
 		      sizeof(battery_golden));
@@ -165,15 +225,12 @@ ZTEST(ros_cdr, test_battery_state_golden_bytes)
 }
 
 /*
- * The two transitions that hand-rolled CDR gets wrong. Asserted separately from
+ * The two transitions that CDR encoders get wrong. Asserted separately from
  * the golden array so a failure names the boundary rather than "bytes differ".
  */
-ZTEST(ros_cdr, test_battery_state_alignment_boundaries)
+ZTEST(picoserdes, test_battery_state_alignment_boundaries)
 {
-	uint8_t buf[128];
-	const struct app_ros_time stamp = {.sec = 0, .nanosec = 0};
-
-	(void)app_ros_encode_battery_state(buf, sizeof(buf), stamp, 12.5f, -1.5f);
+	(void)encode_battery(0, 0, 12.5f, -1.5f);
 
 	/* float32 after the empty frame_id string: 3 pad bytes at abs 17..19. */
 	zassert_equal(buf[17], 0, "pad byte 0 before voltage is not zero");
@@ -197,16 +254,14 @@ ZTEST(ros_cdr, test_battery_state_alignment_boundaries)
 }
 
 /* The five "if unmeasured, NaN" fields must decode as NaN, not as 0.0. */
-ZTEST(ros_cdr, test_battery_state_nan_sentinels)
+ZTEST(picoserdes, test_battery_state_nan_sentinels)
 {
-	uint8_t buf[128];
-	const struct app_ros_time stamp = {.sec = 0, .nanosec = 0};
 	const size_t nan_offsets[] = {24, 32, 36, 40, 44}; /* temperature, charge,
 							    * capacity, design_capacity,
 							    * percentage
 							    */
 
-	(void)app_ros_encode_battery_state(buf, sizeof(buf), stamp, 12.5f, -1.5f);
+	(void)encode_battery(0, 0, 12.5f, -1.5f);
 
 	ARRAY_FOR_EACH(nan_offsets, i) {
 		zassert_true(isnan(f32_at(buf, nan_offsets[i])), "field at offset %zu is not NaN",
@@ -223,12 +278,9 @@ ZTEST(ros_cdr, test_battery_state_nan_sentinels)
  * are bare integers on the wire, so a wrong one is only visible to the
  * subscriber -- POWER_SUPPLY_HEALTH_GOOD is 1 and 2 is OVERHEAT, one apart.
  */
-ZTEST(ros_cdr, test_battery_state_power_supply_enums)
+ZTEST(picoserdes, test_battery_state_power_supply_enums)
 {
-	uint8_t buf[128];
-	const struct app_ros_time stamp = {.sec = 0, .nanosec = 0};
-
-	(void)app_ros_encode_battery_state(buf, sizeof(buf), stamp, 12.5f, -1.5f);
+	(void)encode_battery(0, 0, 12.5f, -1.5f);
 
 	zassert_equal(buf[48], 2, "power_supply_status should be DISCHARGING (2)");
 	zassert_equal(buf[49], 1, "power_supply_health should be GOOD (1), not OVERHEAT (2)");
@@ -236,59 +288,27 @@ ZTEST(ros_cdr, test_battery_state_power_supply_enums)
 	zassert_equal(buf[51], 1, "present should be true");
 }
 
-/* cdr_write_encapsulation() must emit CDR_LE (0x0001) with a zero options word. */
-ZTEST(ros_cdr, test_encapsulation_header)
+/* ps_serialize() must emit CDR_LE (0x0001) with a zero options word. */
+ZTEST(picoserdes, test_encapsulation_header)
 {
-	uint8_t battery[128];
-	uint8_t joint[128];
-	const struct app_ros_time stamp = {.sec = 0, .nanosec = 0};
-	const struct app_ros_joint_sample sample = {
-		.name = "pan_joint", .position = 1.0, .velocity = -2.0};
 	static const uint8_t expected[] = {0x00, 0x01, 0x00, 0x00};
+	rstring names[] = {"pan_joint"};
+	double positions[] = {1.0};
+	double velocities[] = {-2.0};
 
-	(void)app_ros_encode_battery_state(battery, sizeof(battery), stamp, 12.5f, -1.5f);
-	(void)app_ros_encode_joint_state(joint, sizeof(joint), stamp, &sample, 1);
+	(void)encode_battery(0, 0, 12.5f, -1.5f);
+	zassert_mem_equal(buf, expected, sizeof(expected), "BatteryState encapsulation");
 
-	zassert_mem_equal(battery, expected, sizeof(expected), "BatteryState encapsulation");
-	zassert_mem_equal(joint, expected, sizeof(expected), "JointState encapsulation");
+	(void)encode_joints(0, 0, names, positions, velocities, 1);
+	zassert_mem_equal(buf, expected, sizeof(expected), "JointState encapsulation");
 }
 
-/*
- * Trust boundary: the caller supplies the buffer. Contract per cdr.c is that
- * an overflowing write sets a sticky error flag, cdr_writer_finish() then
- * returns 0, and nothing is written past the declared capacity.
- */
-ZTEST(ros_cdr, test_battery_state_buffer_bounds)
+ZTEST(picoserdes, test_joint_state_golden_bytes)
 {
-	uint8_t buf[128];
-	const struct app_ros_time stamp = {.sec = 0x11223344u, .nanosec = 0x55667788u};
-
-	/* Exact fit succeeds. */
-	zassert_equal(
-		app_ros_encode_battery_state(buf, sizeof(battery_golden), stamp, 12.5f, -1.5f),
-		sizeof(battery_golden), "exact-size buffer should encode fully");
-
-	/* One byte short fails, and the guard byte past the limit is untouched. */
-	memset(buf, 0xAA, sizeof(buf));
-	zassert_equal(
-		app_ros_encode_battery_state(buf, sizeof(battery_golden) - 1, stamp, 12.5f, -1.5f),
-		0, "undersized buffer must report 0 bytes");
-	zassert_equal(buf[sizeof(battery_golden) - 1], 0xAA, "wrote past the caller's buffer");
-
-	/* A buffer too small even for the encapsulation header must not scribble. */
-	memset(buf, 0xAA, sizeof(buf));
-	zassert_equal(app_ros_encode_battery_state(buf, 2, stamp, 12.5f, -1.5f), 0,
-		      "2-byte buffer must report 0 bytes");
-	zassert_equal(buf[2], 0xAA, "wrote past a 2-byte buffer");
-}
-
-ZTEST(ros_cdr, test_joint_state_golden_bytes)
-{
-	uint8_t buf[128];
-	const struct app_ros_time stamp = {.sec = 1, .nanosec = 2};
-	const struct app_ros_joint_sample sample = {
-		.name = "pan_joint", .position = 1.0, .velocity = -2.0};
-	size_t len = app_ros_encode_joint_state(buf, sizeof(buf), stamp, &sample, 1);
+	rstring names[] = {"pan_joint"};
+	double positions[] = {1.0};
+	double velocities[] = {-2.0};
+	size_t len = encode_joints(1, 2, names, positions, velocities, 1);
 
 	zassert_equal(len, sizeof(joint_golden), "encoded %zu bytes, expected %zu", len,
 		      sizeof(joint_golden));
@@ -297,108 +317,176 @@ ZTEST(ros_cdr, test_joint_state_golden_bytes)
 
 	/*
 	 * The float64 boundary specifically: position[0] needs no padding
-	 * (rel 40), velocity[0] needs 4 bytes (rel 52 -> 56). Getting this
-	 * wrong is the classic hand-rolled-CDR failure.
+	 * (rel 40), velocity[0] needs 4 bytes (rel 52 -> 56).
 	 */
 	zassert_equal(buf[40], 0x01, "position count moved off absolute offset 40");
 	zassert_mem_equal(&buf[56], "\x00\x00\x00\x00", 4, "missing 4-byte pad before velocity[0]");
 }
 
-ZTEST(ros_cdr, test_joint_state_buffer_bounds)
+/*
+ * The exact size the firmware's JointState buffer is sized against. If a joint
+ * name changes length, or a joint is added, this fails and
+ * JOINT_STATE_BUF_SIZE in app_picoros.c has to be re-derived -- picoserdes
+ * silently truncates rather than reporting an overflow (see
+ * test_serialize_overflow_is_silent below).
+ */
+ZTEST(picoserdes, test_joint_state_four_joint_size)
 {
-	uint8_t buf[128];
-	const struct app_ros_time stamp = {.sec = 1, .nanosec = 2};
-	const struct app_ros_joint_sample sample = {
-		.name = "pan_joint", .position = 1.0, .velocity = -2.0};
+	rstring names[] = {"left_wheel_joint", "right_wheel_joint", "pan_joint", "tilt_joint"};
+	double positions[] = {0.0, 0.0, 0.0, 0.0};
+	double velocities[] = {0.0, 0.0, 0.0, 0.0};
+	size_t len = encode_joints(1, 2, names, positions, velocities, ARRAY_SIZE(names));
 
-	memset(buf, 0xAA, sizeof(buf));
-	zassert_equal(app_ros_encode_joint_state(buf, sizeof(joint_golden) - 1, stamp, &sample, 1),
-		      0, "undersized buffer must report 0 bytes");
-	zassert_equal(buf[sizeof(joint_golden) - 1], 0xAA, "wrote past the caller's buffer");
-
-	/* A NULL sample array with a non-zero count is rejected before any write. */
-	zassert_equal(app_ros_encode_joint_state(buf, sizeof(buf), stamp, NULL, 1), 0,
-		      "NULL joints with count > 0 must be rejected");
+	zassert_equal(len, 184, "four-joint JointState is %zu bytes, expected 184", len);
+	zassert_true(len <= 320, "exceeds app_picoros.c's JOINT_STATE_BUF_SIZE");
 }
 
 /*
- * Round trip: the decoder walks the same alignment rules as the encoder, so a
- * mismatch between the two shows up here even if both golden arrays agree.
+ * Round trip through the same type description the firmware uses, with the
+ * sequence-capacity contract the gimbal command handler relies on:
+ * n_elements is the caller's capacity going in, n_deserialized is the count
+ * that came back.
  */
-ZTEST(ros_cdr, test_joint_command_round_trip)
+ZTEST(picoserdes, test_joint_state_round_trip)
 {
-	uint8_t buf[192];
-	const struct app_ros_time stamp = {.sec = 7, .nanosec = 8};
-	const struct app_ros_joint_sample samples[] = {
-		{.name = "tilt_joint", .position = 0.25, .velocity = 0.0},
-		{.name = "pan_joint", .position = -0.5, .velocity = 0.0},
+	rstring tx_names[] = {"tilt_joint", "pan_joint"};
+	double tx_positions[] = {0.25, -0.5};
+	double tx_velocities[] = {0.0, 0.0};
+	size_t len = encode_joints(7, 8, tx_names, tx_positions, tx_velocities, 2);
+
+	rstring rx_names[8];
+	double rx_positions[8];
+	double rx_velocities[8];
+	double rx_efforts[8];
+	ros_JointState rx = {
+		.name = {.data = rx_names, .n_elements = ARRAY_SIZE(rx_names)},
+		.position = {.data = rx_positions, .n_elements = ARRAY_SIZE(rx_positions)},
+		.velocity = {.data = rx_velocities, .n_elements = ARRAY_SIZE(rx_velocities)},
+		.effort = {.data = rx_efforts, .n_elements = ARRAY_SIZE(rx_efforts)},
 	};
-	struct app_ros_joint_command cmd = {0};
-	size_t len =
-		app_ros_encode_joint_state(buf, sizeof(buf), stamp, samples, ARRAY_SIZE(samples));
 
 	zassert_true(len > 0, "encode failed");
-	zassert_true(app_ros_decode_joint_command(buf, len, &cmd), "decode failed");
-	zassert_true(cmd.has_pan, "pan_joint not found");
-	zassert_true(cmd.has_tilt, "tilt_joint not found");
-	zassert_equal(cmd.pan_position, -0.5, "pan position mismatch");
-	zassert_equal(cmd.tilt_position, 0.25, "tilt position mismatch");
+	zassert_true(ps_deserialize(buf, &rx, len), "decode failed");
+
+	zassert_equal(rx.header.stamp.sec, 7, "stamp.sec");
+	zassert_equal(rx.header.stamp.nanosec, 8, "stamp.nanosec");
+	zassert_equal(rx.name.n_deserialized, 2, "expected 2 names, got %u",
+		      rx.name.n_deserialized);
+	zassert_equal(rx.position.n_deserialized, 2, "expected 2 positions");
+	zassert_equal(rx.effort.n_deserialized, 0, "effort should be empty");
+
+	zassert_str_equal(rx_names[0], "tilt_joint", "name[0]");
+	zassert_str_equal(rx_names[1], "pan_joint", "name[1]");
+	zassert_equal(rx_positions[0], 0.25, "position[0]");
+	zassert_equal(rx_positions[1], -0.5, "position[1]");
 }
 
-ZTEST(ros_cdr, test_joint_command_rejects_bad_input)
+/*
+ * Strings deserialize in place: rstring fields point back into the caller's
+ * buffer rather than into copies. The gimbal handler depends on this (it
+ * strcmp()s the names before returning, and picoros frees the buffer after),
+ * so it is pinned rather than assumed.
+ */
+ZTEST(picoserdes, test_deserialized_strings_alias_the_buffer)
 {
-	uint8_t buf[192];
-	const struct app_ros_time stamp = {.sec = 0, .nanosec = 0};
-	const struct app_ros_joint_sample samples[] = {
-		{.name = "tilt_joint", .position = 0.25, .velocity = 0.0},
-		{.name = "pan_joint", .position = -0.5, .velocity = 0.0},
+	rstring tx_names[] = {"pan_joint"};
+	double tx_positions[] = {1.0};
+	double tx_velocities[] = {0.0};
+	size_t len = encode_joints(0, 0, tx_names, tx_positions, tx_velocities, 1);
+
+	rstring rx_names[2];
+	double rx_positions[2];
+	double rx_velocities[2];
+	ros_JointState rx = {
+		.name = {.data = rx_names, .n_elements = ARRAY_SIZE(rx_names)},
+		.position = {.data = rx_positions, .n_elements = ARRAY_SIZE(rx_positions)},
+		.velocity = {.data = rx_velocities, .n_elements = ARRAY_SIZE(rx_velocities)},
+		.effort = {.data = NULL, .n_elements = 0},
 	};
-	struct app_ros_joint_command cmd = {0};
-	size_t len =
-		app_ros_encode_joint_state(buf, sizeof(buf), stamp, samples, ARRAY_SIZE(samples));
 
-	zassert_true(len > 0, "encode failed");
+	zassert_true(ps_deserialize(buf, &rx, len), "decode failed");
+	zassert_true((uint8_t *)rx_names[0] >= buf && (uint8_t *)rx_names[0] < buf + sizeof(buf),
+		     "name[0] should point into the source buffer, not a copy");
+}
 
-	/* Big-endian encapsulation (CDR_BE) must be refused, not misparsed. */
-	buf[1] = 0x00;
-	zassert_false(app_ros_decode_joint_command(buf, len, &cmd),
-		      "non-CDR_LE encapsulation must be rejected");
-	buf[1] = 0x01;
+/*
+ * geometry_msgs/Twist, the cmd_vel payload. rmw_zenoh delivers it as six
+ * float64s after the encapsulation header, which is what the previous
+ * hand-rolled handler assumed by offset; this pins the same layout.
+ */
+ZTEST(picoserdes, test_twist_round_trip)
+{
+	ros_Twist tx = {
+		.linear = {.x = 0.5, .y = 0.0, .z = 0.0},
+		.angular = {.x = 0.0, .y = 0.0, .z = -1.25},
+	};
+	size_t len = ps_serialize(buf, &tx, sizeof(buf));
+	ros_Twist rx = {0};
 
-	/*
-	 * Truncation. Absolute offsets for this two-joint message, derived the
-	 * same way as the golden arrays above:
-	 *   20  name count = 2
-	 *   24  name[0] length, 28..38 "tilt_joint\0", 39 pad
-	 *   40  name[1] length, 44..53 "pan_joint\0", 54..55 pad
-	 *   56  position count = 2
-	 *   60  position[0]   68  position[1]
-	 *   76  velocity count, 80..83 pad, 84 velocity[0], 92 velocity[1]
-	 *  100  effort count            -> total 104
-	 */
-	zassert_equal(len, 104, "two-joint layout changed; update the offsets below");
+	zassert_equal(len, 52, "Twist should be 4 + 6*8 = 52 bytes, got %zu", len);
+	zassert_true(ps_deserialize(buf, &rx, len), "decode failed");
+	zassert_equal(rx.linear.x, 0.5, "linear.x");
+	zassert_equal(rx.angular.z, -1.25, "angular.z");
+}
 
-	/* Cut right after the name count: name[0] cannot be read. */
-	zassert_false(app_ros_decode_joint_command(buf, 24, &cmd),
-		      "payload truncated inside the name array must be rejected");
+/*
+ * The reason app_picoros.c zeroes its serialization buffers before every
+ * encode: Micro-CDR's ucdr_align_to() moves the iterator past CDR padding
+ * without writing it, so pad bytes keep whatever the buffer held before. In a
+ * reused static buffer that is a fragment of the previous message, published
+ * to the network. ROS 2 subscribers ignore padding, so this is a disclosure
+ * problem rather than a parsing one -- but it is also why the golden-byte
+ * tests above only hold on a zeroed buffer.
+ */
+ZTEST(picoserdes, test_padding_is_not_zeroed_by_the_encoder)
+{
+	rstring names[] = {"pan_joint"};
+	double positions[] = {1.0};
+	double velocities[] = {-2.0};
 
-	/* Cut inside position[1], which spans 68..75. */
-	zassert_false(app_ros_decode_joint_command(buf, 72, &cmd),
-		      "payload truncated inside the position array must be rejected");
+	/* Poison the buffer, then encode *without* the memset the helpers do. */
+	memset(buf, 0xAA, sizeof(buf));
 
-	/*
-	 * Not a defect, but pinned so it stays deliberate: the decoder stops
-	 * after the position array, so a payload missing the trailing velocity
-	 * and effort fields is still accepted.
-	 */
-	zassert_true(app_ros_decode_joint_command(buf, 76, &cmd),
-		     "decoder must not require the velocity/effort fields");
+	ros_JointState msg = {
+		.header = {.stamp = {.sec = 1, .nanosec = 2}, .frame_id = ""},
+		.name = {.data = names, .n_elements = 1},
+		.position = {.data = positions, .n_elements = 1},
+		.velocity = {.data = velocities, .n_elements = 1},
+		.effort = {.data = NULL, .n_elements = 0},
+	};
+	size_t len = ps_serialize(buf, &msg, sizeof(buf));
 
-	/* Only one of the two joints present -> rejected. */
-	len = app_ros_encode_joint_state(buf, sizeof(buf), stamp, &samples[1], 1);
-	zassert_true(len > 0, "encode failed");
-	zassert_false(app_ros_decode_joint_command(buf, len, &cmd),
-		      "a command without tilt_joint must be rejected");
+	zassert_equal(len, sizeof(joint_golden), "length should not change");
 
-	zassert_false(app_ros_decode_joint_command(NULL, 0, &cmd), "NULL buffer must be rejected");
+	/* Absolute offsets 17..19 are the pad after the empty frame_id. */
+	zassert_equal(buf[17], 0xAA,
+		      "padding after frame_id was unexpectedly zeroed; "
+		      "if picoserdes now zero-fills, the memset in "
+		      "app_picoros.c can go");
+}
+
+/*
+ * Not a defect to fix here, but a limitation worth pinning so nobody assumes
+ * otherwise: Micro-CDR raises an error flag on its writer when the buffer runs
+ * out, but ps_serialize() discards the writer and returns the truncated
+ * length. There is no in-band way for a caller to tell a short message from a
+ * cut-off one, which is why app_picoros.c sizes its buffers from the worst
+ * case rather than checking a return code.
+ */
+ZTEST(picoserdes, test_serialize_overflow_is_silent)
+{
+	uint8_t small[32] __aligned(4);
+	ros_BatteryState msg = {
+		.header = {.stamp = {.sec = 0, .nanosec = 0}, .frame_id = ""},
+		.voltage = 12.5f,
+		.location = "",
+		.serial_number = "",
+	};
+	size_t len = ps_serialize(small, &msg, sizeof(small));
+
+	zassert_true(len > 0, "truncated encode still reports a length");
+	zassert_true(len < sizeof(battery_golden),
+		     "expected a truncated length below the full %zu bytes, got %zu",
+		     sizeof(battery_golden), len);
+	zassert_true(len <= sizeof(small), "wrote past the caller's buffer");
 }

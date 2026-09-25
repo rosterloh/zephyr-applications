@@ -3,8 +3,16 @@ LOG_MODULE_REGISTER(app_gimbal, LOG_LEVEL_INF);
 
 #include <zephyr/actuator/actuator.h>
 #include <zephyr/device.h>
+#ifdef CONFIG_BUS_SERVO
+#include <zephyr/drivers/uart.h>
+#include <drivers/bus_servo.h>
+#endif
 
 #include "app_gimbal.h"
+
+#ifdef CONFIG_BUS_SERVO
+#define SERVO_BUS_NODE DT_NODELABEL(gimbal_servo_bus)
+#endif
 
 static const struct device *const pan = DEVICE_DT_GET(DT_ALIAS(gimbal_pan));
 static const struct device *const tilt = DEVICE_DT_GET(DT_ALIAS(gimbal_tilt));
@@ -29,6 +37,24 @@ static bool read_joint(const struct device *dev, const char *name,
 
 bool app_gimbal_init(void)
 {
+#ifdef CONFIG_BUS_SERVO
+	/* The bus device has no init hook: the application configures its UART. */
+	struct bus_servo_iface_param param = {
+		.rx_timeout_us = 50000,
+		.serial =
+			{
+				.baud = DT_PROP(DT_PARENT(SERVO_BUS_NODE), current_speed),
+				.parity = UART_CFG_PARITY_NONE,
+			},
+	};
+	int iface = bus_servo_iface_get_by_name(DEVICE_DT_NAME(SERVO_BUS_NODE));
+
+	if (iface < 0 || bus_servo_init(iface, param) != 0) {
+		LOG_ERR("gimbal servo bus init failed");
+		return false;
+	}
+#endif
+
 	if (!device_is_ready(pan) || !device_is_ready(tilt)) {
 		LOG_ERR("gimbal devices not ready");
 		return false;
