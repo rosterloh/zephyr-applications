@@ -12,6 +12,8 @@
 
 #include <drivers/bus_servo.h>
 
+#include "app_watchdog.h"
+
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(pt_mcp, LOG_LEVEL_INF);
 
@@ -26,6 +28,20 @@ static const struct device *const tilt = DEVICE_DT_GET(DT_ALIAS(tilt_servo));
  */
 ACTUATOR_GROUP_DEFINE(pan_tilt, DEVICE_DT_GET(DT_ALIAS(pan_servo)),
 		      DEVICE_DT_GET(DT_ALIAS(tilt_servo)));
+
+/* Stall detection follows data_collection's shape: main() returns once the
+ * server is up, so there is no loop to feed from. A "boot" channel covers
+ * main(), and a "tool" channel covers each tool call -- the only steady-state
+ * path that touches the servo bus. A call wedged on the bus never reaches its
+ * delete and the timeout fires, rather than silently consuming one of the
+ * MCP_REQUEST_WORKERS until the server stops answering.
+ *
+ * A call is a handful of bus transactions, each bounded by the 50 ms
+ * rx_timeout in motors_init(), so 5 s is generous. The boot window covers
+ * servo bring-up and the HTTP server start; WiFi connects asynchronously
+ * under conn_mgr and is not inside it. */
+#define BOOT_WDT_TIMEOUT_MS 30000
+#define TOOL_WDT_TIMEOUT_MS 5000
 
 static mcp_server_ctx_t server;
 static bool motors_ready;
@@ -101,8 +117,8 @@ static int submit_text(const char *text, const char *execution_token)
 	return mcp_server_submit_tool_message(server, &response, execution_token);
 }
 
-static int motor_control_tool_callback(enum mcp_tool_event_type event, const char *arguments,
-				       const char *execution_token)
+static int motor_control(enum mcp_tool_event_type event, const char *arguments,
+			 const char *execution_token)
 {
 	char buf[128];
 	int ret;
@@ -179,6 +195,16 @@ static int motor_control_tool_callback(enum mcp_tool_event_type event, const cha
 	return submit_text(buf, execution_token);
 }
 
+static int motor_control_tool_callback(enum mcp_tool_event_type event, const char *arguments,
+				       const char *execution_token)
+{
+	int wdt_channel = app_watchdog_register("tool", TOOL_WDT_TIMEOUT_MS);
+	int ret = motor_control(event, arguments, execution_token);
+
+	app_watchdog_unregister(wdt_channel);
+	return ret;
+}
+
 static const struct mcp_tool_record motor_control_tool = {
 	.metadata =
 		{
@@ -243,11 +269,9 @@ static bool motors_init(void)
 	return true;
 }
 
-int main(void)
+static int app_start(void)
 {
 	int ret;
-
-	LOG_INF("pt_mcp %s", APP_VERSION_STRING);
 
 	motors_ready = motors_init();
 	if (!motors_ready) {
@@ -287,4 +311,23 @@ int main(void)
 	LOG_INF("MCP server running on port %d%s", CONFIG_MCP_HTTP_PORT, CONFIG_MCP_HTTP_ENDPOINT);
 
 	return 0;
+}
+
+int main(void)
+{
+	int wdt_channel;
+	int ret;
+
+	LOG_INF("pt_mcp %s", APP_VERSION_STRING);
+
+	app_watchdog_init();
+	wdt_channel = app_watchdog_register("boot", BOOT_WDT_TIMEOUT_MS);
+
+	ret = app_start();
+
+	/* Deleted on every path, success included: nothing feeds it after
+	 * main() returns, and an unfed channel is a reboot timer. */
+	app_watchdog_unregister(wdt_channel);
+
+	return ret;
 }

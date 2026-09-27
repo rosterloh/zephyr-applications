@@ -6,6 +6,7 @@ config APP_WATCHDOG
 	default y
 	select TASK_WDT
 	select WATCHDOG
+	select REBOOT
 	help
 	  Monitors registered tasks with Zephyr's task watchdog and reboots the
 	  board if one stops being fed. The failure mode this catches is a hang
