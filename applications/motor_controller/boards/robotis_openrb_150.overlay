@@ -102,7 +102,14 @@
 };
 
 &zephyr_udc0 {
+	/* Half the binding's 1024 B default. Since Zephyr 6d69698de74 each FIFO is
+	 * a dedicated pool of 64 B net_bufs (16 at the default, each with its own
+	 * header) rather than a ring buffer, which cost this 32 KB part ~600 B of
+	 * RAM and overflowed it. 8 packets each way is ample for the shell and
+	 * log traffic this port carries; must stay >= 2 x the 64 B bulk MPS. */
 	cdc_acm_uart0: cdc_acm_uart0 {
 		compatible = "zephyr,cdc-acm-uart";
+		tx-fifo-size = <512>;
+		rx-fifo-size = <512>;
 	};
 };

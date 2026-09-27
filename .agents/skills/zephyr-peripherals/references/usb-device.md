@@ -251,8 +251,10 @@ CONFIG_USBD_CDC_ACM_CLASS=y
 # Message callback from a workqueue instead of stack context
 CONFIG_USBD_MSG_DEFERRED_MODE=y
 
-# CDC ACM tuning
-CONFIG_USBD_CDC_ACM_BUF_POOL_SIZE=2048
+# CDC ACM tuning. Buffer sizing is devicetree, not Kconfig: each instance's
+# TX/RX pools hold tx-fifo-size / rx-fifo-size bytes (binding default 1024)
+# in MPS-sized net_bufs. USBD_CDC_ACM_BUF_POOL(_SIZE) was removed in
+# 6d69698de74; on a small part, shrink the FIFOs on the cdc-acm-uart node.
 CONFIG_USBD_CDC_ACM_STACK_SIZE=1024
 
 # Needed for USBD_DESC_BOS_DEFINE
