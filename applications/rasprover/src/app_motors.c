@@ -33,9 +33,9 @@ static void cmd_watchdog_handler(struct k_work *work)
 {
 	ARG_UNUSED(work);
 
-	(void)actuator_set_velocity(left_motor, 0.0f);
-	(void)actuator_set_velocity(right_motor, 0.0f);
-	/* Must come after set_velocity(0): setpoints reset the stage to NORMAL,
+	(void)actuator_set_duty(left_motor, 0.0f);
+	(void)actuator_set_duty(right_motor, 0.0f);
+	/* Must come after set_duty(0): setpoints reset the stage to NORMAL,
 	 * so COAST last leaves the bridge high-Z. Best-effort: backends without
 	 * ACTUATOR_CAP_DRIVE_MODE reject it.
 	 */
@@ -73,11 +73,9 @@ void app_motors_cmd_vel(float linear_x, float angular_z)
 	float v_left = linear_x - angular_z * half_track_m;
 	float v_right = linear_x + angular_z * half_track_m;
 
-	/* Open loop: the hbridge backend interprets the velocity setpoint as
-	 * normalised duty in -1.0..1.0.
-	 */
-	(void)actuator_set_velocity(left_motor, CLAMP(v_left / max_speed_m_s, -1.0f, 1.0f));
-	(void)actuator_set_velocity(right_motor, CLAMP(v_right / max_speed_m_s, -1.0f, 1.0f));
+	/* Open loop: duty scales linearly with speed, full duty at max_speed. */
+	(void)actuator_set_duty(left_motor, CLAMP(v_left / max_speed_m_s, -1.0f, 1.0f));
+	(void)actuator_set_duty(right_motor, CLAMP(v_right / max_speed_m_s, -1.0f, 1.0f));
 
 	k_work_reschedule(&cmd_watchdog, K_MSEC(CONFIG_APP_MOTORS_CMD_TIMEOUT_MS));
 }

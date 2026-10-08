@@ -20,6 +20,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`applications/common/picoros`, zenoh-pico transport tunables). The zenoh
   transport lease now defaults to 60 s with a x2 expire factor to match
   `rmw_zenohd`.
+- Wheel motors are driven with `actuator_set_duty()` instead of passing a
+  duty cycle through `actuator_set_velocity()`; the hbridge backend no longer
+  advertises velocity control. Duty is slew-limited on hardware (0 to full in
+  0.5 s, full to 0 in 0.25 s) via the backend's new ramp properties.
 - Message encoding moved from the hand-written `app_ros_cdr.c` to Pico-ROS's
   `picoserdes` over Micro-CDR, driven by `src/rasprover_types.h`. The wire
   bytes are unchanged -- `tests/picoserdes` asserts the same golden arrays
