@@ -66,3 +66,16 @@
 	 * mechanics would otherwise need /delete-property/ to get rid of it. */
 	invert-position;
 };
+
+/* Slew-limit the wheel duty so a cmd_vel step or reversal does not slam the
+ * gearmotors: 0 to full in 0.5 s, full to 0 in 0.25 s. Starting values, not
+ * tuned on the rover. The cmd_vel watchdog's COAST bypasses the ramp. */
+&left_motor {
+	ramp-up-permille-per-s = <2000>;
+	ramp-down-permille-per-s = <4000>;
+};
+
+&right_motor {
+	ramp-up-permille-per-s = <2000>;
+	ramp-down-permille-per-s = <4000>;
+};
