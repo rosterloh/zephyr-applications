@@ -57,7 +57,7 @@ jobs:
         run: sudo apt-get update
 
       - name: Install mise
-        uses: jdx/mise-action@v4
+        uses: jdx/mise-action@v5
         with:
           bootstrap: true
           cache: true
@@ -93,7 +93,7 @@ jobs:
 
       # No bootstrap here — see the clang-format job, which owns that coverage.
       - name: Install mise
-        uses: jdx/mise-action@v4
+        uses: jdx/mise-action@v5
         with:
           cache: true
 
