@@ -47,11 +47,14 @@
 };
 
 / {
-	joystick: analog-axis {
+	/* One analog-axis per channel: without CONFIG_ADC_ESP32_DMA the ESP32 ADC
+	 * driver rejects multi-channel sequences with -ENOTSUP.
+	 */
+	stick_x: stick-x {
 		compatible = "analog-axis";
 		poll-period-ms = <15>;
 
-		axis-x {
+		axis {
 			io-channels = <&adc0 4>;
 			in-min = <0>;
 			in-max = <4095>;
@@ -60,8 +63,13 @@
 			out-max = <1000>;
 			zephyr,axis = <INPUT_ABS_X>;
 		};
+	};
 
-		axis-y {
+	stick_y: stick-y {
+		compatible = "analog-axis";
+		poll-period-ms = <15>;
+
+		axis {
 			io-channels = <&adc0 5>;
 			in-min = <0>;
 			in-max = <4095>;
@@ -70,8 +78,13 @@
 			out-max = <1000>;
 			zephyr,axis = <INPUT_ABS_Y>;
 		};
+	};
 
-		axis-rz {
+	stick_rz: stick-rz {
+		compatible = "analog-axis";
+		poll-period-ms = <15>;
+
+		axis {
 			io-channels = <&adc0 6>;
 			in-min = <0>;
 			in-max = <4095>;
@@ -82,12 +95,8 @@
 		};
 	};
 
-	deadman: deadman-keys {
-		compatible = "gpio-keys";
-
-		apem_button {
-			gpios = <&gpio0 23 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
-			zephyr,code = <INPUT_BTN_0>;
-		};
+	/* Read directly by main every tick, so a failed read counts as released. */
+	zephyr,user {
+		deadman-gpios = <&gpio0 23 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
 	};
 };

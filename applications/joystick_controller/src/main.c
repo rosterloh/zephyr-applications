@@ -1,5 +1,6 @@
 #include <string.h>
 
+#include <zephyr/drivers/gpio.h>
 #include <zephyr/input/input.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
@@ -23,7 +24,9 @@ LOG_MODULE_REGISTER(app, LOG_LEVEL_INF);
  */
 #define TWIST_BUF_SIZE 64
 
-static atomic_t axis_x, axis_y, axis_rz, enable, l4_up;
+static atomic_t axis_x, axis_y, axis_rz, l4_up;
+
+static const struct gpio_dt_spec deadman = GPIO_DT_SPEC_GET(DT_PATH(zephyr_user), deadman_gpios);
 
 static void input_cb(struct input_event *evt, void *user_data)
 {
@@ -38,9 +41,6 @@ static void input_cb(struct input_event *evt, void *user_data)
 		break;
 	case INPUT_ABS_RZ:
 		atomic_set(&axis_rz, evt->value);
-		break;
-	case INPUT_BTN_0:
-		atomic_set(&enable, evt->value);
 		break;
 	default:
 		break;
@@ -129,6 +129,11 @@ int main(void)
 	struct teleop_state state = {0};
 	bool connected = false;
 
+	if (!gpio_is_ready_dt(&deadman) || gpio_pin_configure_dt(&deadman, GPIO_INPUT)) {
+		LOG_ERR("deadman button unavailable");
+		return -ENODEV;
+	}
+
 	settings_subsys_init();
 	settings_load();
 
@@ -150,7 +155,8 @@ int main(void)
 		}
 
 		const struct teleop_input in = {
-			.enable = atomic_get(&enable),
+			/* A failed read (e.g. seesaw I2C gone) counts as released. */
+			.enable = gpio_pin_get_dt(&deadman) > 0,
 			.x = atomic_get(&axis_x),
 			.y = atomic_get(&axis_y),
 			.rz = atomic_get(&axis_rz),

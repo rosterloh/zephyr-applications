@@ -76,13 +76,10 @@
 		};
 	};
 
-	deadman: deadman-keys {
-		compatible = "gpio-keys";
-		polling-mode;
-
-		button_a {
-			gpios = <&joy_gpio 6 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
-			zephyr,code = <INPUT_BTN_0>;
-		};
+	/* Read directly by main every tick: if the seesaw stops answering, the
+	 * read fails and the deadman counts as released instead of stuck held.
+	 */
+	zephyr,user {
+		deadman-gpios = <&joy_gpio 6 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
 	};
 };

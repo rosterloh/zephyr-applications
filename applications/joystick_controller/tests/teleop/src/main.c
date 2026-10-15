@@ -71,13 +71,24 @@ ZTEST(teleop, test_cal_symmetric_about_rest)
 {
 	int16_t min, max;
 
-	teleop_cal_symmetric(1800, 900, 3000, &min, &max);
+	zassert_true(teleop_cal_symmetric(1800, 900, 3000, 100, &min, &max));
 	zassert_equal(min, 900);
 	zassert_equal(max, 2700);
 
-	teleop_cal_symmetric(2048, 100, 4000, &min, &max);
+	zassert_true(teleop_cal_symmetric(2048, 100, 4000, 100, &min, &max));
 	zassert_equal(min, 100);
 	zassert_equal(max, 3996);
+}
+
+ZTEST(teleop, test_cal_rejects_one_sided_sweep)
+{
+	int16_t min = 0, max = 0;
+
+	/* Moved only one way: total sweep is large, one side is not. */
+	zassert_false(teleop_cal_symmetric(2000, 1950, 3500, 100, &min, &max));
+	zassert_false(teleop_cal_symmetric(2000, 500, 2050, 100, &min, &max));
+	zassert_equal(min, 0);
+	zassert_equal(max, 0);
 }
 
 ZTEST_SUITE(teleop, NULL, NULL, NULL, NULL, NULL);

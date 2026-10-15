@@ -38,11 +38,16 @@ void teleop_reset(struct teleop_state *s)
 	s->blocked = true;
 }
 
-void teleop_cal_symmetric(int16_t rest, int16_t seen_min, int16_t seen_max, int16_t *in_min,
-			  int16_t *in_max)
+bool teleop_cal_symmetric(int16_t rest, int16_t seen_min, int16_t seen_max, int16_t min_span,
+			  int16_t *in_min, int16_t *in_max)
 {
 	int16_t span = MIN(rest - seen_min, seen_max - rest);
 
+	if (span < min_span) {
+		return false;
+	}
+
 	*in_min = rest - span;
 	*in_max = rest + span;
+	return true;
 }

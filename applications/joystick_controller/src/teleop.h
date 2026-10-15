@@ -38,8 +38,11 @@ bool teleop_step(struct teleop_state *s, const struct teleop_input *in,
 /* Link lost: go inactive and ignore enable until it is seen released. */
 void teleop_reset(struct teleop_state *s);
 
-/* Largest span symmetric about rest that fits inside [seen_min, seen_max]. */
-void teleop_cal_symmetric(int16_t rest, int16_t seen_min, int16_t seen_max, int16_t *in_min,
-			  int16_t *in_max);
+/* Largest span symmetric about rest that fits inside [seen_min, seen_max].
+ * Returns false, leaving the outputs untouched, if either side of rest moved
+ * less than min_span (stick only swept one way, or was not at rest at start).
+ */
+bool teleop_cal_symmetric(int16_t rest, int16_t seen_min, int16_t seen_max, int16_t min_span,
+			  int16_t *in_min, int16_t *in_max);
 
 #endif /* TELEOP_H_ */
