@@ -123,13 +123,13 @@ int main(void)
 		LOG_ERR("Device %s not found", display_dev->name);
 	}
 
-	slider = lv_slider_create(lv_scr_act());
+	slider = lv_slider_create(lv_screen_active());
 	lv_obj_center(slider);
 	lv_slider_set_range(slider, 0, 1023);
 	lv_slider_set_value(slider, 25, LV_ANIM_OFF);
 	lv_obj_refresh_ext_draw_size(slider);
 
-	slide_label = lv_label_create(lv_scr_act());
+	slide_label = lv_label_create(lv_screen_active());
 	lv_obj_align_to(slide_label, slider, LV_ALIGN_OUT_BOTTOM_MID, 0, 10);
 
 	lv_task_handler();

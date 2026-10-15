@@ -133,7 +133,7 @@ static void initialise_display_cb(struct k_work *work)
 	}
 
 	lvgl_lock();
-	lv_scr_load(build_screen());
+	lv_screen_load(build_screen());
 	lvgl_unlock();
 	initialised = true;
 

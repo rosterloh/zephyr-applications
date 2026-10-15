@@ -211,11 +211,7 @@ static void refresh_cb(lv_timer_t *timer)
 
 	if (mode != shown_mode) {
 		for (int i = 0; i < PB_MODE_COUNT; i++) {
-			if (i == mode) {
-				lv_obj_remove_flag(pages[i], LV_OBJ_FLAG_HIDDEN);
-			} else {
-				lv_obj_add_flag(pages[i], LV_OBJ_FLAG_HIDDEN);
-			}
+			lv_obj_set_hidden(pages[i], i != mode);
 		}
 		shown_mode = mode;
 	}
@@ -250,7 +246,7 @@ int pb_ui_init(void)
 	lv_obj_set_style_bg_color(scr, lv_color_black(), 0);
 	lv_obj_set_style_text_color(scr, lv_color_white(), 0);
 	lv_obj_set_style_pad_all(scr, 0, 0);
-	lv_obj_remove_flag(scr, LV_OBJ_FLAG_SCROLLABLE);
+	lv_obj_set_scrollable(scr, false);
 
 	for (int i = 0; i < PB_MODE_COUNT; i++) {
 		pages[i] = lv_obj_create(scr);
@@ -262,8 +258,8 @@ int pb_ui_init(void)
 		lv_obj_set_style_border_width(pages[i], 0, 0);
 		lv_obj_set_style_radius(pages[i], 0, 0);
 		lv_obj_set_scrollbar_mode(pages[i], LV_SCROLLBAR_MODE_OFF);
-		lv_obj_remove_flag(pages[i], LV_OBJ_FLAG_SCROLLABLE);
-		lv_obj_add_flag(pages[i], LV_OBJ_FLAG_HIDDEN);
+		lv_obj_set_scrollable(pages[i], false);
+		lv_obj_set_hidden(pages[i], true);
 	}
 
 	create_dash(pages[PB_MODE_DASH]);
