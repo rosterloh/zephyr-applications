@@ -10,4 +10,5 @@ include(${CMAKE_CURRENT_LIST_DIR}/../common/picoros/picoros.cmake)
 target_sources(app PRIVATE
   src/main.c
   src/teleop.c
+  src/calibrate.c
 )
