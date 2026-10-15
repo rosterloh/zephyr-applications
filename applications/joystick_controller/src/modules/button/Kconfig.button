@@ -1,3 +1,0 @@
-module = BUTTON_MODULE
-module-str = BUTTON
-source "subsys/logging/Kconfig.template.log_config"

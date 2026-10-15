@@ -1,10 +1,52 @@
-menu "Application"
+mainmenu "Joystick controller"
 
-rsource "src/modules/button/Kconfig.button"
-rsource "src/modules/led/Kconfig.led"
+menuconfig APP_PICOROS
+	bool "Publish teleop Twist over Pico-ROS"
+	select PICOROS
+	default y
 
-endmenu
+if APP_PICOROS
 
-menu "Zephyr Kernel"
+config APP_PICOROS_LOCATOR
+	string "Zenoh locator for the host router"
+	default "tcp/192.168.1.10:7447"
+	help
+	  '<protocol>/<host>:<port>' of the rmw_zenohd router on the ROS 2 host.
+
+config APP_PICOROS_NODE_NAME
+	string "ROS 2 node name"
+	default "joystick_controller"
+
+config APP_PICOROS_DOMAIN_ID
+	int "ROS domain ID"
+	default 0
+	range 0 232
+
+config APP_PICOROS_CMD_VEL_TOPIC
+	string "ROS topic for geometry_msgs/Twist"
+	default "cmd_vel"
+	help
+	  Fully qualified topic name without the leading slash.
+
+endif # APP_PICOROS
+
+config APP_TELEOP_PUBLISH_HZ
+	int "Twist publish rate while the deadman is held"
+	default 20
+	range 1 100
+	help
+	  Keep the period well inside the robot's command timeout (e.g.
+	  twist_mux timeouts), which is what stops the robot if this controller
+	  loses power or its link.
+
+config APP_TELEOP_MAX_LINEAR_MM_S
+	int "Linear speed at full stick deflection (mm/s)"
+	default 500
+
+config APP_TELEOP_MAX_ANGULAR_MRAD_S
+	int "Angular speed at full twist deflection (mrad/s)"
+	default 1000
+
+rsource "../common/picoros/Kconfig"
+
 source "Kconfig.zephyr"
-endmenu
