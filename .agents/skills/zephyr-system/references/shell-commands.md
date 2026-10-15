@@ -290,15 +290,16 @@ Distributed registration allows subcommands to be defined in different source fi
 #### Usage Pattern
 1.  **Define the Set**: Create an extensible subcommand set in a header or common file.
     ```c
-    SHELL_SUBCMD_SET_CREATE(extensible_subcmds, (parent_command));
+    /* Set for `sensor read <x>`; the `read` command uses &sub_sensor_read as its subcmd */
+    SHELL_SUBCMD_SET_CREATE(sub_sensor_read, (sensor, read));
     ```
 2.  **Add Commands**: Use `SHELL_SUBCMD_ADD` or `SHELL_SUBCMD_COND_ADD` in any compilation unit.
     ```c
     /* In sensor_a.c */
-    SHELL_SUBCMD_ADD(extensible_subcmds, sensor_a, NULL, "Sensor A help", handler_a, 1, 0);
+    SHELL_SUBCMD_ADD((sensor, read), sensor_a, NULL, "Sensor A help", handler_a, 1, 0);
 
     /* In sensor_b.c */
-    SHELL_SUBCMD_COND_ADD(CONFIG_SENSOR_B, extensible_subcmds, sensor_b, NULL, "Sensor B help", handler_b, 1, 0);
+    SHELL_SUBCMD_COND_ADD(CONFIG_SENSOR_B, (sensor, read), sensor_b, NULL, "Sensor B help", handler_b, 1, 0);
     ```
 
 #### Use Case
@@ -317,14 +318,14 @@ The shell provides several mechanisms for handling and validating arguments.
 #### Parsing Techniques
 - **Standard Parsing**: Use `strtol`, `strtoul`, or `strtobool` for numeric and boolean parsing.
 - **Parent Context**: To access the parent command name, use `argv[-1]`.
-- **Getopt Support**: If `CONFIG_SHELL_GETOPT` is enabled, you can use `getopt` for complex flag parsing.
+- **Getopt Support**: If `CONFIG_SHELL_GETOPT` is enabled, you can use `sys_getopt` for complex flag parsing.
 
 ```c
 static int cmd_complex(const struct shell *sh, size_t argc, char **argv)
 {
     int c;
     /* argv[0] is the command name, so getopt starts at index 1 */
-    while ((c = getopt(argc, argv, "ab:")) != -1) {
+    while ((c = sys_getopt(argc, argv, "ab:")) != -1) {
         switch (c) {
         case 'a': /* handle flag a */ break;
         case 'b': /* handle optarg */ break;
@@ -373,14 +374,14 @@ Handling raw data transfers, implementing terminal emulators, or supporting spec
 
 #### API and Callback
 ```c
-void shell_set_bypass(const struct shell *sh, shell_bypass_cb_t cb);
+void shell_set_bypass(const struct shell *sh, shell_bypass_cb_t bypass, void *user_data);
 
 /* Callback signature */
-void (*shell_bypass_cb_t)(const struct shell *sh, uint8_t *data, size_t len);
+void (*shell_bypass_cb_t)(const struct shell *sh, uint8_t *data, size_t len, void *user_data);
 ```
 
 #### Use Case
-A command like `transfer_file` that sets a bypass callback to receive raw bytes until a termination sequence is detected, then restores normal shell operation by calling `shell_set_bypass(sh, NULL)`.
+A command like `transfer_file` that sets a bypass callback to receive raw bytes until a termination sequence is detected, then restores normal shell operation by calling `shell_set_bypass(sh, NULL, NULL)`.
 
 ---
 
@@ -426,7 +427,7 @@ const struct shell_transport_api my_api = { ... };
         .api = &my_api, \
         .ctx = &_name##_ctx \
     }; \
-    SHELL_DEFINE(_name, "prompt> ", &_name##_transport, 10, 0, SHELL_FLAG_USE_COLORS)
+    SHELL_DEFINE(_name, "prompt> ", &_name##_transport, 10, 0, SHELL_FLAG_OLF_CRLF)
 ```
 
 ## Api
@@ -571,13 +572,14 @@ Changes the prompt for the specified shell instance.
 - **Parameters:**
   - `sh`: Shell instance.
   - `prompt`: New prompt string.
-- **Return Value:** None.
+- **Return Value:** 0 on success, negative errno on failure.
 
 #### shell_set_bypass
 Sets a bypass callback to handle raw input data directly.
 - **Parameters:**
   - `sh`: Shell instance.
   - `bypass`: Function of type `shell_bypass_cb_t`.
+  - `user_data`: Passed to every `bypass` call.
 - **Return Value:** None.
 
 #### shell_ready
@@ -587,8 +589,8 @@ Checks if the shell is ready to accept commands.
 
 #### shell_set_root_cmd
 Sets a root command that will be active for all shell instances.
-- **Parameters:** `cmd`: Pointer to a static command entry.
-- **Return Value:** None.
+- **Parameters:** `cmd`: Name of a root command (string), or `NULL` to reset.
+- **Return Value:** 0 on success, `-EINVAL` for an unknown root command.
 
 #### shell_get_return_value
 Gets the return value of the last executed command.
@@ -628,7 +630,7 @@ void (*)(size_t idx, struct shell_static_entry *entry)
 #### shell_bypass_cb_t
 Callback for bypass mode (raw data handling).
 ```c
-void (*)(const struct shell *sh, uint8_t *data, size_t len)
+void (*)(const struct shell *sh, uint8_t *data, size_t len, void *user_data)
 ```
 
 ### Return Values
@@ -1473,19 +1475,18 @@ SHELL_COND_CMD_REGISTER(CONFIG_SHELL_DEBUG, debug, &debug_cmds,
 
 ### Commands with Getopt
 
-Standard argument parsing with getopt.
+Argument parsing with Zephyr's `sys_getopt` (renamed from `getopt` to avoid
+clashing with the libc one). The shell resets the per-shell getopt state before
+each command, so no manual `optind` reset is needed.
 
 **Kconfig:**
 ```kconfig
-CONFIG_POSIX_C_LIB_EXT=y
-CONFIG_GETOPT_LONG=y
-CONFIG_SHELL_GETOPT=y
+CONFIG_SHELL_GETOPT=y   # selects CONFIG_GETOPT; add CONFIG_GETOPT_LONG for sys_getopt_long()
 ```
 
 **Code:**
 ```c
-#include <zephyr/shell/shell.h>
-#include <getopt.h>
+#include <zephyr/shell/shell.h>   /* pulls in <zephyr/sys/sys_getopt.h> */
 
 static int cmd_config(const struct shell *sh, size_t argc, char **argv)
 {
@@ -1494,20 +1495,18 @@ static int cmd_config(const struct shell *sh, size_t argc, char **argv)
     const char *name = NULL;
     int count = 1;
 
-    /* Reset getopt */
-    optreset = 1;
-    optind = 1;
+    while ((opt = sys_getopt(argc, argv, "vn:c:h")) != -1) {
+        struct sys_getopt_state *state = sys_getopt_state_get();
 
-    while ((opt = getopt(argc, argv, "vn:c:h")) != -1) {
         switch (opt) {
         case 'v':
             verbose = true;
             break;
         case 'n':
-            name = optarg;
+            name = state->optarg;
             break;
         case 'c':
-            count = atoi(optarg);
+            count = atoi(state->optarg);
             break;
         case 'h':
             shell_print(sh, "Usage: config [-v] [-n name] [-c count]");

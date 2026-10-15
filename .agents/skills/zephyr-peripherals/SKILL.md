@@ -19,7 +19,7 @@ description: >
 
 # Zephyr Peripherals
 
-Validated against: Zephyr 4.4.99 (47ea4fd92683, 2026-09-18). Re-check with `mise run check-skills`.
+Validated against: Zephyr 4.5.0 (124121fbb079, 2026-10-15). Re-check with `mise run check-skills`.
 
 ## Scope
 
@@ -55,7 +55,7 @@ interfaces (see `zephyr-connectivity`), filesystem drivers (see
 - **pinctrl needs both the DT pinctrl-0 entry AND the SoC's pinctrl
   driver Kconfig.** Missing either keeps the peripheral electrically
   silent.
-- **Driver log level defaults to WRN.** Bring it up to DBG (e.g.
+- **Driver log level defaults to `CONFIG_LOG_DEFAULT_LEVEL` (INF).** Bring it up to DBG (e.g.
   `CONFIG_I2C_LOG_LEVEL_DBG=y`) when a driver is misbehaving;
   driver-internal `LOG_DBG` lines often hold the real error.
 - **`DT_INST_*` macros only work inside a driver's compatible-bound
@@ -74,7 +74,8 @@ Don't stop at "it compiles" — each of these names an artifact to look at.
       `builds/<app>/zephyr/include/generated/zephyr/devicetree_generated.h`
       — catches a `compatible` that no binding matched.
 - [ ] `device list` on the shell reports the device (and every device it
-      depends on) as ready, not `DISABLED` or `ERR`.
+      depends on) as `READY` (or a PM state), not `DISABLED` — which is also
+      how a failed init is shown.
 - [ ] `device_is_ready()` is checked in code before the first API call, and
       the boot log has no init-failure line for the driver.
 - [ ] Bus traffic confirmed at the expected address/rate — `i2c scan` finds

@@ -95,9 +95,10 @@ The sections above react to an overflow after it's already corrupted
 something. Find it proactively instead:
 
 - **Per-thread peak stack use.** Build with `CONFIG_THREAD_ANALYZER=y`
-  (+ `CONFIG_THREAD_ANALYZER_USE_PRINTK=y`), then `kernel stacks` from the
-  shell lists each thread's stack size and high-water mark. Any thread near
-  100% is one bad path from an overflow — widen it now. `kernel threads`
+  (selects `INIT_STACKS`/`THREAD_STACK_INFO`; + `CONFIG_THREAD_ANALYZER_USE_PRINTK=y`
+  for its own periodic report), then `kernel thread stacks` from the
+  shell lists each thread's stack size and unused bytes. Any thread near
+  100% is one bad path from an overflow — widen it now. `kernel thread list`
   adds state + (with `CONFIG_THREAD_RUNTIME_STATS=y`) CPU usage per thread,
   which also catches a thread spinning when it should be idle.
 - **Heap exhaustion.** A `k_malloc`/`sys_heap` returning NULL shows up as a
@@ -109,6 +110,15 @@ something. Find it proactively instead:
   (MPU-backed) traps a stack overflow at the moment it happens with the
   faulting thread named, instead of letting it scribble on a neighbour and
   crash somewhere unrelated later. Cheap; leave it on in debug builds.
+- **Asserts per module/file (4.5 ZASSERT).** `CONFIG_ASSERT` stays the master
+  switch; levels (OFF/TERSE/NORMAL/VERBOSE) come from
+  `CONFIG_ASSERT_MODULE_<MODULE>_LEVEL` (an app module is declared in its
+  Kconfig with `module = FOO` + `source
+  "subsys/debug/zassert/Kconfig.template.assert"`). A file opts in with
+  `ZASSERT_MODULE(FOO)` (or `ZASSERT_MODULE(FOO, ZASSERT_LEVEL_VERBOSE)` to
+  override just that file) and uses `ZASSERT()`. Legacy `__ASSERT()` maps to the
+  `DEFAULT` module, so `CONFIG_ASSERT_MODULE_DEFAULT_LEVEL_VERBOSE=y` replaces
+  `CONFIG_ASSERT_VERBOSE` (`include/zephyr/sys/zassert.h`).
 
 ## "Boot logs stop after a couple seconds"
 
@@ -116,8 +126,8 @@ Usually not a crash — just log dedup or a thread that runs once at boot
 and goes idle. Verify by:
 
 1. `kernel uptime` from the shell — if it climbs, the kernel is fine.
-2. `device list` — anything FAILED here would have logged at boot.
-3. `log info` — check that the modules you expect output from aren't at
+2. `device list` — anything `DISABLED` here failed init and would have logged at boot.
+3. `log status` — check that the modules you expect output from aren't at
    level 0 (OFF).
 
 If those are clean, the board is healthy and just quiet.

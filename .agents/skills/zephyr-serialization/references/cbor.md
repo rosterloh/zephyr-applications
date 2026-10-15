@@ -23,7 +23,7 @@ Two ways to use zcbor:
 #include <zcbor_encode.h>
 
 uint8_t buf[64];
-ZCBOR_STATE_E(zse, 0, buf, sizeof(buf), 1);  /* 0 backups, 1 top-level elem */
+ZCBOR_STATE_E(zse, 0, buf, sizeof(buf), 1);  /* 0 backups is fine unless CANONICAL */
 
 bool ok = zcbor_map_start_encode(zse, 2)
        && zcbor_tstr_put_lit(zse, "temp")
@@ -40,7 +40,7 @@ size_t len = zse->payload - buf;  /* bytes written */
 ```c
 #include <zcbor_decode.h>
 
-ZCBOR_STATE_D(zsd, 0, buf, buf_len, 1, 0);  /* 0 backups, 1 elem, 0 flags */
+ZCBOR_STATE_D(zsd, 1, buf, buf_len, 1, 0);  /* 1 backup per open list/map, 1 elem, 0 flags */
 
 int32_t temp;
 struct zcbor_string unit;
@@ -59,15 +59,18 @@ that buffer lives.
 
 ### Important Notes
 
-1. **Errors are sticky-ish.** Without `CONFIG_ZCBOR_STOP_ON_ERROR`,
-   subsequent calls keep executing after a failure; chain with `&&`
-   and check `zcbor_peek_error(state)` at the end.
+1. **Errors are sticky-ish.** Unless `CONFIG_ZCBOR_STOP_ON_ERROR=y` *and*
+   `state->constant_state->stop_on_error = true`, subsequent calls keep
+   executing after a failure; chain with `&&` and check
+   `zcbor_peek_error(state)` at the end.
 2. **State macros lie down the stack.** `ZCBOR_STATE_E/D` declares a
    local array — don't return a pointer to it from a function.
 3. **`size_hint` only matters under `CONFIG_ZCBOR_CANONICAL`.** Pass
    `0` for `map/list_start_encode` if you don't know or don't care.
-4. **Backups consume RAM.** Unordered-map search needs
-   `num_backups >= 1`; nested bstr decode needs another.
+4. **Backups consume RAM, and running out fails with
+   `ZCBOR_ERR_NO_BACKUP_MEM`.** Decoding takes one backup per open
+   list/map/bstr nesting level; encoding takes one per open bstr, plus one
+   per list/map only under `CONFIG_ZCBOR_CANONICAL`.
 5. **`_put` takes a value, `_encode` takes a pointer.** The pointer
    variants are needed by `zcbor_multi_encode`.
 
@@ -116,9 +119,9 @@ My_Command = (
 ### 2. Generate C code
 
 ```bash
-pip install zcbor
-
-zcbor code --decode --encode \
+# zcbor is pinned in pyproject.toml to the version of the zcbor module in
+# deps/ -- generated code must match the C library. Bump both together.
+mise x -- zcbor code --decode --encode \
   --short-names \
   -c my-api.cddl \
   -t My_Command status_response \
@@ -375,8 +378,9 @@ bool zcbor_multi_encode_minmax(size_t min_encode, size_t max_encode,
 ```
 
 `size_hint` is used only with `CONFIG_ZCBOR_CANONICAL`. Pass `0` if
-unused. Use `ZCBOR_CAST_FP(fn)` to cast function pointers for
-`zcbor_multi_encode`.
+unused. Cast typed functions with `(zcbor_encoder_t *)fn` /
+`(zcbor_decoder_t *)fn` for `zcbor_multi_encode`/`_decode` (the typedefs are
+function types, not pointer types).
 
 ### Decoding Primitives
 
@@ -452,8 +456,9 @@ bool zcbor_multi_decode(size_t min_decode, size_t max_decode,
                         zcbor_state_t *s, void *result, size_t result_len);
 ```
 
-Unordered-map search requires `num_backups >= 1` in `ZCBOR_STATE_D`,
-and `n_flags >=` max number of elements in any unordered map.
+Unordered-map search needs a backup like any map. `n_flags` in
+`ZCBOR_STATE_D` is only used with `ZCBOR_MAP_SMART_SEARCH` (set it `>=` the
+element count of the largest unordered map); otherwise it is ignored.
 
 ### Error Handling
 
@@ -464,11 +469,13 @@ int zcbor_peek_error(const zcbor_state_t *state);  /* returns ZCBOR_ERR_* */
 | Code                            | Meaning                                  |
 |---------------------------------|------------------------------------------|
 | `ZCBOR_ERR_NO_PAYLOAD`          | buffer exhausted                         |
+| `ZCBOR_ERR_NO_BACKUP_MEM`       | `num_backups` too small for the nesting  |
 | `ZCBOR_ERR_WRONG_TYPE`          | type mismatch                            |
-| `ZCBOR_ERR_HIGH_ELEM_COUNT`     | too many elements in list/map            |
-| `ZCBOR_ERR_NOT_AT_END`          | list/map didn't consume all elements     |
-| `ZCBOR_ERR_VALUE_NOT_FOUND`     | `_expect()` value mismatch               |
-| `ZCBOR_ERR_PAYLOAD_NOT_CONSUMED`| trailing bytes after decoding            |
+| `ZCBOR_ERR_LOW_ELEM_COUNT`      | read past the last element of a list/map |
+| `ZCBOR_ERR_HIGH_ELEM_COUNT`     | list/map ended with elements unconsumed  |
+| `ZCBOR_ERR_WRONG_VALUE`         | `_expect()` value mismatch               |
+| `ZCBOR_ERR_ELEM_NOT_FOUND`      | unordered-map key not found              |
+| `ZCBOR_ERR_PAYLOAD_NOT_CONSUMED`| `bstr_end_decode` with bytes left in the bstr |
 
 ### Encoded Size
 
@@ -539,11 +546,12 @@ CONFIG_ZCBOR_STOP_ON_ERROR=y
 
 | Resource           | Path                                                    |
 |--------------------|---------------------------------------------------------|
-| Encoding API       | `modules/zcbor/include/zcbor_encode.h`                  |
-| Decoding API       | `modules/zcbor/include/zcbor_decode.h`                  |
-| Shared types       | `modules/zcbor/include/zcbor_common.h`                  |
-| Registered tags    | `modules/zcbor/include/zcbor_tags.h`                    |
-| Implementation     | `modules/zcbor/src/{zcbor_encode,zcbor_decode,zcbor_common}.c` |
+| Encoding API       | `deps/modules/lib/zcbor/include/zcbor_encode.h`         |
+| Decoding API       | `deps/modules/lib/zcbor/include/zcbor_decode.h`         |
+| Shared types       | `deps/modules/lib/zcbor/include/zcbor_common.h`         |
+| Registered tags    | `deps/modules/lib/zcbor/include/zcbor_tags.h`           |
+| Implementation     | `deps/modules/lib/zcbor/src/{zcbor_encode,zcbor_decode,zcbor_common}.c` |
+| Zephyr glue/Kconfig | `deps/zephyr/modules/zcbor/`                           |
 
 zcbor is a Zephyr module — no manual CMakeLists changes are needed
 beyond `CONFIG_ZCBOR=y`, unless you add a CDDL codegen step (see the
@@ -551,8 +559,11 @@ overview above).
 
 ### Samples
 
+No Zephyr-tree sample; the module ships its own:
+
 ```
-samples/modules/zcbor/   # Basic encoding/decoding sample
+deps/modules/lib/zcbor/samples/hello_world/   # manual API
+deps/modules/lib/zcbor/samples/pet/           # CDDL codegen
 ```
 
 ### Tests
@@ -593,7 +604,7 @@ zcbor_list_end_decode(zsd);
 ### Unordered Map (Keys in Any Order)
 
 ```c
-/* backups=1 required; n_flags = max elements in any unordered map */
+/* 1 backup for the map; n_flags only matters with ZCBOR_MAP_SMART_SEARCH */
 ZCBOR_STATE_D(zsd, 1, buf, len, 1, 2);
 
 int32_t temp;
@@ -665,7 +676,7 @@ size_t num_decoded;
 
 zcbor_list_start_decode(zsd);
 zcbor_multi_decode(1, ARRAY_SIZE(items), &num_decoded,
-                   (zcbor_decoder_t)zcbor_uint32_decode,
+                   (zcbor_decoder_t *)zcbor_uint32_decode,
                    zsd, items, sizeof(items[0]));
 zcbor_list_end_decode(zsd);
 ```

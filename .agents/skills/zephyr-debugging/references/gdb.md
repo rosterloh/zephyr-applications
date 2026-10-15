@@ -16,7 +16,7 @@ backtrace. gdb attaches through the same debug probe as RTT.
 
 west wraps the probe + gdb for you:
 ```
-mise x -- west debug   -d builds/<app>     # flash, reset, attach, halt at main
+mise x -- west debug   -d builds/<app>     # flash (gdb `load`), reset, attach halted
 mise x -- west attach  -d builds/<app>     # attach to a *running* target, no reset
 mise x -- west debugserver -d builds/<app> # just the gdbserver; connect gdb yourself
 ```
@@ -26,18 +26,18 @@ doesn't reset, so you catch the system in the bad state.
 Manual path (when west's runner doesn't fit, e.g. a custom openocd cfg):
 ```
 openocd -f <board.cfg>                          # terminal 1, gdbserver on :3333
-arm-none-eabi-gdb builds/<app>/zephyr/zephyr.elf # terminal 2
+arm-zephyr-eabi-gdb builds/<app>/zephyr/zephyr.elf # terminal 2
 (gdb) target extended-remote localhost:3333
 ```
 The ELF is `builds/<app>/zephyr/zephyr.elf` — load it so gdb has symbols.
 
-> **ESP32-S3** uses `openocd-esp32` + `xtensa-esp32s3-elf-gdb`; `west debug`
+> **ESP32-S3** uses `openocd-esp32` + `xtensa-espressif_esp32s3_zephyr-elf-gdb` (SDK); `west debug`
 > selects the right pair automatically. The Zephyr-awareness and fault
 > sections below are Cortex-M specific.
 
 ## Zephyr thread awareness
 
-openocd has a Zephyr RTOS layer that lists threads as gdb "processes". Build
+openocd has a Zephyr RTOS layer that lists Zephyr threads as gdb threads. Build
 with:
 ```
 CONFIG_DEBUG_THREAD_INFO=y     # exposes the kernel thread list to the debugger
@@ -49,19 +49,22 @@ Then:
 (gdb) bt                       # backtrace of the selected thread
 ```
 Without `CONFIG_DEBUG_THREAD_INFO` you only ever see the CPU's current
-stack, which is useless for "which thread deadlocked".
+stack, which is useless for "which thread deadlocked". `west debug`/`attach`
+add `-c '$_TARGETNAME configure -rtos Zephyr'` for you, but only on Cortex-M,
+Cortex-R and ARCv2 (`runners/openocd.py: target_supports_rtos`); on the manual
+path pass it to openocd yourself.
 
 ## Decoding a fault (Cortex-M)
 
 When you get a `>>> ZEPHYR FATAL ERROR` dump but no symbols, build with:
 ```
 CONFIG_EXTRA_EXCEPTION_INFO=y  # dumps callee regs + fault status
-CONFIG_DEBUG=y                 # -g, keeps symbols
+CONFIG_DEBUG=y                 # disables optimisation (the ELF always has -g)
 ```
 The dump prints faulting PC/LR and the CFSR/HFSR fault-status bits. To turn
 an address into a line without a live target:
 ```
-arm-none-eabi-addr2line -e builds/<app>/zephyr/zephyr.elf 0x<PC>
+arm-zephyr-eabi-addr2line -e builds/<app>/zephyr/zephyr.elf 0x<PC>
 ```
 Live, halted at the fault, read the System Control Block fault registers:
 ```
@@ -70,14 +73,14 @@ Live, halted at the fault, read the System Control Block fault registers:
 (gdb) x/1xw 0xE000ED34          # MMFAR — faulting data address (if MMARVALID)
 (gdb) x/1xw 0xE000ED38          # BFAR  — bus fault address  (if BFARVALID)
 ```
-A set `PRECISERR` (CFSR bit 1) + valid BFAR points straight at the bad
+A set `PRECISERR` (CFSR bit 9) + `BFARVALID` (bit 15) points straight at the bad
 dereference.
 
 ## Useful breakpoints
 
 ```
-(gdb) break k_panic
-(gdb) break z_fatal_error        # catch every fatal before it reboots
+(gdb) break z_fatal_error        # catch every fatal (incl. k_panic/k_oops, which are macros)
+(gdb) break k_sys_fatal_error_handler
 (gdb) break sys_reboot
 (gdb) monitor reset halt         # openocd: reset and stop at the vector table
 ```

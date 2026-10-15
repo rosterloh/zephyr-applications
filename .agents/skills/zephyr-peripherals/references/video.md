@@ -13,8 +13,10 @@ variant with a CSI camera).
                                     * warning, so stale includes are invisible. */
 ```
 
-Supporting types (`struct video_format`, `enum video_buf_type`, FourCC macros)
-live in `<zephyr/video/types.h>`, pulled in by `video.h`.
+Supporting types (`struct video_format`, `enum video_buf_type`) live in
+`<zephyr/video/types.h>`, FourCC/`VIDEO_PIX_FMT_*` macros in
+`<zephyr/video/formats.h>` and `VIDEO_CID_*` in `<zephyr/video/controls.h>`,
+all pulled in by `video.h`.
 
 ## Contents
 
@@ -262,12 +264,31 @@ here is a build error, which is the good case.
   pointing it at an unused pin.
 - Zephyr's console is on `uart0` via the CH343 USB-serial bridge, not USB-CDC.
 
+### Host-side testing on native_sim (4.5)
+
+`zephyr,native-sim-video-fifo` (`drivers/video/video_native_sim_fifo.c`,
+`CONFIG_VIDEO_NATIVE_SIM_FIFO`, default `y` once the node exists) is a
+`zephyr,camera` that reads raw frames from a host named pipe — test capture code
+with no camera. Add it with `-S video-native-fifo` (or your own node). Path:
+`fifo-path` DT property, default `/tmp/zephyr-<device>-<pid>.fifo`, overridable
+with `--<node-name>=<path>` (`--video-fifo=...` for the snippet). Uncompressed
+formats only (RGB565/RGB24/BGR24/XRGB32/BGRX32/YUYV/GREY), up to 1920x1080,
+default 320x240 RGB565; no scaling/conversion, so the writer must match
+`video_set_format()`. No writer attached = no frames, never a blocked sim.
+
+```bash
+mkfifo /tmp/zephyr-cam.fifo
+builds/<app>/zephyr/zephyr.exe --video-fifo=/tmp/zephyr-cam.fifo &
+ffmpeg -re -f lavfi -i testsrc2=size=320x240:rate=10 \
+    -pix_fmt rgb565le -f rawvideo -y /tmp/zephyr-cam.fifo
+```
+
 ## <a name="kconfig"></a>Kconfig
 
 ```kconfig
 CONFIG_VIDEO=y
-CONFIG_VIDEO_BUFFER_POOL_NUM_MAX=3          # max buffers in the pool
-CONFIG_VIDEO_BUFFER_POOL_HEAP_SIZE=460800   # total pool bytes (3 * 320*240*2)
+CONFIG_VIDEO_BUFFER_POOL_NUM_MAX=3          # max buffers in the pool (default 2)
+CONFIG_VIDEO_BUFFER_POOL_HEAP_SIZE=460800   # total pool bytes (3 * 320*240*2); default 2 MiB
 CONFIG_VIDEO_BUFFER_POOL_ALIGN=32           # DMA alignment, if the driver needs it
 
 # Place the frame pool in a named linker region, or in external RAM
@@ -312,6 +333,5 @@ devices, formats and controls without a rebuild cycle. See
   has adjusted your request, and re-read the format instead of assuming the one
   you set was accepted verbatim.
 - **The pre-4.5 `<zephyr/drivers/video.h>` include still compiles** with no
-  warning, so stale includes don't announce themselves. In this workspace
-  `applications/embedded_vision/src/main.c` still uses the old path — harmless,
-  but new code should use `<zephyr/video/video.h>`.
+  warning, so stale includes don't announce themselves. New code should use
+  `<zephyr/video/video.h>` (as `applications/embedded_vision/src/main.c` does).

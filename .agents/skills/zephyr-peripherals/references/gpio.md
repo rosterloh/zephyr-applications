@@ -235,13 +235,13 @@ CONFIG_GPIO=y                    # Enable GPIO driver subsystem (required)
 
 | Flag | Value | Description |
 |------|-------|-------------|
-| `GPIO_INPUT` | 0x1 | Pin configured as input |
-| `GPIO_OUTPUT` | 0x2 | Pin configured as output |
-| `GPIO_OUTPUT_INACTIVE` | 0x2 | Output initially inactive |
-| `GPIO_OUTPUT_ACTIVE` | 0x3 | Output initially active |
-| `GPIO_ACTIVE_LOW` | 0x10 | Logical active = physical low |
-| `GPIO_PULL_UP` | 0x100 | Enable internal pull-up |
-| `GPIO_PULL_DOWN` | 0x200 | Enable internal pull-down |
+| `GPIO_INPUT` | `BIT(16)` | Pin configured as input |
+| `GPIO_OUTPUT` | `BIT(17)` | Pin configured as output |
+| `GPIO_OUTPUT_INACTIVE` | `OUTPUT \| INIT_LOW \| INIT_LOGICAL` | Output initially inactive |
+| `GPIO_OUTPUT_ACTIVE` | `OUTPUT \| INIT_HIGH \| INIT_LOGICAL` | Output initially active |
+| `GPIO_ACTIVE_LOW` | `1 << 0` | Logical active = physical low (DT flag) |
+| `GPIO_PULL_UP` | `1 << 4` | Enable internal pull-up (DT flag) |
+| `GPIO_PULL_DOWN` | `1 << 5` | Enable internal pull-down (DT flag) |
 
 #### Interrupt Flags
 
@@ -616,10 +616,10 @@ if (!gpio_is_ready_dt(&led)) {
 
 | Flag | Value | Description |
 |------|-------|-------------|
-| `GPIO_INPUT` | (1 << 0) | Configure as input |
-| `GPIO_OUTPUT` | (1 << 1) | Configure as output |
-| `GPIO_OUTPUT_INACTIVE` | GPIO_OUTPUT | Output, initial inactive |
-| `GPIO_OUTPUT_ACTIVE` | GPIO_OUTPUT \| GPIO_OUTPUT_INIT_HIGH | Output, initial active |
+| `GPIO_INPUT` | (1 << 16) | Configure as input |
+| `GPIO_OUTPUT` | (1 << 17) | Configure as output |
+| `GPIO_OUTPUT_INACTIVE` | GPIO_OUTPUT \| GPIO_OUTPUT_INIT_LOW \| GPIO_OUTPUT_INIT_LOGICAL | Output, initial inactive |
+| `GPIO_OUTPUT_ACTIVE` | GPIO_OUTPUT \| GPIO_OUTPUT_INIT_HIGH \| GPIO_OUTPUT_INIT_LOGICAL | Output, initial active |
 | `GPIO_OUTPUT_LOW` | GPIO_OUTPUT \| GPIO_OUTPUT_INIT_LOW | Output, initial low |
 | `GPIO_OUTPUT_HIGH` | GPIO_OUTPUT \| GPIO_OUTPUT_INIT_HIGH | Output, initial high |
 
@@ -627,15 +627,15 @@ if (!gpio_is_ready_dt(&led)) {
 
 | Flag | Value | Description |
 |------|-------|-------------|
-| `GPIO_ACTIVE_LOW` | (1 << 4) | Active = physical low |
+| `GPIO_ACTIVE_LOW` | (1 << 0) | Active = physical low |
 | `GPIO_ACTIVE_HIGH` | 0 | Active = physical high (default) |
 
 #### Pull Resistor Flags
 
 | Flag | Value | Description |
 |------|-------|-------------|
-| `GPIO_PULL_UP` | (1 << 8) | Enable pull-up |
-| `GPIO_PULL_DOWN` | (1 << 9) | Enable pull-down |
+| `GPIO_PULL_UP` | (1 << 4) | Enable pull-up |
+| `GPIO_PULL_DOWN` | (1 << 5) | Enable pull-down |
 
 #### Drive Mode Flags
 
@@ -876,8 +876,8 @@ Include: `<zephyr/dt-bindings/gpio/gpio.h>`
 
 | Flag | Value | Description |
 |------|-------|-------------|
-| `GPIO_OPEN_DRAIN` | 64 | Open-drain output |
-| `GPIO_OPEN_SOURCE` | 128 | Open-source output |
+| `GPIO_OPEN_DRAIN` | 6 | Open-drain output (`SINGLE_ENDED \| LINE_OPEN_DRAIN`) |
+| `GPIO_OPEN_SOURCE` | 2 | Open-source output (`SINGLE_ENDED \| LINE_OPEN_SOURCE`) |
 
 #### Combining Flags
 
@@ -1022,7 +1022,7 @@ For GPIO mapping/redirection between controllers.
 
 ```dts
 gpio_mux: gpio-mux {
-    compatible = "gpio-nexus";
+    compatible = "vendor,my-header"; /* binding does include: gpio-nexus.yaml */
     #gpio-cells = <2>;
 
     gpio-map =
@@ -1067,10 +1067,10 @@ CONFIG_GPIO_INIT_PRIORITY=40
 ```
 
 **Type:** int
-**Default:** 40
-**Range:** 0-99
+**Default:** `KERNEL_INIT_PRIORITY_DEFAULT` (40)
 
-Higher priority (lower number) initializes earlier. Default 40 runs after basic bus drivers.
+Lower number initializes earlier. Default 40 runs *before* I2C/SPI controllers
+(`KERNEL_INIT_PRIORITY_DEVICE`, 50); bus-attached expanders use their own (≥ the bus's).
 
 ### Logging Options
 
@@ -1108,10 +1108,12 @@ CONFIG_SHELL=y  # Required dependency
 
 **Available shell commands:**
 ```
-gpio conf <device> <pin> <mode>   # Configure pin
+gpio conf <device> <pin> <i|o>[u|d][h|l][0|1]  # Configure pin
 gpio get <device> <pin>           # Read pin
-gpio set <device> <pin> <value>   # Write pin
-gpio blink <device> <pin>         # Toggle pin
+gpio set <device> <pin> <0|1>     # Write pin
+gpio toggle <device> <pin>        # Toggle pin
+gpio blink <device> <pin>         # Blink pin
+gpio devices / gpio info          # List controllers / pin info
 ```
 
 ### Hardware-Specific Options
@@ -1208,7 +1210,7 @@ a pin mask, or per-pin with the boolean helpers:
 ```c
 /* Per port: fills bitmasks of input and/or output pins. Pass NULL to skip. */
 gpio_port_pins_t inputs, outputs;
-int ret = gpio_port_get_direction(port, GPIO_PORT_PINS_MASK, &inputs, &outputs);
+int ret = gpio_port_get_direction(port, BIT(3) | BIT(4), &inputs, &outputs);
 
 /* Per pin: 1 = yes, 0 = no, negative errno on failure */
 int is_in  = gpio_pin_is_input(port, pin);

@@ -20,7 +20,7 @@
 static struct net_mgmt_event_callback wifi_cb;
 
 static void wifi_event_handler(struct net_mgmt_event_callback *cb,
-                               uint32_t mgmt_event, struct net_if *iface)
+                               uint64_t mgmt_event, struct net_if *iface)
 {
     switch (mgmt_event) {
     case NET_EVENT_WIFI_CONNECT_RESULT:
@@ -79,7 +79,7 @@ int main(void)
 
 ```c
 static void scan_result_handler(struct net_mgmt_event_callback *cb,
-                                uint32_t mgmt_event, struct net_if *iface)
+                                uint64_t mgmt_event, struct net_if *iface)
 {
     if (mgmt_event == NET_EVENT_WIFI_SCAN_RESULT) {
         const struct wifi_scan_result *entry =
@@ -154,6 +154,8 @@ CONFIG_NET_IPV4=y
 CONFIG_NET_DHCPV4=y
 ```
 
+DHCPv4 teardown order changed in 4.5: `NET_EVENT_IPV4_DHCP_STOP` now fires *before* the lease is given up (address and lease DNS servers still installed in the handler); `NET_EVENT_IPV4_ADDR_DEL` is now the last teardown event, so put "IP lost" handling there.
+
 ### Minimum Kconfig for AP Mode
 
 ```
@@ -171,7 +173,7 @@ CONFIG_NET_CONFIG_MY_IPV4_NETMASK="255.255.255.0"
 | Event | Description |
 |-------|-------------|
 | `NET_EVENT_WIFI_SCAN_RESULT` | Single scan result (called per AP found) |
-| `NET_EVENT_WIFI_SCAN_DONE` | Scan complete |
+| `NET_EVENT_WIFI_SCAN_DONE` | Scan complete; `wifi_status.status` != 0 on failure (ESP32 reports `-EIO` as of 4.5) |
 | `NET_EVENT_WIFI_CONNECT_RESULT` | Connection attempt result |
 | `NET_EVENT_WIFI_DISCONNECT_RESULT` | Disconnection notification |
 | `NET_EVENT_WIFI_AP_ENABLE_RESULT` | AP mode enabled |
@@ -222,7 +224,7 @@ CONFIG_WIFI_NM_WPA_SUPPLICANT_AP=y
 static struct net_mgmt_event_callback ap_cb;
 
 static void ap_event_handler(struct net_mgmt_event_callback *cb,
-                             uint32_t mgmt_event, struct net_if *iface)
+                             uint64_t mgmt_event, struct net_if *iface)
 {
     switch (mgmt_event) {
     case NET_EVENT_WIFI_AP_ENABLE_RESULT: {
@@ -331,38 +333,19 @@ struct wifi_connect_req_params params = {
 
 ### Get Connected Stations
 
-```c
-void list_connected_stations(struct net_if *iface)
-{
-    struct wifi_ap_sta_list sta_list = {0};
-
-    int ret = net_mgmt(NET_REQUEST_WIFI_AP_STA_LIST, iface,
-                       &sta_list, sizeof(sta_list));
-    if (ret) {
-        printk("Failed to get station list: %d\n", ret);
-        return;
-    }
-
-    printk("Connected stations: %d\n", sta_list.num_sta);
-    for (int i = 0; i < sta_list.num_sta; i++) {
-        printk("  %d: %02x:%02x:%02x:%02x:%02x:%02x\n", i,
-               sta_list.sta[i].mac[0], sta_list.sta[i].mac[1],
-               sta_list.sta[i].mac[2], sta_list.sta[i].mac[3],
-               sta_list.sta[i].mac[4], sta_list.sta[i].mac[5]);
-    }
-}
-```
+There is no `net_mgmt` request that returns the station list. Keep your own
+table from `NET_EVENT_WIFI_AP_STA_CONNECTED` / `_DISCONNECTED` (each carries a
+`wifi_ap_sta_info`) — the `wifi ap stations` shell command does exactly this
+in `subsys/net/l2/wifi/wifi_shell.c`.
 
 ### Disconnect a Station
 
 ```c
-void disconnect_station(struct net_if *iface, const uint8_t *mac)
+void disconnect_station(struct net_if *iface, uint8_t mac[WIFI_MAC_ADDR_LEN])
 {
-    struct wifi_ap_sta_info sta = {0};
-    memcpy(sta.mac, mac, WIFI_MAC_ADDR_LEN);
-
+    /* Payload is the bare 6-byte MAC; any other length returns -EINVAL */
     int ret = net_mgmt(NET_REQUEST_WIFI_AP_STA_DISCONNECT, iface,
-                       &sta, sizeof(sta));
+                       mac, WIFI_MAC_ADDR_LEN);
     if (ret) {
         printk("Failed to disconnect station: %d\n", ret);
     }
@@ -497,9 +480,10 @@ CONFIG_WIFI_AIROC=y          # Infineon AIROC
 #### WiFi Usage Mode
 
 ```
-# STA is the default. Enable AP support explicitly when you need it;
-# there are no *_STA_MODE_ONLY / *_AP_MODE_ONLY symbols.
-CONFIG_WIFI_NM_WPA_SUPPLICANT_AP=y
+# choice WIFI_USAGE_MODE (drivers/wifi/Kconfig), default WIFI_USAGE_MODE_STA.
+# AP or STA_AP defaults WIFI_NM_WPA_SUPPLICANT_AP=y; there are no
+# *_STA_MODE_ONLY / *_AP_MODE_ONLY symbols.
+CONFIG_WIFI_USAGE_MODE_STA_AP=y        # or _STA, _AP, _SCAN_ONLY
 ```
 
 ### Management API
@@ -511,8 +495,10 @@ CONFIG_NET_L2_WIFI_MGMT=y
 # Extended management features
 CONFIG_WIFI_MGMT_RAW_SCAN_RESULTS=y     # Raw 802.11 scan data
 CONFIG_WIFI_MGMT_RAW_SCAN_RESULT_LENGTH=1024
-CONFIG_WIFI_MGMT_SCAN_SSID_FILT_MAX=4   # Max SSIDs for filtered scan
-CONFIG_WIFI_MGMT_SCAN_CHAN_MAX_MANUAL=8 # Max channels for manual scan
+# Max SSIDs for filtered scan
+CONFIG_WIFI_MGMT_SCAN_SSID_FILT_MAX=4
+# Max channels for manual scan
+CONFIG_WIFI_MGMT_SCAN_CHAN_MAX_MANUAL=8
 ```
 
 ### Power Save Options
@@ -638,7 +624,8 @@ CONFIG_NET_L2_WIFI_MGMT_LOG_LEVEL_DBG=y
 CONFIG_WIFI_NM_LOG_LEVEL_DBG=y
 
 # wpa_supplicant debug
-CONFIG_WIFI_NM_WPA_SUPPLICANT_DEBUG_LEVEL=5  # 0=none to 5=verbose
+# 0=none to 5=verbose
+CONFIG_WIFI_NM_WPA_SUPPLICANT_DEBUG_LEVEL=5
 ```
 
 ### Driver-Specific Options
@@ -754,18 +741,23 @@ CONFIG_NET_IF_MAX_IPV6_COUNT=2
 ### Kconfig Dependencies
 
 ```
-# WiFi Management API dependencies
-NET_L2_WIFI_MGMT → NETWORKING, NET_L2_ETHERNET (for native)
+# WiFi Management API (selects NET_MGMT, NET_MGMT_EVENT[_INFO])
+NET_L2_WIFI_MGMT → NETWORKING
 
-# wpa_supplicant dependencies
-WIFI_NM_WPA_SUPPLICANT → NET_SOCKETS, POSIX_API
+# wpa_supplicant selects (not depends on) these, plus EXPERIMENTAL
+WIFI_NM_WPA_SUPPLICANT ⇒ NET_SOCKETS, POSIX_API, NET_L2_WIFI_MGMT, WIFI_NM
 
-# Credential storage dependencies
-WIFI_CREDENTIALS_BACKEND_SETTINGS → SETTINGS, NVS, FLASH, FLASH_MAP
-
-# TWT dependencies
-WIFI_MGMT_TWT → NET_L2_WIFI_MGMT
+# Credential storage: only SETTINGS is a hard dependency; NVS/FLASH/FLASH_MAP
+# are whatever your settings backend needs
+WIFI_CREDENTIALS_BACKEND_SETTINGS → SETTINGS, !SETTINGS_NONE
 ```
+
+native_sim (4.5): `boards/native/native_sim/Kconfig.defconfig` defaults
+`WIFI_NM_WPA_SUPPLICANT=y` whenever `WIFI=y && !WIFI_OFFLOAD` (for the new
+host-nl80211 `WIFI_NATIVE_SIM` driver, which also needs a
+`zephyr,native-sim-wifi` DT node and is 32-bit only). A native_sim build
+with `CONFIG_WIFI=y` but `CONFIG_NETWORKING=n` therefore aborts Kconfig —
+drop `CONFIG_WIFI` there or set `CONFIG_WIFI_NM_WPA_SUPPLICANT=n`.
 
 ## Locations
 
@@ -845,9 +837,9 @@ All WiFi drivers are in `drivers/wifi/`:
 
 | Path | Description |
 |------|-------------|
-| `doc/connectivity/networking/api/wifi.rst` | WiFi API documentation |
-| `doc/connectivity/networking/api/wifi_credentials.rst` | Credentials API docs |
-| `doc/connectivity/networking/` | General networking docs |
+| `doc/services/connectivity/networking/api/wifi.rst` | WiFi API documentation |
+| `doc/services/connectivity/networking/api/wifi_credentials.rst` | Credentials API docs |
+| `doc/services/connectivity/networking/` | General networking docs |
 
 ### Sample Applications
 
@@ -873,7 +865,7 @@ All WiFi samples are in `samples/net/wifi/`:
 | Path | Description |
 |------|-------------|
 | `tests/net/wifi/` | WiFi subsystem tests |
-| `tests/net/wifi_credentials/` | Credential storage tests |
+| `tests/net/lib/wifi_credentials*/` | Credential storage tests |
 
 ### Device Tree Bindings
 
@@ -899,7 +891,7 @@ All WiFi samples are in `samples/net/wifi/`:
 |-------|------|
 | nRF7002 DK | `boards/nordic/nrf7002dk/` |
 | ESP32 boards | `boards/espressif/esp32*/` |
-| RPi Pico W | `boards/raspberrypi/rpi_pico/rpi_pico_w.overlay` |
+| RPi Pico W | `boards/raspberrypi/rpi_pico/rpi_pico_rp2040_w.dts` |
 
 ### Quick Reference Paths
 
@@ -926,7 +918,7 @@ subsys/net/l2/wifi/Kconfig
 modules/hostap/Kconfig
 
 # Documentation
-doc/connectivity/networking/api/wifi.rst
+doc/services/connectivity/networking/api/wifi.rst
 ```
 
 ## Power Save
@@ -979,11 +971,13 @@ void disable_power_save(struct net_if *iface)
 ```c
 struct wifi_ps_params {
     enum wifi_ps enabled;           /* WIFI_PS_ENABLED/DISABLED */
-    enum wifi_ps_mode mode;         /* LEGACY or WMM */
-    int listen_interval;            /* Beacon intervals to sleep */
+    unsigned short listen_interval; /* Beacon intervals to sleep */
     enum wifi_ps_wakeup_mode wakeup_mode;
-    unsigned short timeout_ms;      /* Inactivity timeout */
-    enum wifi_config_ps_exit_strategy exit_strategy;
+    enum wifi_ps_mode mode;         /* LEGACY or WMM */
+    unsigned int timeout_ms;        /* Inactivity timeout, 0 = off */
+    enum wifi_ps_param_type type;   /* which field this request sets */
+    enum wifi_config_ps_param_fail_reason fail_reason;
+    enum wifi_ps_exit_strategy exit_strategy;
 };
 ```
 
@@ -1040,7 +1034,7 @@ TWT allows the device to negotiate specific wake times with the AP, providing pr
 static struct net_mgmt_event_callback twt_cb;
 
 static void twt_event_handler(struct net_mgmt_event_callback *cb,
-                              uint32_t mgmt_event, struct net_if *iface)
+                              uint64_t mgmt_event, struct net_if *iface)
 {
     if (mgmt_event == NET_EVENT_WIFI_TWT) {
         const struct wifi_twt_params *twt =
@@ -1050,8 +1044,8 @@ static void twt_event_handler(struct net_mgmt_event_callback *cb,
         case WIFI_TWT_SETUP:
             if (twt->resp_status == WIFI_TWT_RESP_RECEIVED) {
                 printk("TWT setup complete\n");
-                printk("  Wake interval: %llu us\n", twt->setup.twt_wake_interval);
-                printk("  Wake duration: %u us\n", twt->setup.twt_interval);
+                printk("  Interval: %llu us\n", twt->setup.twt_interval);
+                printk("  Wake duration: %u us\n", twt->setup.twt_wake_interval);
             } else {
                 printk("TWT setup failed: %d\n", twt->fail_reason);
             }
@@ -1081,8 +1075,8 @@ void setup_twt(struct net_if *iface)
             .trigger = 1,               /* Trigger-enabled */
             .implicit = 1,              /* Implicit TWT */
             .announce = 0,              /* Unannounced */
-            .twt_wake_interval = 65000, /* Wake interval in us */
-            .twt_interval = 1,          /* Min wake duration */
+            .twt_interval = 524000,     /* wake + sleep period, us */
+            .twt_wake_interval = 65000, /* wake (service period), us */
         },
     };
 
@@ -1133,26 +1127,29 @@ struct wifi_twt_params {
     enum wifi_twt_operation operation;      /* SETUP/TEARDOWN */
     enum wifi_twt_negotiation_type negotiation_type;
     enum wifi_twt_setup_cmd setup_cmd;      /* REQUEST/SUGGEST/DEMAND */
+    enum wifi_twt_setup_resp_status resp_status;
+    enum wifi_twt_teardown_status teardown_status;
     uint8_t dialog_token;
     uint8_t flow_id;                        /* 0-7 */
-    enum wifi_twt_setup_resp_status resp_status;
-    enum wifi_twt_fail_reason fail_reason;
 
     union {
         struct {
-            uint64_t twt_wake_interval;     /* Wake interval in us */
-            uint32_t twt_interval;          /* Service period in us */
+            uint64_t twt_interval;          /* wake + sleep period, us */
             bool responder;
             bool trigger;
             bool implicit;
             bool announce;
-            bool wake_ahead;
+            uint32_t twt_wake_interval;     /* wake (service period), us */
+            uint32_t twt_wake_ahead_duration;
+            /* ... twt_info_disable, twt_exponent, twt_mantissa */
         } setup;
+        /* struct { ... } btwt;  broadcast TWT */
 
         struct {
             bool teardown_all;
         } teardown;
     };
+    enum wifi_twt_fail_reason fail_reason;
 };
 ```
 
@@ -1227,7 +1224,7 @@ Station mode connects to an existing WiFi access point. This is the most common 
 static struct net_mgmt_event_callback scan_cb;
 
 static void scan_handler(struct net_mgmt_event_callback *cb,
-                         uint32_t mgmt_event, struct net_if *iface)
+                         uint64_t mgmt_event, struct net_if *iface)
 {
     if (mgmt_event == NET_EVENT_WIFI_SCAN_RESULT) {
         const struct wifi_scan_result *entry =
@@ -1266,20 +1263,19 @@ Use `wifi_scan_params` to filter scan results:
 ```c
 struct wifi_scan_params params = {
     .scan_type = WIFI_SCAN_TYPE_ACTIVE,
-    .bands = WIFI_FREQ_BAND_2_4_GHZ | WIFI_FREQ_BAND_5_GHZ,
+    /* bitmap: enum wifi_frequency_bands values are bit positions */
+    .bands = BIT(WIFI_FREQ_BAND_2_4_GHZ) | BIT(WIFI_FREQ_BAND_5_GHZ),
     .dwell_time_active = 50,   /* ms per channel */
     .dwell_time_passive = 130, /* ms for passive scan */
     .max_bss_cnt = 10,         /* Max results to return */
 };
 
-/* Scan specific SSID */
+/* Scan specific SSID (no count field: unused slots stay NULL) */
 params.ssids[0] = "TargetNetwork";
-params.num_ssids = 1;
 
-/* Scan specific channels */
-params.chan[0].channel = 6;
-params.chan[0].band = WIFI_FREQ_BAND_2_4_GHZ;
-params.num_chans = 1;
+/* Scan specific channels (list ends at the first zero channel) */
+params.band_chan[0].channel = 6;
+params.band_chan[0].band = WIFI_FREQ_BAND_2_4_GHZ;
 
 int ret = net_mgmt(NET_REQUEST_WIFI_SCAN, iface, &params, sizeof(params));
 ```
@@ -1288,11 +1284,12 @@ int ret = net_mgmt(NET_REQUEST_WIFI_SCAN, iface, &params, sizeof(params));
 
 ```c
 struct wifi_scan_result {
-    uint8_t ssid[WIFI_SSID_MAX_LEN];
+    uint8_t ssid[WIFI_SSID_MAX_LEN + 1];
     uint8_t ssid_length;
     uint8_t band;                    /* WIFI_FREQ_BAND_* */
     uint8_t channel;
     enum wifi_security_type security;
+    enum wifi_wpa3_enterprise_type wpa3_ent_type;
     enum wifi_mfp_options mfp;       /* Management Frame Protection */
     int8_t rssi;
     uint8_t mac[6];                  /* BSSID */
@@ -1308,7 +1305,7 @@ struct wifi_scan_result {
 static struct net_mgmt_event_callback conn_cb;
 
 static void connection_handler(struct net_mgmt_event_callback *cb,
-                               uint32_t mgmt_event, struct net_if *iface)
+                               uint64_t mgmt_event, struct net_if *iface)
 {
     if (mgmt_event == NET_EVENT_WIFI_CONNECT_RESULT) {
         const struct wifi_status *status =
@@ -1395,7 +1392,7 @@ struct wifi_connect_req_params {
 
 ```c
 static void disconnect_handler(struct net_mgmt_event_callback *cb,
-                               uint32_t mgmt_event, struct net_if *iface)
+                               uint64_t mgmt_event, struct net_if *iface)
 {
     if (mgmt_event == NET_EVENT_WIFI_DISCONNECT_RESULT) {
         const struct wifi_status *status =
@@ -1446,20 +1443,23 @@ void check_status(struct net_if *iface)
 
 ```c
 struct wifi_iface_status {
-    enum wifi_iface_state state;     /* WIFI_STATE_* */
+    int state;                       /* enum wifi_iface_state, WIFI_STATE_* */
     unsigned int ssid_len;
-    char ssid[WIFI_SSID_MAX_LEN];
+    char ssid[WIFI_SSID_MAX_LEN + 1];
     char bssid[WIFI_MAC_ADDR_LEN];
     enum wifi_frequency_bands band;
     unsigned int channel;
     enum wifi_iface_mode iface_mode; /* STA, AP, etc. */
     enum wifi_link_mode link_mode;   /* WiFi 4/5/6/6E/7 */
+    enum wifi_wpa3_enterprise_type wpa3_ent_type;
     enum wifi_security_type security;
+    enum wifi_wep_key_type wep_key_type;
     enum wifi_mfp_options mfp;
     int rssi;
-    unsigned int beacon_interval;
-    unsigned int dtim_period;
-    enum wifi_twt_sleep_state twt_capable;
+    unsigned char dtim_period;
+    unsigned short beacon_interval;
+    bool twt_capable;
+    float current_phy_tx_rate;
 };
 ```
 
@@ -1481,10 +1481,10 @@ struct wifi_credentials_personal creds = {
     .password_len = strlen("MyPassword"),
 };
 
-wifi_credentials_set_personal(&creds);
+wifi_credentials_set_personal_struct(&creds);
 
-/* Auto-connect using stored credentials */
-wifi_credentials_connect_stored(iface);
+/* Connect using stored credentials (needs CONFIG_WIFI_CREDENTIALS_CONNECT_STORED) */
+net_mgmt(NET_REQUEST_WIFI_CONNECT_STORED, iface, NULL, 0);
 ```
 
 Kconfig for credentials:

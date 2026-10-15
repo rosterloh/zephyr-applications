@@ -132,7 +132,8 @@ image will not run. Sysbuild signs the app automatically as part of the build.
 SB_CONFIG_BOOT_SIGNATURE_TYPE_ECDSA_P256=y
 SB_CONFIG_BOOT_SIGNATURE_KEY_FILE="${APPLICATION_CONFIG_DIR}/keys/mcuboot_priv.pem"
 
-# Optional image encryption
+# Optional image encryption (the key file depends on BOOT_ENCRYPTION)
+SB_CONFIG_BOOT_ENCRYPTION=y
 SB_CONFIG_BOOT_ENCRYPTION_KEY_FILE="${APPLICATION_CONFIG_DIR}/keys/enc_priv.pem"
 ```
 
@@ -141,6 +142,12 @@ Signature types: `SB_CONFIG_BOOT_SIGNATURE_TYPE_NONE`, `..._RSA`,
 
 `${APPLICATION_CONFIG_DIR}` expands to the app directory, which keeps the path
 working regardless of where the build runs from.
+
+The image version imgtool stamps comes from the app's `VERSION` file
+(`CONFIG_MCUBOOT_IMGTOOL_SIGN_VERSION`, default `0.0.0+0` without one).
+`-DAPP_BUILD_VERSION=...` is separate — only `app_version.h`'s build-version
+string — and since 4.5 a sysbuild command-line value reaches the main image
+instead of falling back to `git describe` (MCUboot keeps its own).
 
 **With no key file configured, MCUboot builds with its committed development
 key.** That is fine for bench work and unacceptable in production — anyone can
@@ -187,8 +194,10 @@ MCUboot needs the slots to exist in devicetree with the labels it expects:
 
 Rules that are easy to violate:
 
-- **`slot0` and `slot1` must be the same size.** A swap between differently
-  sized slots cannot work.
+- **Size `slot0` and `slot1` deliberately.** Equal sizes always work. MOVE and
+  OFFSET can save space with a one-sector difference (MOVE: primary larger;
+  OFFSET: secondary larger); any other mismatch caps the image at the smaller
+  slot. All sectors across both slots must share one sector size.
 - **Slots must be erase-block aligned.** A slot starting mid-sector fails at
   runtime, not at build time.
 - Most SoC families already define these in their board DTS — check before
@@ -219,10 +228,17 @@ if (!boot_is_img_confirmed()) {
 `boot_request_upgrade(BOOT_UPGRADE_TEST)` marks the secondary slot for a test
 swap on next boot; `BOOT_UPGRADE_PERMANENT` skips the test cycle.
 
-Enable the MCUboot-side Kconfig for whichever transport does the upload —
+Enable the application-side Kconfig for whichever transport does the upload —
 `CONFIG_MCUMGR_TRANSPORT_BT` / `..._UART`, or the USB DFU class
 (`CONFIG_USBD_DFU`, see
 `../../zephyr-peripherals/references/usb-device.md`).
+
+The bootutil library comes in by Kconfig: `CONFIG_MCUBOOT_IMG_MANAGER` and (since
+4.5) `CONFIG_MCUMGR_GRP_IMG_CLIENT` select `CONFIG_MCUBOOT_BOOTUTIL_LIB`, so drop
+hand-written `zephyr_library_link_libraries(MCUBOOT_BOOTUTIL)` lines. 4.5 also
+adds `CONFIG_APP_LINK_WITH_MCUBOOT_BOOTUTIL` (default y) to put bootutil headers
+on `app`'s include path, but the pinned MCUboot module doesn't consume it yet —
+check before relying on it for direct `bootutil/*.h` includes.
 
 ## <a name="traps"></a>Traps
 
@@ -249,8 +265,14 @@ Enable the MCUboot-side Kconfig for whichever transport does the upload —
   `SWAP_SCRATCH` without adding `scratch_partition` fails at MCUboot runtime,
   after a successful build.
 - **`CONFIG_*` in `prj.conf` never configures MCUboot.** Use
-  `sysbuild/mcuboot.conf` or `-Dmcuboot_CONFIG_*`. Symbols placed in the wrong
-  file are silently ignored — see `./kconfig.md`.
+  `sysbuild/mcuboot.conf` or `-Dmcuboot_CONFIG_*`. A symbol both images define
+  (e.g. `CONFIG_LOG`) silently configures only the app; an MCUboot-only one
+  (e.g. `CONFIG_BOOT_MAX_IMG_SECTORS`) aborts the app's Kconfig stage as
+  undefined — see `./kconfig.md`.
+- **The MCUboot image header is `CONFIG_ROM_START_OFFSET`.** Its Cortex-M
+  default also covers VTOR alignment since 4.5: 0x200, or 0x400/0x800/0x1000
+  above 112/240/496 `NUM_IRQS`. SoC-level overrides still win; TF-M builds are
+  unaffected. Before 4.5 a >112-IRQ target with no override failed under MCUboot.
 - **Erasing flash wipes your bootloader too.** A full `esptool erase-flash` or
   `nrfjprog --eraseall` removes MCUboot; reflash `merged.hex`, not just the app.
   Note that on ESP32 targets a plain `mise run flash` only erases the app region, so

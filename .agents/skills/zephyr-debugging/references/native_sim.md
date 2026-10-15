@@ -17,19 +17,22 @@ simulates those. Use it for the firmware's logic, not its hardware coupling.
 
 ```
 mise x -- west build -b native_sim -p always -d builds/<app> applications/<app>
-./build/<app>/zephyr/zephyr.exe            # runs as a normal process
-./build/<app>/zephyr/zephyr.exe --help     # native_sim runtime options
+./builds/<app>/zephyr/zephyr.exe            # runs as a normal process
+./builds/<app>/zephyr/zephyr.exe --help     # native_sim runtime options
 ```
 
 Networking works via a host tap interface (`zeth`, set up by Zephyr's
-net-tools) — see `network.md` for capturing it. A UART maps to a PTY or
+net-tools) — see `network.md` for capturing it. With `CONFIG_WIFI=y` the tap
+default (`ETH_NATIVE_TAP`) turns off and `WIFI_NM_WPA_SUPPLICANT` defaults on;
+the nl80211 Wi-Fi driver against host `mac80211_hwsim` additionally needs a
+`zephyr,native-sim-wifi` DT node and is 32-bit only. A UART maps to a PTY or
 stdio, so the shell-driving pattern from `serial.md` works against the
 process too.
 
 ## gdb — just attach, no probe
 
 ```
-gdb ./build/<app>/zephyr/zephyr.exe
+gdb ./builds/<app>/zephyr/zephyr.exe
 (gdb) break my_buggy_function
 (gdb) run
 (gdb) bt / print / step
@@ -43,7 +46,7 @@ watchpoints on a Cortex-M.
 ```
 mise x -- west build -b native_sim -d builds/<app> applications/<app> -- \
     -DCONFIG_ASAN=y -DCONFIG_UBSAN=y
-./build/<app>/zephyr/zephyr.exe
+./builds/<app>/zephyr/zephyr.exe
 ```
 - **ASAN** catches buffer overflows / use-after-free with the exact
   offending stack at the moment of the bad access — the thing that on a
@@ -62,7 +65,7 @@ mise x -- west build -b native_sim ... -- -DCONFIG_COVERAGE=y
 mise x -- west twister -T tests --coverage -p native_sim
 
 # rr — record once, replay deterministically backwards/forwards
-rr record ./build/<app>/zephyr/zephyr.exe
+rr record ./builds/<app>/zephyr/zephyr.exe
 rr replay        # reverse-continue to the instruction that corrupted state
 ```
 `rr` is the closer for "I can't catch the moment it goes wrong" — record the
@@ -85,5 +88,7 @@ failing run once, then step *backwards* from the symptom to the cause.
 - **64-bit host vs 32-bit target.** Pointer-size and `long`-size
   assumptions can hide or appear here; `native_sim/native/64` vs the default
   32-bit variant matters for those.
-- **No real time.** `k_sleep` is fast-forwarded; anything timing-dependent
-  behaves differently than on-target.
+- **Time is host-scheduled.** Apps run slowed to real time
+  (`NATIVE_SIM_SLOWDOWN_TO_REAL_TIME` defaults y unless `CONFIG_TEST`); test
+  builds fast-forward `k_sleep`. Override with `--rt` / `--no-rt`. Either way,
+  anything timing-dependent behaves differently than on-target.

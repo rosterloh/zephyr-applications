@@ -23,7 +23,7 @@ Expert guidance for testing Zephyr RTOS applications using Ztest framework, Twis
 tests/foo/bar/
 ├── CMakeLists.txt
 ├── prj.conf
-├── testcase.yaml
+├── tests.yaml
 └── src/
     └── main.c
 ```
@@ -41,7 +41,7 @@ target_sources(app PRIVATE src/main.c)
 CONFIG_ZTEST=y
 ```
 
-**testcase.yaml:**
+**tests.yaml:**
 ```yaml
 tests:
   mysubsystem.feature.basic:
@@ -82,7 +82,7 @@ find_package(Zephyr COMPONENTS unittest REQUIRED HINTS $ENV{ZEPHYR_BASE})
 target_sources(testbinary PRIVATE main.c)
 ```
 
-**testcase.yaml:**
+**tests.yaml:**
 ```yaml
 tests:
   mymodule.unit:
@@ -107,7 +107,12 @@ tests:
 | Ztest suite name | snake_case, descriptive | `semaphore_tests` |
 | Test function | `test_<what_is_tested>` | `test_sem_give_take` |
 
-#### testcase.yaml Key Options
+#### tests.yaml Key Options
+
+`tests.yaml` is the current name; `testcase.yaml` and `sample.yaml` are still
+detected but deprecated. Twister builds with warnings as errors (unless `-W`),
+which also sets `CONFIG_DEPRECATED_KCONFIGS_AS_ERRORS` — enabling a deprecated
+Kconfig symbol fails the build.
 
 | Key | Purpose | Example |
 |-----|---------|---------|
@@ -243,7 +248,7 @@ ZTEST(suite, test_known_broken)
 |------|---------|
 | `twister.json` | Full results in JSON |
 | `twister.log` | Build/run logs |
-| `twister_discard.csv` | Skipped tests with reasons |
+| `twister.json` filtered entries | Skipped/filtered tests with reasons (`status: filtered`) |
 
 ---
 
@@ -361,7 +366,7 @@ Complete working test examples for common scenarios.
 tests/mysubsys/feature/
 ├── CMakeLists.txt
 ├── prj.conf
-├── testcase.yaml
+├── tests.yaml
 └── src/
     └── main.c
 ```
@@ -382,7 +387,7 @@ target_sources(app PRIVATE src/main.c)
 CONFIG_ZTEST=y
 ```
 
-#### testcase.yaml
+#### tests.yaml
 
 ```yaml
 tests:
@@ -440,7 +445,7 @@ Unit tests compile only the module under test without full Zephyr.
 tests/unit/mymodule/
 ├── CMakeLists.txt
 ├── prj.conf
-├── testcase.yaml
+├── tests.yaml
 └── src/
     ├── main.c
     └── mymodule.c  # Module under test
@@ -470,7 +475,7 @@ target_include_directories(testbinary PRIVATE
 CONFIG_ZTEST=y
 ```
 
-#### testcase.yaml
+#### tests.yaml
 
 ```yaml
 tests:
@@ -917,14 +922,14 @@ ZTEST(stress_tests, test_concurrent_access)
 tests/integration/shell_test/
 ├── CMakeLists.txt
 ├── prj.conf
-├── testcase.yaml
+├── tests.yaml
 ├── src/
 │   └── main.c
 └── pytest/
     └── test_shell.py
 ```
 
-#### testcase.yaml
+#### tests.yaml
 
 ```yaml
 tests:
@@ -1510,10 +1515,8 @@ Enable via devicetree overlay:
 
 ### FFF Extensions (Zephyr)
 
-Zephyr provides simplified macro wrappers. See `<zephyr/fff.h>` for:
-
-- `ZTEST_FFF_FAKE` - Simplified fake declaration
-- Additional helper macros for common patterns
+`<zephyr/fff_extensions.h>` adds `RETURN_HANDLED_CONTEXT()`, a helper for
+custom fakes that look up a per-call context struct from the fake's arguments.
 
 ---
 
@@ -1534,7 +1537,7 @@ Complete reference for Twister test runner configuration and usage.
 ### Table of Contents
 
 1. [Running Tests](#running-tests)
-2. [testcase.yaml Configuration](#testcaseyaml-configuration)
+2. [tests.yaml Configuration](#testsyaml-configuration)
 3. [Harnesses](#harnesses)
 4. [Hardware Testing](#hardware-testing)
 5. [Filter Expressions](#filter-expressions)
@@ -1597,13 +1600,13 @@ Complete reference for Twister test runner configuration and usage.
 
 ---
 
-### testcase.yaml Configuration
+### tests.yaml Configuration
 
 #### Complete Key Reference
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `tags` | list | required | Categorization tags |
+| `tags` | list | none | Categorization tags |
 | `platform_allow` | list | all | Only run on these platforms |
 | `platform_exclude` | list | none | Never run on these platforms |
 | `arch_allow` | list | all | Only run on these architectures |
@@ -1614,12 +1617,12 @@ Complete reference for Twister test runner configuration and usage.
 | `timeout` | int | 60 | Seconds before kill |
 | `slow` | bool | false | Only with --enable-slow |
 | `skip` | bool | false | Skip unconditionally |
-| `min_ram` | int | 128 | Minimum RAM in KB |
-| `min_flash` | int | 512 | Minimum flash in KB |
+| `min_ram` | int | 16 | Minimum RAM in KB |
+| `min_flash` | int | 32 | Minimum flash in KB |
 | `extra_args` | list | none | Extra build arguments |
 | `extra_configs` | list | none | Kconfig overlays |
 | `filter` | string | none | Expression filter |
-| `harness` | string | ztest | Test harness type |
+| `harness` | string | `test` (ztest parser) | Test harness type |
 | `harness_config` | dict | none | Harness-specific options |
 | `type` | string | integration | "unit" for unit tests |
 | `integration_platforms` | list | none | Platforms for --integration |
@@ -1940,7 +1943,7 @@ Default: `twister-out/` directory
 |------|---------|
 | `twister.json` | Complete results in JSON |
 | `twister.log` | Build and execution logs |
-| `twister_discard.csv` | Skipped tests with reasons |
+| `twister.json` filtered entries | Skipped/filtered tests with reasons (`status: filtered`) |
 | `twister_report.xml` | JUnit-style report |
 | `testplan.json` | Planned test execution |
 

@@ -14,7 +14,7 @@ description: >
 
 # Zephyr Connectivity
 
-Validated against: Zephyr 4.4.99 (64437be51c30, 2026-09-19). Re-check with `mise run check-skills`.
+Validated against: Zephyr 4.5.0 (124121fbb079, 2026-10-15). Re-check with `mise run check-skills`.
 
 ## Scope
 
@@ -47,8 +47,10 @@ configuration, or the `net_buf` primitive (see `zephyr-kernel`).
   subsequent connects with no obvious error.
 - **DTLS uses sockets** with `SOCK_DGRAM` + `IPPROTO_DTLS_1_2`, not a
   separate API. Easy to confuse with TLS option codes.
-- **`net_if_get_default()` returns NULL** if no interface has been
-  brought up — always null-check before configuring an IP.
+- **`net_if_get_default()` ignores up/down state.** It returns NULL only
+  when no interface is compiled in; otherwise it returns the configured
+  default (or the first interface) even while that is still down. Null-check,
+  and wait for `net if` / `NET_EVENT_L4_CONNECTED` before using the address.
 - **Multicast joins survive an interface down/up** as of 4.5:
   `net_if_down()` sends the leave message but keeps the addresses in the
   interface's multicast list and rejoins on the way back up. Don't re-join

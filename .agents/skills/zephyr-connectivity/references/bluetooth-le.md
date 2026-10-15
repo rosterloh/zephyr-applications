@@ -34,6 +34,11 @@ int main(void)
 }
 ```
 
+As of 4.5, a missing/unpowered controller makes `bt_enable()` return
+`-ETIMEDOUT` (transport closed, safe to call again) instead of asserting in
+`hci_core.c`; `-EALREADY` / `-EAGAIN` mean already enabled / `bt_disable()`
+still running.
+
 ### GAP Roles
 
 | Role | Kconfig | Description | Key APIs |
@@ -151,8 +156,8 @@ bt_conn_auth_cb_register(&auth_cb);
 Security levels:
 - `BT_SECURITY_L1`: No encryption
 - `BT_SECURITY_L2`: Encrypted, no MITM protection
-- `BT_SECURITY_L3`: Encrypted + MITM (legacy pairing)
-- `BT_SECURITY_L4`: Encrypted + MITM (LE Secure Connections)
+- `BT_SECURITY_L3`: Encrypted + MITM (authenticated pairing, legacy or SC)
+- `BT_SECURITY_L4`: Authenticated LE Secure Connections, 128-bit key
 
 ### Persistent Storage
 
@@ -284,13 +289,15 @@ err = bt_le_adv_stop();
 
 #### Basic Scanning
 
+Since 4.5 `bt_addr_le_to_str()` emits `P:`/`R:` + address (e.g. `R:11:22:33:44:55:66`) instead of `11:22:33:44:55:66 (random)`; `BT_ADDR_LE_STR_LEN` shrank 30 -> 20, and `bt_addr_le_from_str()` / BT shell commands take the same single prefixed string. Update any log/shell parsers.
+
 ```c
 static void scan_cb(const bt_addr_le_t *addr, int8_t rssi,
                     uint8_t adv_type, struct net_buf_simple *buf)
 {
     char addr_str[BT_ADDR_LE_STR_LEN];
     bt_addr_le_to_str(addr, addr_str, sizeof(addr_str));
-    printk("Device: %s, RSSI: %d\n", addr_str, rssi);
+    printk("Device: %s, RSSI: %d\n", addr_str, rssi);  /* "Device: R:11:22:33:44:55:66, RSSI: -60" */
 
     /* Parse advertising data */
     while (buf->len > 1) {
@@ -320,7 +327,6 @@ err = bt_le_scan_stop();
 |-------|-------------|
 | `BT_LE_SCAN_ACTIVE` | Active scanning (requests scan responses) |
 | `BT_LE_SCAN_PASSIVE` | Passive scanning |
-| `BT_LE_SCAN_CODED` | Scan on LE Coded PHY |
 
 #### Custom Scan Parameters
 
@@ -852,7 +858,7 @@ err = bt_gatt_unsubscribe(conn, &subscribe_params);
 | `BT_GATT_CHRC_WRITE` | Write with response |
 | `BT_GATT_CHRC_NOTIFY` | Notify supported |
 | `BT_GATT_CHRC_INDICATE` | Indicate supported |
-| `BT_GATT_CHRC_AUTH` | Authenticated signed writes |
+| `BT_GATT_CHRC_AUTH` | Authenticated signed writes (deprecated) |
 | `BT_GATT_CHRC_EXT_PROP` | Extended properties |
 
 ### UUIDs
@@ -885,9 +891,9 @@ if (bt_uuid_cmp(uuid, BT_UUID_HRS) == 0) {
 /* At compile time */
 static struct bt_uuid_128 my_uuid = BT_UUID_INIT_128(MY_UUID_VAL);
 
-/* String to UUID */
-struct bt_uuid_128 uuid;
-bt_uuid_create(&uuid.uuid, "12345678-1234-5678-1234-56789abcdef0", 36);
+/* String to UUID (bt_uuid_create() takes little-endian raw bytes, not text) */
+struct bt_uuid_any uuid;
+bt_uuid_from_str("12345678-1234-5678-1234-56789abcdef0", &uuid);
 ```
 
 ## Kconfig
@@ -916,7 +922,8 @@ CONFIG_BT=y
 
 ```
 CONFIG_BT_DEVICE_NAME="My Device"
-CONFIG_BT_DEVICE_APPEARANCE=0    # Generic (see Bluetooth SIG assigned numbers)
+# Generic (see Bluetooth SIG assigned numbers)
+CONFIG_BT_DEVICE_APPEARANCE=0
 ```
 
 Common appearance values:
@@ -976,7 +983,8 @@ CONFIG_BT_GATT_DYNAMIC_DB=y          # Allow runtime service registration
 
 ```
 CONFIG_BT_GATT_AUTO_UPDATE_MTU=y     # Automatically negotiate MTU
-CONFIG_BT_L2CAP_TX_MTU=247           # Maximum MTU size
+# Maximum MTU size
+CONFIG_BT_L2CAP_TX_MTU=247
 ```
 
 #### GATT Caching
@@ -998,15 +1006,16 @@ CONFIG_BT_GATT_NOTIFY_MULTIPLE=y     # Send multiple notifications at once
 
 ```
 CONFIG_BT_SMP=y                      # Enable pairing/bonding
-CONFIG_BT_SMP_SC_ONLY=n              # Allow legacy pairing
-CONFIG_BT_SMP_SC_PAIR_ONLY=y         # Require LE Secure Connections
+CONFIG_BT_SMP_SC_PAIR_ONLY=y         # Default y: no legacy pairing; =n to allow it
+CONFIG_BT_SMP_SC_ONLY=n              # =y: SC Only Mode (L4 only; selects SC_PAIR_ONLY)
 ```
 
 #### Bonding
 
 ```
 CONFIG_BT_SETTINGS=y                 # Required for bonding persistence
-CONFIG_BT_MAX_PAIRED=5               # Max bonded devices
+# Max bonded devices
+CONFIG_BT_MAX_PAIRED=5
 CONFIG_BT_BONDABLE=y                 # Allow bonding
 CONFIG_BT_BONDING_REQUIRED=n         # Require bonding for connections
 ```
@@ -1015,7 +1024,8 @@ CONFIG_BT_BONDING_REQUIRED=n         # Require bonding for connections
 
 ```
 CONFIG_BT_PRIVACY=y                  # Enable RPA (Resolvable Private Address)
-CONFIG_BT_RPA_TIMEOUT=900            # RPA rotation interval (seconds)
+# RPA rotation interval (seconds)
+CONFIG_BT_RPA_TIMEOUT=900
 ```
 
 #### Fixed / application-provided Passkey
@@ -1057,13 +1067,15 @@ CONFIG_BT_OOB_DATA_FIXED=y           # Use fixed OOB data (for testing)
 #### Connection Count
 
 ```
-CONFIG_BT_MAX_CONN=1                 # Max simultaneous connections
+# Max simultaneous connections
+CONFIG_BT_MAX_CONN=1
 ```
 
 #### Connection Parameters
 
 ```
-CONFIG_BT_CONN_PARAM_UPDATE_TIMEOUT=5000   # Parameter update timeout (ms)
+# Parameter update timeout (ms)
+CONFIG_BT_CONN_PARAM_UPDATE_TIMEOUT=5000
 ```
 
 #### PHY Options
@@ -1078,7 +1090,8 @@ CONFIG_BT_PHY_UPDATE=y               # Enable PHY update procedure
 ```
 CONFIG_BT_USER_DATA_LEN_UPDATE=y     # Allow application to control data length
 CONFIG_BT_DATA_LEN_UPDATE=y          # Enable data length extension
-CONFIG_BT_CTLR_DATA_LENGTH_MAX=251   # Maximum data length
+# Maximum data length
+CONFIG_BT_CTLR_DATA_LENGTH_MAX=251
 ```
 
 ### Buffer Options
@@ -1086,10 +1099,14 @@ CONFIG_BT_CTLR_DATA_LENGTH_MAX=251   # Maximum data length
 #### ACL Buffers
 
 ```
-CONFIG_BT_BUF_ACL_TX_SIZE=251        # TX buffer size
-CONFIG_BT_BUF_ACL_TX_COUNT=7         # Number of TX buffers
-CONFIG_BT_BUF_ACL_RX_SIZE=251        # RX buffer size
-CONFIG_BT_BUF_ACL_RX_COUNT_EXTRA=6   # *Extra* RX buffers (default = BT_MAX_CONN)
+# TX buffer size
+CONFIG_BT_BUF_ACL_TX_SIZE=251
+# Number of TX buffers
+CONFIG_BT_BUF_ACL_TX_COUNT=7
+# RX buffer size
+CONFIG_BT_BUF_ACL_RX_SIZE=251
+# *Extra* RX buffers (default = BT_MAX_CONN)
+CONFIG_BT_BUF_ACL_RX_COUNT_EXTRA=6
 ```
 
 `BT_BUF_ACL_RX_COUNT` no longer exists — the RX side is now expressed as
@@ -1099,15 +1116,18 @@ CONFIG_BT_BUF_ACL_RX_COUNT_EXTRA=6   # *Extra* RX buffers (default = BT_MAX_CONN
 #### ATT MTU
 
 ```
-CONFIG_BT_L2CAP_TX_MTU=247           # L2CAP MTU (ATT MTU = MTU - 4)
-CONFIG_BT_ATT_PREPARE_COUNT=0        # Prepare write queue size
+# L2CAP MTU (ATT MTU = MTU - 4)
+CONFIG_BT_L2CAP_TX_MTU=247
+# Prepare write queue size
+CONFIG_BT_ATT_PREPARE_COUNT=0
 ```
 
 ### Extended Advertising
 
 ```
 CONFIG_BT_EXT_ADV=y                  # Enable extended advertising
-CONFIG_BT_EXT_ADV_MAX_ADV_SET=1      # Maximum advertising sets
+# Maximum advertising sets
+CONFIG_BT_EXT_ADV_MAX_ADV_SET=1
 CONFIG_BT_EXT_ADV_LEGACY_SUPPORT=y   # Also support legacy advertising
 ```
 
@@ -1116,7 +1136,8 @@ CONFIG_BT_EXT_ADV_LEGACY_SUPPORT=y   # Also support legacy advertising
 ```
 CONFIG_BT_PER_ADV=y                  # Enable periodic advertising
 CONFIG_BT_PER_ADV_SYNC=y             # Enable sync to periodic advertising
-CONFIG_BT_PER_ADV_SYNC_MAX=1         # Maximum syncs
+# Maximum syncs
+CONFIG_BT_PER_ADV_SYNC_MAX=1
 ```
 
 ### Logging Options
@@ -1140,7 +1161,8 @@ For boards with Zephyr's BLE controller:
 ```
 CONFIG_BT_LL_SW_SPLIT=y              # Use Zephyr's LL implementation
 CONFIG_BT_CTLR_TX_PWR_PLUS_8=y       # Set TX power (+8 dBm example)
-CONFIG_BT_CTLR_DATA_LENGTH_MAX=251   # Max LL PDU payload (LE Data Length Ext)
+# Max LL PDU payload (LE Data Length Ext)
+CONFIG_BT_CTLR_DATA_LENGTH_MAX=251
 ```
 
 There is no `CONFIG_BT_CTLR_TX_BUFFER_SIZE`. For throughput tuning the knobs
@@ -1214,16 +1236,16 @@ Note: `<zephyr-ws-dir>` refers to the Zephyr workspace root (e.g., `zephyr-ws/de
 
 | Description | Location |
 |-------------|----------|
-| BLE Architecture | `<zephyr-ws-dir>/doc/connectivity/bluetooth/bluetooth-arch.rst` |
-| LE Host Overview | `<zephyr-ws-dir>/doc/connectivity/bluetooth/bluetooth-le-host.rst` |
-| Controller Architecture | `<zephyr-ws-dir>/doc/connectivity/bluetooth/bluetooth-ctlr-arch.rst` |
-| Development Guide | `<zephyr-ws-dir>/doc/connectivity/bluetooth/bluetooth-dev.rst` |
-| BT Shell Commands | `<zephyr-ws-dir>/doc/connectivity/bluetooth/bluetooth-shell.rst` |
-| API Index | `<zephyr-ws-dir>/doc/connectivity/bluetooth/api/index.rst` |
-| GAP API | `<zephyr-ws-dir>/doc/connectivity/bluetooth/api/gap.rst` |
-| GATT API | `<zephyr-ws-dir>/doc/connectivity/bluetooth/api/gatt.rst` |
-| Connection Management | `<zephyr-ws-dir>/doc/connectivity/bluetooth/api/connection_mgmt.rst` |
-| L2CAP API | `<zephyr-ws-dir>/doc/connectivity/bluetooth/api/l2cap.rst` |
+| BLE Architecture | `<zephyr-ws-dir>/doc/services/connectivity/bluetooth/bluetooth-arch.rst` |
+| LE Host Overview | `<zephyr-ws-dir>/doc/services/connectivity/bluetooth/bluetooth-le-host.rst` |
+| Controller Architecture | `<zephyr-ws-dir>/doc/services/connectivity/bluetooth/bluetooth-ctlr-arch.rst` |
+| Development Guide | `<zephyr-ws-dir>/doc/services/connectivity/bluetooth/bluetooth-dev.rst` |
+| BT Shell Commands | `<zephyr-ws-dir>/doc/services/connectivity/bluetooth/bluetooth-shell.rst` |
+| API Index | `<zephyr-ws-dir>/doc/services/connectivity/bluetooth/api/index.rst` |
+| GAP API | `<zephyr-ws-dir>/doc/services/connectivity/bluetooth/api/gap.rst` |
+| GATT API | `<zephyr-ws-dir>/doc/services/connectivity/bluetooth/api/gatt.rst` |
+| Connection Management | `<zephyr-ws-dir>/doc/services/connectivity/bluetooth/api/connection_mgmt.rst` |
+| L2CAP API | `<zephyr-ws-dir>/doc/services/connectivity/bluetooth/api/l2cap.rst` |
 
 ### Public Headers
 
@@ -1405,10 +1427,14 @@ CONFIG_BT_DIS_SW_REV=y
 
 # Optional PnP ID
 CONFIG_BT_DIS_PNP=y
-CONFIG_BT_DIS_PNP_VID_SRC=1       # 1=Bluetooth SIG, 2=USB
-CONFIG_BT_DIS_PNP_VID=0x05F1      # Vendor ID
-CONFIG_BT_DIS_PNP_PID=0x0001      # Product ID
-CONFIG_BT_DIS_PNP_VER=0x0001      # Product version
+# 1=Bluetooth SIG, 2=USB
+CONFIG_BT_DIS_PNP_VID_SRC=1
+# Vendor ID
+CONFIG_BT_DIS_PNP_VID=0x05F1
+# Product ID
+CONFIG_BT_DIS_PNP_PID=0x0001
+# Product version
+CONFIG_BT_DIS_PNP_VER=0x0001
 ```
 
 #### Dynamic Strings
@@ -1422,7 +1448,8 @@ CONFIG_BT_DIS_HW_REV_STR=""
 CONFIG_BT_DIS_SW_REV_STR=""
 ```
 
-Then set via settings subsystem or implement `bt_dis_str_t` callbacks.
+With `CONFIG_BT_DIS_SETTINGS=y` (strings up to `BT_DIS_STR_MAX`) they can be
+overwritten at runtime through the settings subsystem; there is no callback API.
 
 #### Advertising
 
@@ -1571,7 +1598,7 @@ Simple alerting service (e.g., for "Find Me" functionality).
 
 ```
 CONFIG_BT_IAS=y
-CONFIG_BT_IAS_CLIENT=y  /* For central role */
+CONFIG_BT_IAS_CLIENT=y  # For central role
 ```
 
 #### Server API
@@ -1713,6 +1740,9 @@ CONFIG_BT_RX_STACK_SIZE=2048
 ```
 
 Upstream: zephyr#114394 and #114487 are both this, not silicon or HAL defects.
+Since 4.5 the RX thread also runs `disconnected()`, SMP pairing timeouts and
+ATT/GATT/L2CAP timeout paths (previously the system workqueue), so size
+`BT_RX_STACK_SIZE` for your own callbacks too.
 Corroboration: Zephyr's own `nus-console` snippet sets the same value.
 
 **Generalise the lesson:** a corrupted-control-flow crash on ESP32 (jump to 0,

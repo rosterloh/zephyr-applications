@@ -558,7 +558,7 @@ static struct fs_mount_t lfs_mnt = {
     .type = FS_LITTLEFS,
     .mnt_point = "/lfs",
     .fs_data = &lfs_config,
-    .storage_dev = (void *)FIXED_PARTITION_ID(storage_partition),
+    .storage_dev = (void *)PARTITION_ID(storage_partition),
 };
 
 int rc = fs_mount(&lfs_mnt);
@@ -626,7 +626,7 @@ int fs_mkfs(int fs_type, uintptr_t dev_id, void *cfg, int flags);
 **Example:**
 ```c
 int rc = fs_mkfs(FS_LITTLEFS,
-                  (uintptr_t)FIXED_PARTITION_ID(storage_partition),
+                  (uintptr_t)PARTITION_ID(storage_partition),
                   NULL, 0);
 ```
 
@@ -1141,7 +1141,7 @@ struct fcb my_fcb = {
 #include <zephyr/fs/fcb.h>
 #include <zephyr/storage/flash_map.h>
 
-#define FCB_FLASH_AREA_ID FIXED_PARTITION_ID(storage_partition)
+#define FCB_FLASH_AREA_ID PARTITION_ID(storage_partition)
 
 static struct flash_sector sectors[4];
 static struct fcb my_fcb;
@@ -1280,7 +1280,7 @@ if (fcb_is_empty(&my_fcb)) {
 #include <zephyr/fs/fcb.h>
 #include <zephyr/storage/flash_map.h>
 
-#define FCB_AREA_ID FIXED_PARTITION_ID(storage_partition)
+#define FCB_AREA_ID PARTITION_ID(storage_partition)
 
 static struct flash_sector sectors[4];
 static struct fcb log_fcb;
@@ -1464,7 +1464,7 @@ FS_LITTLEFS_DECLARE_DEFAULT_CONFIG(storage);
 static struct fs_mount_t lfs_mount = {
     .type = FS_LITTLEFS,
     .fs_data = &storage,
-    .storage_dev = (void *)FIXED_PARTITION_ID(storage_partition),
+    .storage_dev = (void *)PARTITION_ID(storage_partition),
     .mnt_point = "/lfs",
 };
 
@@ -1557,7 +1557,7 @@ FS_LITTLEFS_DECLARE_CUSTOM_CONFIG(my_lfs,
 static struct fs_mount_t custom_mount = {
     .type = FS_LITTLEFS,
     .fs_data = &my_lfs,
-    .storage_dev = (void *)FIXED_PARTITION_ID(storage_partition),
+    .storage_dev = (void *)PARTITION_ID(storage_partition),
     .mnt_point = "/custom",
 };
 ```
@@ -1575,7 +1575,7 @@ FS_LITTLEFS_DECLARE_DEFAULT_CONFIG(storage);
 static struct fs_mount_t lfs_mnt = {
     .type = FS_LITTLEFS,
     .fs_data = &storage,
-    .storage_dev = (void *)FIXED_PARTITION_ID(storage_partition),
+    .storage_dev = (void *)PARTITION_ID(storage_partition),
     .mnt_point = "/lfs",
 };
 
@@ -1640,7 +1640,7 @@ Formula: `RAM ≈ NUM_FILES × cache_size + lookahead_size + overhead`
 
 Flash device not ready or partition not found:
 ```c
-const struct device *flash = FIXED_PARTITION_DEVICE(storage_partition);
+const struct device *flash = PARTITION_DEVICE(storage_partition);
 if (!device_is_ready(flash)) {
     printk("Flash not ready\n");
 }
@@ -1650,7 +1650,7 @@ if (!device_is_ready(flash)) {
 
 Filesystem not formatted. Format first:
 ```c
-fs_mkfs(FS_LITTLEFS, (uintptr_t)FIXED_PARTITION_ID(storage_partition), NULL, 0);
+fs_mkfs(FS_LITTLEFS, (uintptr_t)PARTITION_ID(storage_partition), NULL, 0);
 ```
 
 #### Writes Fail

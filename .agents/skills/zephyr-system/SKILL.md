@@ -11,7 +11,7 @@ description: >
   symbol-visibility errors, persisting configuration or runtime state,
   mounting a filesystem, registering shell commands with
   SHELL_CMD_REGISTER, writing Ztest test cases, configuring
-  testcase.yaml, reducing current draw, wiring wake sources, adding a
+  tests.yaml/testcase.yaml, reducing current draw, wiring wake sources, adding a
   bootloader, signing an image, or setting up OTA/DFU.
   Triggers on prj.conf, CONFIG_*, settings_save/load, nvs_write,
   fs_mount, SHELL_CMD_*, ZTEST(), twister, "store this on flash",
@@ -23,7 +23,7 @@ description: >
 
 # Zephyr System
 
-Validated against: Zephyr 4.4.99 (47ea4fd92683, 2026-09-18). Re-check with `mise run check-skills`.
+Validated against: Zephyr 4.5.0 (124121fbb079, 2026-10-15). Re-check with `mise run check-skills`.
 
 ## Scope
 
@@ -60,7 +60,7 @@ skill.
 - **Settings handler `h_set` callbacks must consume the value** with
   `read_cb` — returning success without reading the buffer leaves the
   next read in an inconsistent state.
-- **Twister's per-test logs live under `twister-out/<board>/<test>/`** —
+- **Twister's per-test logs live under `twister-out/<platform>/<toolchain>/<test>/`** —
   the top-level twister output only summarizes pass/fail.
 - **System PM only fires when no thread is runnable.** A single polling
   thread (or a busy loop with short `k_sleep`s) keeps the scheduler busy
@@ -81,6 +81,6 @@ skill.
 - [ ] After a `west flash`, you know whether the storage partition was
       erased — if the value vanished, that's the cause, not your code.
 - [ ] Tests actually *ran*: twister/ztest reports PASS per suite (check
-      `twister-out/<board>/<test>/` for the log), not just a successful build.
+      `twister-out/<platform>/<toolchain>/<test>/` for the log), not just a successful build.
 - [ ] MCUboot/sysbuild: the new image is confirmed, or you have demonstrated
       the revert path by deliberately not confirming one boot.

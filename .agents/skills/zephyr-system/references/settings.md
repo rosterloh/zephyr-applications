@@ -54,7 +54,7 @@ Settings supports loading from multiple sources but saves to a single destinatio
 
 Ensure the following are enabled in `prj.conf`:
 - `CONFIG_SETTINGS=y`
-- One or more backends: `CONFIG_SETTINGS_NVS=y`, `CONFIG_SETTINGS_ZMS=y`, `CONFIG_SETTINGS_FILE=y`, or `CONFIG_SETTINGS_FCB=y`
+- Exactly one backend (it's a `choice`): `CONFIG_SETTINGS_NVS=y`, `CONFIG_SETTINGS_ZMS=y`, `CONFIG_SETTINGS_FILE=y`, or `CONFIG_SETTINGS_FCB=y`
 - `CONFIG_SETTINGS_RUNTIME=y` if using runtime API
 - `CONFIG_SETTINGS_DYNAMIC_HANDLERS=y` if registering handlers at runtime
 
@@ -80,7 +80,7 @@ This skill works well with:
 
 ##### Static Registration
 - `SETTINGS_STATIC_HANDLER_DEFINE(name, tree, get, set, commit, export)`: Define a static settings handler with default priority.
-- `SETTINGS_STATIC_HANDLER_DEFINE_WITH_CPRIO(name, tree, cprio, get, set, commit, export)`: Define a static handler with explicit commit priority.
+- `SETTINGS_STATIC_HANDLER_DEFINE_WITH_CPRIO(name, tree, get, set, commit, export, cprio)`: Define a static handler with explicit commit priority.
 
 **Commit Priority (`cprio`):**
 - Lower values = Higher priority (executed first during commit)
@@ -137,6 +137,7 @@ struct settings_handler {
     int (*h_set)(const char *key, size_t len, settings_read_cb read_cb, void *cb_arg);
     int (*h_commit)(void);
     int (*h_export)(int (*export_func)(const char *name, const void *val, size_t val_len));
+    sys_snode_t node;      /* Internal list node */
 };
 ```
 
@@ -826,12 +827,12 @@ When handlers depend on each other:
 
 ```c
 /* Network service - must initialize first (higher priority = lower cprio) */
-SETTINGS_STATIC_HANDLER_DEFINE_WITH_CPRIO(net_cfg, "net", -10,
-    NULL, net_set, net_commit, net_export);
+SETTINGS_STATIC_HANDLER_DEFINE_WITH_CPRIO(net_cfg, "net",
+    NULL, net_set, net_commit, net_export, -10);
 
 /* App config - depends on network (lower priority = higher cprio) */
-SETTINGS_STATIC_HANDLER_DEFINE_WITH_CPRIO(app_cfg, "app", 10,
-    NULL, app_set, app_commit, app_export);
+SETTINGS_STATIC_HANDLER_DEFINE_WITH_CPRIO(app_cfg, "app",
+    NULL, app_set, app_commit, app_export, 10);
 ```
 
 Or with dynamic registration:
@@ -1006,11 +1007,11 @@ settings_register_with_cprio(&dependent_handler, 10);
 
 Or with static handlers:
 ```c
-SETTINGS_STATIC_HANDLER_DEFINE_WITH_CPRIO(base, "base", -10,
-    NULL, base_set, base_commit, base_export);
+SETTINGS_STATIC_HANDLER_DEFINE_WITH_CPRIO(base, "base",
+    NULL, base_set, base_commit, base_export, -10);
 
-SETTINGS_STATIC_HANDLER_DEFINE_WITH_CPRIO(dependent, "dependent", 10,
-    NULL, dep_set, dep_commit, dep_export);
+SETTINGS_STATIC_HANDLER_DEFINE_WITH_CPRIO(dependent, "dependent",
+    NULL, dep_set, dep_commit, dep_export, 10);
 ```
 
 ---

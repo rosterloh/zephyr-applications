@@ -1341,7 +1341,7 @@ Complete reference for Zephyr UART/Serial subsystem Kconfig configuration option
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `CONFIG_SERIAL` | bool | y | Enable serial driver subsystem |
+| `CONFIG_SERIAL` | bool | n (most board defconfigs set y) | Enable serial driver subsystem |
 | `CONFIG_SERIAL_HAS_DRIVER` | bool | (auto) | Set by driver to indicate serial available |
 | `CONFIG_SERIAL_INIT_PRIORITY` | int | varies | Driver initialization priority |
 
@@ -1464,7 +1464,7 @@ CONFIG_UART_PIPE=y
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `CONFIG_UART_PIPE` | bool | n | Enable pipe UART driver |
+| `CONFIG_UART_PIPE` | bool | n | Enable pipe UART driver (needs `zephyr,uart-pipe` chosen; selects `UART_INTERRUPT_DRIVEN`) |
 
 Custom protocol handling without shell/console interpretation.
 
@@ -1482,13 +1482,9 @@ Zero-copy handling with multiple RX buffers.
 
 #### Async-to-Interrupt Adapter
 
-```kconfig
-CONFIG_UART_ASYNC_TO_INT_DRIVEN_API=y
-```
-
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `CONFIG_UART_ASYNC_TO_INT_DRIVEN_API` | bool | n | Adapter layer for async-only drivers |
+| `CONFIG_UART_ASYNC_TO_INT_DRIVEN_API` | bool (no prompt) | n | Adapter layer for async-only drivers; must be `select`ed by the driver, cannot be set in `prj.conf` |
 | `CONFIG_UART_ASYNC_TO_INT_DRIVEN_RX_TIMEOUT` | int | 100 | RX timeout in bauds |
 
 Allows using interrupt API on drivers that only implement async.
@@ -1506,7 +1502,8 @@ CONFIG_UART_LOG_LEVEL_DBG=y
 | `CONFIG_UART_LOG_LEVEL_OFF` | bool | | Disable UART logging |
 | `CONFIG_UART_LOG_LEVEL_ERR` | bool | | Error level only |
 | `CONFIG_UART_LOG_LEVEL_WRN` | bool | | Warning and above |
-| `CONFIG_UART_LOG_LEVEL_INF` | bool | y | Info and above (default) |
+| `CONFIG_UART_LOG_LEVEL_INF` | bool | | Info and above |
+| `CONFIG_UART_LOG_LEVEL_DEFAULT` | bool | y | Follows `CONFIG_LOG_DEFAULT_LEVEL` (INF) |
 | `CONFIG_UART_LOG_LEVEL_DBG` | bool | | Debug and above |
 
 ---
@@ -1586,7 +1583,7 @@ Many SoC-specific options exist under `CONFIG_UART_<VENDOR>_*`. Examples:
 - `CONFIG_UART_STM32_*` - STM32
 - `CONFIG_UART_SAM_*` - Atmel SAM
 - `CONFIG_UART_ESP32_*` - ESP32
-- `CONFIG_UART_NS16550_*` - Generic 16550
+- `CONFIG_UART_NS16550_*` - Generic 16550 (`CONFIG_UART_NS16550_DW8250_DW_APB` is DT-driven since 4.5: add `snps,dw-apb-uart` to the node instead)
 
 Check `drivers/serial/Kconfig.<vendor>` for vendor-specific options.
 
@@ -1598,7 +1595,7 @@ Check `drivers/serial/Kconfig.<vendor>` for vendor-specific options.
 |-------|-------|----------|
 | `uart_irq_*` undefined | API not enabled | Enable `CONFIG_UART_INTERRUPT_DRIVEN` |
 | `uart_tx` undefined | API not enabled | Enable `CONFIG_UART_ASYNC_API` |
-| `uart_configure` returns `-ENOSYS` | Runtime config disabled | Enable `CONFIG_UART_USE_RUNTIME_CONFIGURE` |
+| `uart_configure` returns `-ENOTSUP` | Runtime config disabled | Enable `CONFIG_UART_USE_RUNTIME_CONFIGURE` (`-ENOSYS` = driver can't reconfigure) |
 | Symbol not visible in menuconfig | Missing dependency | Check `depends on` in Kconfig |
 | "SERIAL_SUPPORT_INTERRUPT not set" | Hardware doesn't support | Check driver or use different UART |
 

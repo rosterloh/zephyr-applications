@@ -339,7 +339,7 @@ K_KERNEL_STACK_SIZEOF(sym);  /* Get usable size */
 #### Dynamic Stack Allocation
 
 ```c
-k_thread_stack_t *k_thread_stack_alloc(size_t size);
+k_thread_stack_t *k_thread_stack_alloc(size_t size, int flags);  /* flags: 0 or K_USER */
 int k_thread_stack_free(k_thread_stack_t *stack);
 ```
 
@@ -439,22 +439,22 @@ int k_work_poll_cancel(struct k_work_poll *work);
 | `CONFIG_NUM_METAIRQ_PRIORITIES` | Meta-IRQ priority levels | 0 |
 | `CONFIG_MAIN_THREAD_PRIORITY` | Main thread priority | 0 |
 | `CONFIG_MAIN_STACK_SIZE` | Main thread stack size | 1024 |
-| `CONFIG_IDLE_STACK_SIZE` | Idle thread stack size | 256 |
+| `CONFIG_IDLE_STACK_SIZE` | Idle thread stack size | 256 (arch-dependent) |
 
 #### Time Slicing
 
 | Option | Description | Default |
 | :--- | :--- | :--- |
 | `CONFIG_TIMESLICING` | Enable time slicing | y |
-| `CONFIG_TIMESLICE_SIZE` | Time slice duration (ms) | 0 |
+| `CONFIG_TIMESLICE_SIZE` | Time slice duration (ms) | 20 |
 | `CONFIG_TIMESLICE_PRIORITY` | Priority threshold for slicing | 0 |
 
 #### Scheduler Implementation
 
 | Option | Description |
 | :--- | :--- |
-| `CONFIG_SCHED_SIMPLE` | Simple linked list (few threads) |
-| `CONFIG_SCHED_MULTIQ` | Multi-queue (default) |
+| `CONFIG_SCHED_SIMPLE` | Simple linked list (few threads, default) |
+| `CONFIG_SCHED_MULTIQ` | Multi-queue |
 | `CONFIG_SCHED_SCALABLE` | Red-black tree (many threads) |
 | `CONFIG_WAITQ_SIMPLE` | Simple linked list wait queues |
 | `CONFIG_WAITQ_SCALABLE` | Scalable wait queues |
@@ -684,8 +684,8 @@ void coop_thread(void *p1, void *p2, void *p3)
 
 Preemptive threads (non-negative priority) can be preempted when:
 - A higher-priority thread becomes ready
-- An equal-priority thread becomes ready (with time slicing)
-- An ISR returns and a higher/equal priority thread is ready
+- Its time slice expires and an equal-priority thread is ready (with time slicing)
+- An ISR returns and a higher priority thread is ready
 
 #### Preemption Example
 
@@ -710,7 +710,7 @@ When enabled, the scheduler gives equal-priority preemptive threads fair CPU tim
 # Enable time slicing
 CONFIG_TIMESLICING=y
 
-# Time slice duration (default: 0 = no time slicing)
+# Time slice duration (default 20; 0 = no time slicing)
 CONFIG_TIMESLICE_SIZE=10  # milliseconds
 
 # Only apply time slicing at or below this priority (0=all preemptive)
@@ -986,7 +986,7 @@ k_tid_t tid = k_thread_create(&data, stack, size, entry,
 #### Dynamic Stack Allocation
 
 ```c
-void *stack = k_thread_stack_alloc(CONFIG_DYNAMIC_THREAD_STACK_SIZE);
+void *stack = k_thread_stack_alloc(CONFIG_DYNAMIC_THREAD_STACK_SIZE, 0);
 if (stack == NULL) {
     /* allocation failed */
     return;

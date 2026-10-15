@@ -23,7 +23,7 @@ Zephyr provides two SPI access methods. Choose based on requirements:
 |-----|---------|----------|-----------|
 | **Synchronous** | (default) | Simple transfers, blocking until complete | Yes |
 | **Asynchronous (callback/signal)** | `CONFIG_SPI_ASYNC` | Non-blocking, callback/signal on completion | No |
-| **RTIO** | `CONFIG_SPI_RTIO` | Queue-based async via `SPI_DT_IODEV_DEFINE` / `spi_iodev_submit`. Forward-looking path in Zephyr 4.4 — the callback-based async API still works, but new async code should prefer RTIO when available. | No |
+| **RTIO** | `CONFIG_SPI_RTIO` | Queue-based async via `SPI_DT_IODEV_DEFINE` / `spi_iodev_submit`. Forward-looking path — the callback-based async API still works, but new async code should prefer RTIO when available. | No |
 
 #### Decision Tree
 
@@ -52,7 +52,7 @@ Use `SPI_DT_SPEC_GET` to get a complete SPI specification including bus, config,
 
 static const struct spi_dt_spec spi_dev = SPI_DT_SPEC_GET(
     MY_SPI_DEVICE,
-    SPI_OP_MODE_MASTER | SPI_WORD_SET(8) | SPI_TRANSFER_MSB
+    SPI_OP_MODE_CONTROLLER | SPI_WORD_SET(8) | SPI_TRANSFER_MSB
 );
 
 /* Runtime check (in main or init) */
@@ -75,8 +75,8 @@ if (!device_is_ready(spi)) {
 /* Manual config setup */
 struct spi_config spi_cfg = {
     .frequency = 1000000U,  /* 1 MHz */
-    .operation = SPI_OP_MODE_MASTER | SPI_WORD_SET(8),
-    .slave = 0,
+    .operation = SPI_OP_MODE_CONTROLLER | SPI_WORD_SET(8),
+    .peripheral = 0,
     .cs = {0},  /* No GPIO CS, use hardware CS */
 };
 ```
@@ -210,7 +210,7 @@ int async_transfer(void)
 CONFIG_SPI=y                    # Enable SPI driver subsystem
 CONFIG_SPI_ASYNC=y              # Enable async API (callback/signal)
 CONFIG_SPI_RTIO=y                # Enable RTIO async path (SPI_DT_IODEV_DEFINE / spi_iodev_submit)
-CONFIG_SPI_SLAVE=y              # Enable slave mode (experimental)
+CONFIG_SPI_PERIPHERAL=y         # Enable peripheral mode (SPI_SLAVE is a deprecated alias)
 CONFIG_SPI_EXTENDED_MODES=y     # Enable dual/quad/octal line modes
 CONFIG_SPI_SHELL=y              # Enable SPI shell for debugging
 ```
@@ -256,8 +256,8 @@ Common flags for `spi_config.operation`:
 
 | Flag | Description |
 |------|-------------|
-| `SPI_OP_MODE_MASTER` | Controller/master mode (default) |
-| `SPI_OP_MODE_SLAVE` | Peripheral/slave mode |
+| `SPI_OP_MODE_CONTROLLER` | Controller mode (default; `_MASTER` is deprecated) |
+| `SPI_OP_MODE_PERIPHERAL` | Peripheral mode (`_SLAVE` is deprecated) |
 | `SPI_MODE_CPOL` | Clock polarity (idle high) |
 | `SPI_MODE_CPHA` | Clock phase (sample on second edge) |
 | `SPI_WORD_SET(n)` | Word size in bits (typically 8) |
@@ -357,7 +357,7 @@ Configuration for SPI transactions:
 struct spi_config {
     uint32_t frequency;           /* Bus frequency in Hz */
     spi_operation_t operation;    /* Operation flags (mode, word size, etc.) */
-    uint16_t slave;               /* Slave number (0 to controller limit) */
+    uint16_t peripheral;          /* Peripheral number (`slave` is a deprecated alias) */
     struct spi_cs_control cs;     /* GPIO chip-select (optional) */
     uint16_t word_delay;          /* Delay between words in ns */
 };
@@ -405,12 +405,17 @@ Chip select control (GPIO or hardware):
 
 ```c
 struct spi_cs_control {
-    struct gpio_dt_spec gpio;  /* GPIO for CS (if cs_is_gpio=true) */
-    uint32_t delay;            /* Delay in microseconds */
-    /* OR for native CS: */
-    uint32_t setup_ns;         /* CS setup time in ns */
-    uint32_t hold_ns;          /* CS hold time in ns */
-    bool cs_is_gpio;           /* True if using GPIO CS */
+    union {
+        struct {
+            struct gpio_dt_spec gpio;  /* GPIO for CS (if cs_is_gpio=true) */
+            uint32_t delay;            /* Delay in microseconds */
+        };
+        struct {                       /* native CS */
+            uint32_t setup_ns;         /* CS setup time in ns */
+            uint32_t hold_ns;          /* CS hold time in ns */
+        };
+    };
+    bool cs_is_gpio;                   /* True if using GPIO CS */
 };
 ```
 
@@ -603,7 +608,7 @@ Check if CS is controlled via GPIO.
 #### SPI_DT_SPEC_GET
 
 ```c
-#define SPI_DT_SPEC_GET(node_id, operation_, ...)
+#define SPI_DT_SPEC_GET(node_id, operation_)
 ```
 
 Initialize `struct spi_dt_spec` from devicetree.
@@ -612,14 +617,14 @@ Initialize `struct spi_dt_spec` from devicetree.
 ```c
 static const struct spi_dt_spec my_spi = SPI_DT_SPEC_GET(
     DT_NODELABEL(my_device),
-    SPI_OP_MODE_MASTER | SPI_WORD_SET(8)
+    SPI_OP_MODE_CONTROLLER | SPI_WORD_SET(8)
 );
 ```
 
 #### SPI_DT_SPEC_INST_GET
 
 ```c
-#define SPI_DT_SPEC_INST_GET(inst, operation_, ...)
+#define SPI_DT_SPEC_INST_GET(inst, operation_)
 ```
 
 Same as `SPI_DT_SPEC_GET` but uses `DT_DRV_INST(inst)`.
@@ -627,7 +632,7 @@ Same as `SPI_DT_SPEC_GET` but uses `DT_DRV_INST(inst)`.
 #### SPI_CONFIG_DT
 
 ```c
-#define SPI_CONFIG_DT(node_id, operation_, ...)
+#define SPI_CONFIG_DT(node_id, operation_)
 ```
 
 Initialize `struct spi_config` from devicetree (without bus pointer).
@@ -656,19 +661,19 @@ Combine with bitwise OR for `spi_config.operation`:
 
 | Flag | Value | Description |
 |------|-------|-------------|
-| `SPI_OP_MODE_MASTER` | 0 | Controller mode (default) |
-| `SPI_OP_MODE_SLAVE` | BIT(0) | Peripheral mode |
+| `SPI_OP_MODE_CONTROLLER` | 0 | Controller mode (default) |
+| `SPI_OP_MODE_PERIPHERAL` | BIT(0) | Peripheral mode |
 | `SPI_MODE_CPOL` | BIT(1) | Clock idle high |
 | `SPI_MODE_CPHA` | BIT(2) | Sample on second edge |
 | `SPI_MODE_LOOP` | BIT(3) | Loopback mode (testing) |
 | `SPI_TRANSFER_LSB` | BIT(4) | LSB first |
-| `SPI_WORD_SET(n)` | n << 5 | Word size (1-64 bits) |
+| `SPI_WORD_SET(n)` | n << 5 | Word size (6-bit field, 1-63 bits) |
 | `SPI_HOLD_ON_CS` | BIT(12) | Keep CS active after transfer |
 | `SPI_LOCK_ON` | BIT(13) | Lock bus for caller |
 | `SPI_CS_ACTIVE_HIGH` | BIT(14) | CS active high |
-| `SPI_LINES_DUAL` | 1 << 16 | Dual MISO (extended) |
-| `SPI_LINES_QUAD` | 2 << 16 | Quad MISO (extended) |
-| `SPI_LINES_OCTAL` | 3 << 16 | Octal MISO (extended) |
+| `SPI_LINES_DUAL` | 1 << 16 | Dual lines (extended) |
+| `SPI_LINES_QUAD` | 2 << 16 | Quad lines (extended) |
+| `SPI_LINES_OCTAL` | 3 << 16 | Octal lines (extended) |
 
 **Note:** `SPI_LINES_*` require `CONFIG_SPI_EXTENDED_MODES=y`.
 
@@ -952,7 +957,7 @@ void good_transfer(void)
 
 #define SENSOR_DT DT_NODELABEL(my_sensor)
 static const struct spi_dt_spec sensor = SPI_DT_SPEC_GET(
-    SENSOR_DT, SPI_OP_MODE_MASTER | SPI_WORD_SET(8));
+    SENSOR_DT, SPI_OP_MODE_CONTROLLER | SPI_WORD_SET(8));
 
 static uint8_t tx_cmd[1] __aligned(4) = {0x80};  /* Read command */
 static uint8_t rx_data[8] __aligned(4);
@@ -1226,8 +1231,8 @@ spi_bitbang: spi-bitbang {
     #address-cells = <1>;
     #size-cells = <0>;
     clk-gpios = <&gpio0 1 GPIO_ACTIVE_HIGH>;
-    mosi-gpios = <&gpio0 2 GPIO_ACTIVE_HIGH>;
-    miso-gpios = <&gpio0 3 GPIO_ACTIVE_HIGH>;
+    sdo-gpios = <&gpio0 2 GPIO_ACTIVE_HIGH>;   /* mosi-gpios is deprecated */
+    sdi-gpios = <&gpio0 3 GPIO_ACTIVE_HIGH>;   /* miso-gpios is deprecated */
     cs-gpios = <&gpio0 4 GPIO_ACTIVE_LOW>;
 
     my_device@0 {
@@ -1253,7 +1258,6 @@ spi_bitbang: spi-bitbang {
         compatible = "vendor,sensor";
         reg = <0>;
         spi-max-frequency = <4000000>;
-        label = "MY_SENSOR";
     };
 };
 ```
@@ -1353,13 +1357,13 @@ Enable asynchronous API calls (`spi_transceive_cb`, `spi_transceive_signal`).
 
 ---
 
-#### CONFIG_SPI_SLAVE
+#### CONFIG_SPI_PERIPHERAL
 
 ```kconfig
-CONFIG_SPI_SLAVE=y
+CONFIG_SPI_PERIPHERAL=y
 ```
 
-Enable SPI slave/peripheral mode operations. Support depends on driver and hardware.
+Enable SPI peripheral mode operations (`CONFIG_SPI_SLAVE` is a deprecated alias that selects it). Support depends on driver and hardware.
 
 **Status:** Experimental
 **Default:** n
@@ -1420,8 +1424,9 @@ Enable SPI shell for interactive debugging and simple transceive operations.
 **Default:** n
 
 **Shell commands:**
-- `spi transceive <device> <bytes...>` - Perform SPI transfer
-- `spi conf <device> <freq> <mode>` - Configure SPI device
+- `spi transceive <spi-device> <tx-byte1> [<tx-byte2> ...]` - Perform SPI transfer
+- `spi conf <spi-device> <frequency> [<settings>]` - Configure bus (settings: mode/bit-order letters)
+- `spi cs <spi-device> <gpio-device> <pin> [<flags>]` - Assign a CS GPIO
 
 #### CONFIG_SPI_SHELL_MAX_DEVICE_SLOTS
 
@@ -1550,11 +1555,11 @@ CONFIG_SPI_STM32_DMA=y
 CONFIG_DMA=y
 ```
 
-#### SPI Slave Mode
+#### SPI Peripheral Mode
 
 ```kconfig
 CONFIG_SPI=y
-CONFIG_SPI_SLAVE=y
+CONFIG_SPI_PERIPHERAL=y
 ```
 
 ---

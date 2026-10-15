@@ -35,8 +35,8 @@ Need a graphical UI on Zephyr?
 LVGL gives you: widgets (label, button, chart, flex/grid containers),
 styling (themes, colors, fonts), input handling (touch, encoder,
 keypad), and a small flush-to-display driver shim. In return it costs
-~100–200 KB code + a configurable heap pool (default 32 KiB; bump
-heavily once you add charts, fonts beyond Montserrat 14, or many
+~100–200 KB code + a configurable heap pool (`CONFIG_LV_Z_MEM_POOL_SIZE`, default only
+2048 B; bump heavily once you add charts, fonts beyond Montserrat 14, or many
 screens).
 
 ---
@@ -48,11 +48,12 @@ Minimum to bring LVGL up:
 ```kconfig
 CONFIG_DISPLAY=y                 # Zephyr display subsystem
 CONFIG_LVGL=y                    # LVGL itself
-CONFIG_LV_Z_MEM_POOL_SIZE=131072 # default 32 KiB is too small in practice
+CONFIG_LV_Z_MEM_POOL_SIZE=131072 # default 2048 B is far too small
 ```
 
-Per-widget enables — none on by default in v9, you only get what you
-ask for:
+Per-widget enables — LVGL's Kconfig defaults most widgets, FLEX/GRID,
+the default theme and Montserrat 14 to `y`; set unused ones `=n` to
+save flash:
 
 ```kconfig
 CONFIG_LV_USE_LABEL=y
@@ -80,8 +81,9 @@ CONFIG_INPUT=y
 CONFIG_INPUT_MODE_THREAD=y       # poll input from a thread, not LVGL ticks
 ```
 
-**Pool sizing.** The `CONFIG_LV_Z_MEM_POOL_SIZE` default (32 KiB) is
-fine for "two screens with a few labels". Realistic numbers:
+**Pool sizing.** The `CONFIG_LV_Z_MEM_POOL_SIZE` default (2048 B, only
+with the default `LV_Z_MEM_POOL_SYS_HEAP`) is barely enough to boot.
+Realistic numbers:
 
 | Workload | Recommended pool |
 |---|---|
@@ -94,18 +96,22 @@ trim it back:
 
 ```conf
 # Two screens with ~70 combined widgets plus Montserrat 28 glyph
-# allocations push LVGL's heap well past the 32 KB default.
+# allocations push LVGL's heap well past 32 KB.
 # Bumped from 131072 to 163840 to fund the Battery screen's three
 # lv_chart widgets (two 120-point series each) and bookkeeping.
 CONFIG_LV_Z_MEM_POOL_SIZE=163840
 ```
+
+**System monitor (4.5).** `CONFIG_LV_USE_SYSMON` no longer implies
+`CONFIG_CPU_LOAD`; set `CONFIG_CPU_LOAD=y` too, or the perf monitor shows 0 %
+CPU (the OSAL logs `CONFIG_CPU_LOAD is not enabled` once).
 
 ---
 
 ### <a name="threading"></a>LVGL threading model — the #1 gotcha
 
 **LVGL is not thread-safe.** Every call into `lv_*` (object creation,
-widget mutation, `lv_timer_handler`, `lv_scr_load`) must run on the
+widget mutation, `lv_timer_handler`, `lv_screen_load`) must run on the
 same thread. In Zephyr applications this is normally a dedicated UI
 thread that owns the LVGL state.
 
@@ -152,7 +158,7 @@ moment you add a few screens or large fonts.
 ### <a name="screens"></a>Screen lifecycle and the build/update split
 
 A "screen" in LVGL is just `lv_obj_create(NULL)` (no parent). To switch:
-`lv_scr_load(screen_handle)`.
+`lv_screen_load(screen_handle)` (`lv_scr_load` is the v8 alias).
 
 For multi-screen apps the established pattern in this workspace is one
 module per screen with a four-function API:
@@ -179,7 +185,7 @@ lv_obj_t *ui_screen_foo_build(void)
 {
     screen = lv_obj_create(NULL);
     lv_obj_add_style(screen, &ui_style_screen, 0);
-    lv_obj_clear_flag(screen, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_scrollable(screen, false);
     lv_obj_set_size(screen, LV_PCT(100), LV_PCT(100));
     lv_obj_set_flex_flow(screen, LV_FLEX_FLOW_COLUMN);
 
@@ -209,7 +215,7 @@ home_scr    = ui_screen_home_build();
 battery_scr = ui_screen_battery_build();
 status_scr  = ui_screen_status_build();
 /* …register input callbacks, push initial model state… */
-lv_scr_load(home_scr);
+lv_screen_load(home_scr);
 tick_timer = lv_timer_create(tick_cb, 1000, NULL);
 ```
 
@@ -222,7 +228,7 @@ tick_timer = lv_timer_create(tick_cb, 1000, NULL);
 ```c
 lv_obj_t *lbl = lv_label_create(parent);
 lv_obj_add_style(lbl, &ui_style_label_muted, 0);
-lv_label_set_long_mode(lbl, LV_LABEL_LONG_CLIP);   /* truncate, don't wrap */
+lv_label_set_long_mode(lbl, LV_LABEL_LONG_MODE_CLIP); /* truncate, don't wrap */
 lv_obj_set_width(lbl, LV_PCT(100));
 lv_label_set_text(lbl, "");                        /* empty until first update */
 ```
@@ -296,20 +302,22 @@ internally; you do **not** need a separate ring buffer.
 
 ### <a name="api-drift"></a>v8 → v9 API drift
 
-Always check `deps/modules/lib/gui/lvgl/lv_version.h` first:
+Always check `deps/modules/lib/gui/lvgl/include/lvgl/lv_version.h` first
+(the top-level `lv_version.h` is a deprecated shim):
 
 ```bash
-$ cat deps/modules/lib/gui/lvgl/lv_version.h
+$ grep VERSION_M deps/modules/lib/gui/lvgl/include/lvgl/lv_version.h
 #define LVGL_VERSION_MAJOR 9
-#define LVGL_VERSION_MINOR 5
+#define LVGL_VERSION_MINOR 6
 ```
 
 The most common drift bites:
 
 | v8 | v9 | Notes |
 |---|---|---|
-| `lv_chart_set_range(c, axis, min, max)` | `lv_chart_set_axis_range(...)` | Same args, renamed function. Easy to miss because most other chart APIs are unchanged. |
-| `lv_obj_clear_flag` | `lv_obj_remove_flag` | v9 has a v8 compat shim (`lv_api_map_v8.h`) so `clear_flag` still works — but new code should use `remove_flag`. |
+| `lv_chart_set_range(c, axis, min, max)` | `lv_chart_set_axis_range(...)` | Same args, renamed in v9.1 (alias in `include/lvgl/api_map/lv_api_map_v9_1.h`). Easy to miss because most other chart APIs are unchanged. |
+| `lv_obj_add_flag` / `lv_obj_clear_flag(o, LV_OBJ_FLAG_X)` | `lv_obj_set_<flag>(o, bool)`, e.g. `lv_obj_set_hidden`, `lv_obj_set_scrollable`, `lv_obj_set_clickable` | v9.6 marks `lv_obj_add_flag`/`lv_obj_remove_flag` `LV_DEPRECATED` (compiler warning); `clear_flag` is a v8 alias of `remove_flag`. |
+| `lv_scr_load`, `LV_LABEL_LONG_CLIP` | `lv_screen_load`, `LV_LABEL_LONG_MODE_CLIP` | Old names are `api_map` aliases, dropped with `LV_DISABLE_API_MAPPING`. |
 | Default theme | `LV_USE_THEME_DEFAULT=n` recommended | v9 default is opinionated; turn off and roll your own if you have a brand. |
 | `lv_color_hex(0xRRGGBB)` | unchanged | Still the canonical color constructor. |
 | `lv_label_set_recolor` | unchanged | Format `#RRGGBB text#`. Mask u32 with 0xFFFFFF. |
@@ -351,8 +359,9 @@ line directly.
 
 #### Touch via `lv_indev`
 
-`CONFIG_INPUT=y` plus `CONFIG_INPUT_MODE_THREAD=y` plumbs touch events
-from a Zephyr Input device (`gt911`, `ft5336`, `ili9xxx_touch`, etc.)
+`CONFIG_INPUT=y` plus a `zephyr,touch` chosen node (auto-creates the
+pointer via `CONFIG_LV_Z_POINTER_FROM_CHOSEN_TOUCH`) or a
+`zephyr,lvgl-pointer-input` node plumbs touch events from a Zephyr Input device (`gt911`, `ft5336`, `ili9xxx_touch`, etc.)
 into LVGL's indev layer. LVGL then synthesizes `LV_EVENT_PRESSED`,
 `LV_EVENT_CLICKED`, `LV_EVENT_RELEASED` on widgets under the touch
 point.
@@ -360,7 +369,7 @@ point.
 Register a click callback per widget:
 
 ```c
-lv_obj_add_flag(my_label, LV_OBJ_FLAG_CLICKABLE);
+lv_obj_set_clickable(my_label, true);
 lv_obj_add_event_cb(my_label, on_click, LV_EVENT_CLICKED, NULL);
 lv_obj_set_ext_click_area(my_label, 10);    /* widen the hit area */
 ```
@@ -387,12 +396,12 @@ static void on_screen_tap(lv_event_t *e)  { (void)e; advance_screen(); }
 
 /* In the button handler thread (NOT the LVGL thread): */
 case BUTTON_ACTION_PRESS:
-    advance_screen();   /* publishes; the UI thread consumes and lv_scr_load's */
+    advance_screen();   /* publishes; the UI thread consumes and lv_screen_load's */
     break;
 ```
 
 The advance helper publishes a message; the UI thread consumes it and
-calls `lv_scr_load`. This keeps all `lv_*` calls on the LVGL thread.
+calls `lv_screen_load`. This keeps all `lv_*` calls on the LVGL thread.
 
 **Debounce GPIO buttons** — if your button service uses `GPIO_INT_EDGE_BOTH`
 and submits a regular `k_work` per ISR, contact bounce can publish
@@ -440,7 +449,7 @@ device that LVGL flushes into.)
 ```bash
 mise x -- west build -b native_sim/native/64 -p always \
                   -d builds/<app>_sim applications/<app>
-./build/<app>_sim/zephyr/zephyr.exe
+./builds/<app>_sim/zephyr/zephyr.exe
 ```
 
 (or `_native_sim_native_64` build dir name if you have multiple
@@ -505,7 +514,7 @@ For pure UI work the loop is:
 ```bash
 # Edit ui_screen_foo.c
 mise x -- west build -d builds/foo_sim
-./build/foo_sim/zephyr/zephyr.exe
+./builds/foo_sim/zephyr/zephyr.exe
 ```
 
 That's ~2-5 s round trip vs ~15 s for `west build && west flash &&
@@ -561,7 +570,7 @@ the convention used throughout `applications/beta_hri/src/ui/`. Don't
 panic-refactor into "containers" until you have a reason — the real
 discipline is keeping all `lv_*` calls on the LVGL thread.
 
-#### `lv_scr_load` while a separate `_update` runs is fine
+#### `lv_screen_load` while a separate `_update` runs is fine
 
 `_update` writes through retained widget pointers regardless of which
 screen is currently in the foreground; LVGL only paints the active
@@ -588,7 +597,7 @@ Static-storage zero-init makes this reliable without explicit init.
 Check, in this order:
 
 1. Did `_build` actually run? Add a `LOG_INF("battery built")` in it.
-2. Did `lv_scr_load` get called for the new screen? Log
+2. Did `lv_screen_load` get called for the new screen? Log
    `model.active_screen` in your `handle_ui_cmd` switch.
 3. Are there competing publishers on the screen-command channel? Grep
    for `zbus_chan_pub(&ui_cmd_chan` — should be exactly one place
@@ -604,17 +613,18 @@ border, and scrollable enabled. For a clean container:
 
 ```c
 lv_obj_remove_style_all(strip);          /* nuke default panel chrome */
-lv_obj_clear_flag(strip, LV_OBJ_FLAG_SCROLLABLE);
+lv_obj_set_scrollable(strip, false);
 ```
 
 If a label seems to be drawing outside its parent, it's probably
-overflow-wrapping; set `LV_LABEL_LONG_CLIP` (or
-`LV_LABEL_LONG_SCROLL` if you want a marquee) and a finite width.
+overflow-wrapping; set `LV_LABEL_LONG_MODE_CLIP` (or
+`LV_LABEL_LONG_MODE_SCROLL` if you want a marquee) and a finite width.
 
 #### Build succeeds but the chart is invisible
 
 Common causes:
-- `CONFIG_LV_USE_CHART=y` missing → chart functions are stubs.
+- `CONFIG_LV_USE_CHART=n` (it defaults to `y`) → `lv_chart_*` is not built
+  and the build fails (`lv_chart_*` undeclared).
 - Chart height is `LV_SIZE_CONTENT` and the parent flex column
   doesn't have a defined height for the chart to expand into. Set an
   explicit pixel height on chart widgets.
@@ -628,10 +638,12 @@ heap watch:
 
 ```c
 #include <lvgl_mem.h>
-LOG_INF("lv pool free=%u", lv_get_dynamic_buf_size());
+struct sys_memory_stats st;
+lvgl_heap_stats(&st);   /* needs CONFIG_SYS_HEAP_RUNTIME_STATS=y */
+LOG_INF("lv pool free=%zu max=%zu", st.free_bytes, st.max_allocated_bytes);
 ```
 
-(or check `mem_pool_stats` in your app's diagnostic command). Bump
+(or `lvgl stats memory` with `CONFIG_LV_Z_SHELL=y`). Bump
 `CONFIG_LV_Z_MEM_POOL_SIZE` accordingly.
 
 #### Multiple buttons / observers cause phantom screen advances
@@ -675,7 +687,7 @@ reset loop, so it doesn't look like a crash.
 
 Things that do **not** fix it:
 
-- `CONFIG_LV_COLOR_DEPTH_1=y` is *required* for any mono attempt (without it the
+- `CONFIG_LV_COLOR_FORMAT_I1=y` (pre-4.5: `CONFIG_LV_COLOR_DEPTH_1=y`) is *required* for any mono attempt (without it the
   Zephyr glue leaves `mono_conv_buf` NULL and faults in `lvgl_display_mono.c`),
   but it is not sufficient.
 - Matching the in-tree `ssd1306_128x32` shield defconfig
@@ -695,6 +707,13 @@ CFB has no render loop or work queue — just draw and
 fonts are 10x16 / 15x24 / 20x32, so on 128x32 the 10x16 font gives 2 rows of
 about 12 characters. (Practical consequence: split a dotted-quad IP address after
 the second dot to make it fit.)
+
+**ssd16xx (e-paper) pixel format changed in 4.5** (`b3150095671`): it now reports
+`PIXEL_FORMAT_MONO01` (set bit = white, matching controller RAM) instead of
+`MONO10`. LVGL mono and CFB render correctly with no change — drop any
+`CONFIG_LV_Z_COLOR_MONO_HW_INVERSION` or manual inversion you added to work
+around inverted output; buffers passed straight to `display_write()` must no
+longer be inverted.
 
 The SSD1306 *driver* itself is fine; only the LVGL layer hangs. Two projects in
 this workspace hit this — `pt_control` ships the CFB path and boots reliably,

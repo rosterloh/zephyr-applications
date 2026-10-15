@@ -171,14 +171,15 @@ K_EVENT_DEFINE(name)
 /* Initialize an event object */
 void k_event_init(struct k_event *event);
 
+/* set/post/clear return the previous event bits */
 /* Set events (overwrite) */
-void k_event_set(struct k_event *event, uint32_t events);
+uint32_t k_event_set(struct k_event *event, uint32_t events);
 
 /* Post events (bitwise OR) */
-void k_event_post(struct k_event *event, uint32_t events);
+uint32_t k_event_post(struct k_event *event, uint32_t events);
 
 /* Clear specific events */
-void k_event_clear(struct k_event *event, uint32_t events);
+uint32_t k_event_clear(struct k_event *event, uint32_t events);
 
 /* Test (query) current events without waiting */
 uint32_t k_event_test(struct k_event *event, uint32_t events_mask);
@@ -263,19 +264,18 @@ CONFIG_EVENTS=y
 #### Mutex Priority Inheritance
 
 ```
-# Limit priority elevation (0 = unlimited, default)
-# Higher values allow higher priority elevation
+# Highest priority inheritance may boost to (default -128 = effectively
+# unlimited; 0 keeps boosted owners preemptible; >= idle prio disables it)
 CONFIG_PRIORITY_CEILING=0
 ```
 
 #### General Kernel Options
 
 ```
-# Enable preemptive scheduling (affects priority inheritance)
-CONFIG_PREEMPT_ENABLED=y
-
-# Enable cooperative scheduling
-CONFIG_COOP_ENABLED=y
+# Priority counts (defaults 15 / 16). PREEMPT_ENABLED / COOP_ENABLED are
+# promptless, derived from these; assigning them aborts the Kconfig stage.
+CONFIG_NUM_PREEMPT_PRIORITIES=15
+CONFIG_NUM_COOP_PRIORITIES=16
 ```
 
 ### Header Files
@@ -312,9 +312,9 @@ This single include provides access to:
 | `k_sem_take` (with timeout) | No |
 | `k_mutex_*` | No |
 | `k_event_post` | Yes |
-| `k_event_set` | Yes |
+| `k_event_set` / `k_event_clear` | Yes |
 | `k_event_test` | Yes |
-| `k_event_wait*` | No |
+| `k_event_wait*` | Only with `K_NO_WAIT` |
 | `k_condvar_*` | No |
 
 ## Comparison
@@ -911,8 +911,8 @@ void uart_isr(void *arg)
 #### Clearing
 
 ```c
-/* Clear specific bits */
-k_event_set(&my_event, k_event_test(&my_event) & ~BITS_TO_CLEAR);
+/* Clear specific bits (atomic; read-modify-write via k_event_set races) */
+k_event_clear(&my_event, BITS_TO_CLEAR);
 
 /* Clear all events */
 k_event_set(&my_event, 0);
@@ -1119,8 +1119,7 @@ void consumer(void)
         consume_data();
         /* Clear BUFFER_FULL if buffer now has space */
         if (buffer_has_space()) {
-            uint32_t current = k_event_test(&buffer_status);
-            k_event_set(&buffer_status, current & ~BUFFER_FULL);
+            k_event_clear(&buffer_status, BUFFER_FULL);
         }
     }
 }
@@ -1413,7 +1412,7 @@ Priority inheritance prevents **priority inversion** — a situation where a hig
 #### Configuration
 
 ```
-# Limit how high priority can be raised (0 = unlimited)
+# Limit how high priority can be raised (default -128 = unlimited)
 CONFIG_PRIORITY_CEILING=0
 ```
 

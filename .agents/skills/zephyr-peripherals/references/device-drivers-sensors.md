@@ -311,7 +311,7 @@ struct my_sensor_data {
     const struct sensor_trigger *trigger;
 
 #ifdef CONFIG_MY_SENSOR_TRIGGER_OWN_THREAD
-    K_THREAD_STACK_MEMBER(thread_stack, CONFIG_MY_SENSOR_THREAD_STACK_SIZE);
+    K_KERNEL_STACK_MEMBER(thread_stack, CONFIG_MY_SENSOR_THREAD_STACK_SIZE);
     struct k_thread thread;
     struct k_sem trig_sem;
 #elif defined(CONFIG_MY_SENSOR_TRIGGER_GLOBAL_THREAD)

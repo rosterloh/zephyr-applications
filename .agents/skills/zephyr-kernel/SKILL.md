@@ -16,7 +16,7 @@ description: >
 
 # Zephyr Kernel
 
-Validated against: Zephyr 4.4.99 (47ea4fd92683, 2026-09-18). Re-check with `mise run check-skills`.
+Validated against: Zephyr 4.5.0 (124121fbb079, 2026-10-15). Re-check with `mise run check-skills`.
 
 ## Scope
 
@@ -46,16 +46,17 @@ filesystem/storage subsystems (see `zephyr-system`).
   neighbouring memory and usually faults elsewhere — enable
   `CONFIG_STACK_SENTINEL` and `CONFIG_THREAD_ANALYZER` while bringing
   up a new thread.
-- **`K_MSEC()`, `K_SECONDS()` are macros, not integers.** Passing a raw
-  ms value where a `k_timeout_t` is expected silently mis-converts on
-  some architectures.
-- **Cooperative threads never get preempted.** A `k_yield()` inside a
-  cooperative thread is the only way to let an equal-or-lower priority
-  cooperative thread run; preemptive threads of higher priority still
-  preempt freely.
-- **Priority inversion needs `CONFIG_PRIORITY_CEILING` on
-  `k_mutex_t`.** Default mutexes inherit priority but don't ceiling —
-  fine for most cases, important to know for hard real-time paths.
+- **`K_MSEC()`, `K_SECONDS()` are macros, not integers.** `k_timeout_t`
+  is an opaque struct (`<zephyr/sys/clock.h>`), so a raw ms value fails
+  to compile; compare timeouts with `K_TIMEOUT_EQ()`, not `==`.
+- **Cooperative threads are never preempted by other threads** (only by
+  ISRs), not even higher-priority ones. They give up the CPU only by
+  blocking, sleeping or `k_yield()`, and `k_yield()` only hands over to
+  ready threads of equal or higher priority.
+- **`k_mutex` does priority inheritance, not a priority-ceiling
+  protocol.** `CONFIG_PRIORITY_CEILING` (default -128) only caps how high
+  inheritance can boost the owner; semaphores don't inherit at all, so
+  use a mutex for shared resources on hard real-time paths.
 
 ## Validation Checklist
 

@@ -1,35 +1,12 @@
 # Protocol Buffers (nanopb)
 
-> **Prerequisite: nanopb is not cloned in this workspace.**
->
-> `west.yml` uses a `name-allowlist` and does not include `nanopb`, so
-> `deps/modules/lib/nanopb` does not exist and nothing here will build as
-> written. No application in this repo currently uses protobuf.
->
-> To use it, add the module to the allowlist in `west.yml` (keep the list
-> alphabetical), then re-sync:
->
-> ```yaml
->         name-allowlist:
->           ...
->           - mcuboot
->           - nanopb
->           - open-amp
-> ```
->
-> ```bash
-> mise run west-update
-> ```
->
-> You also need the host `protoc` compiler available — nanopb's CMake
-> integration invokes it at build time.
->
-> Because the module is absent, the `CONFIG_NANOPB*` symbols below are
-> **unverified against the tree** — `mise run check-skills` allowlists them
-> for that reason rather than confirming them. Re-check them once the module is
-> actually cloned. Everything in `./cbor.md` and `./json.md` *is* verified;
-> prefer CBOR unless you specifically need protobuf schema compatibility with
-> another system.
+> **Workspace status.** `nanopb` is in `west.yml`'s `name-allowlist`
+> (esp-hosted-mcu's coprocessor RPC on the ESP32-P4-Nano needs it), so
+> `deps/modules/lib/nanopb` is cloned. No application here uses protobuf
+> directly yet. `protoc` is pinned lazily in `mise.toml` (`mise x -- protoc`)
+> and the generator's python `protobuf` package is in `pyproject.toml`, so
+> builds must run via `mise run`/`mise x --`. Prefer CBOR (`./cbor.md`)
+> unless you need protobuf schema compatibility with another system.
 
 ## Overview
 
@@ -59,7 +36,7 @@ message SimpleMessage {
 ```
 
 **2. Add a sibling `.options` file** to bound variable-length fields
-(required without `CONFIG_NANOPB_ENABLE_MALLOC`):
+(without a bound they are generated as `pb_callback_t` callbacks):
 
 ```
 # src/simple.options
@@ -114,10 +91,8 @@ pb_release(SimpleMessage_fields, &rx);  /* only matters with malloc mode */
 ### Important Notes
 
 1. **`protoc` is a build-time host dependency.** The build fails with
-   `'protoc' not found` if it's missing. Install:
-   `sudo apt install protobuf-compiler` /
-   `brew install protobuf` /
-   `choco install protoc`.
+   `'protoc' not found` if it's missing. Here it comes from `mise.toml`;
+   elsewhere `apt install protobuf-compiler` / `brew install protobuf`.
 2. **Generated files live under `${CMAKE_CURRENT_BINARY_DIR}`** and are
    `#include`d with the path of the original `.proto` (e.g.
    `#include "src/simple.pb.h"` when the proto lived in `src/`). They
@@ -125,9 +100,10 @@ pb_release(SimpleMessage_fields, &rx);  /* only matters with malloc mode */
 3. **All messages must be initialized.** Use the generated
    `<Msg>_init_zero` or `<Msg>_init_default`; un-initialized fields
    yield garbage `_count`/`has_*` values that confuse the encoder.
-4. **String / bytes fields need `max_size`** (or
-   `CONFIG_NANOPB_ENABLE_MALLOC`). proto3 doesn't carry size hints, so
-   nanopb requires you to declare them in `.options`.
+4. **String / bytes / repeated fields need a bound** (`max_size` /
+   `max_count` in `.options`), or they are generated as `pb_callback_t`
+   you must service. `type:FT_POINTER` (needs `CONFIG_NANOPB_ENABLE_MALLOC`)
+   heap-allocates them instead.
 5. **`pb_encode` and `pb_decode` return `bool`.** Read
    `PB_GET_ERROR(stream)` for a human-readable message; suppress
    strings with `CONFIG_NANOPB_NO_ERRMSG=y` to save flash.
@@ -180,13 +156,13 @@ pb_release(SimpleMessage_fields, &rx);  /* only matters with malloc mode */
 | `float`                      | `float`                                      |
 | `double`                     | `double`                                     |
 | `bool`                       | `bool`                                       |
-| `string` (with `max_size:N`) | `char field[N]`                              |
-| `bytes` (with `max_size:N`)  | `pb_byte_t field[N]` + `size_t field_size`   |
+| `string` (with `max_size:N`) | `char field[N]` (N includes the NUL)         |
+| `bytes` (with `max_size:N`)  | `PB_BYTES_ARRAY_T(N) field` (`.size`, `.bytes[N]`) |
 | `bytes` (`fixed_length:true`)| `pb_byte_t field[N]` (no size field)         |
 | `repeated T` (with `max_count:N`)| `T field[N]` + `pb_size_t field_count`   |
 | `optional T` (proto3)        | `bool has_field` + `T field`                 |
 | nested `Message`             | `Message field` + `bool has_field`           |
-| `oneof`                      | `union` + `int which_oneof` discriminator    |
+| `oneof`                      | `union` + `pb_size_t which_<oneof>` discriminator |
 | `enum E`                     | generated `enum _E { … }`, used by value     |
 
 ### Encoding
@@ -199,12 +175,11 @@ typedef bool (*pb_callback_encode_t)(pb_ostream_t *stream,
 bool pb_encode(pb_ostream_t *stream, const pb_msgdesc_t *fields,
                const void *src_struct);
 
-bool pb_encode_delimited(pb_ostream_t *stream, const pb_msgdesc_t *fields,
-                         const void *src_struct);
-
-bool pb_encode_nullterminated(pb_ostream_t *stream,
-                              const pb_msgdesc_t *fields,
-                              const void *src_struct);
+bool pb_encode_ex(pb_ostream_t *stream, const pb_msgdesc_t *fields,
+                  const void *src_struct, unsigned int flags);
+/* macros over pb_encode_ex: */
+#define pb_encode_delimited(s, f, d)      pb_encode_ex(s, f, d, PB_ENCODE_DELIMITED)
+#define pb_encode_nullterminated(s, f, d) pb_encode_ex(s, f, d, PB_ENCODE_NULLTERMINATED)
 
 bool pb_encode_submessage(pb_ostream_t *stream, const pb_msgdesc_t *fields,
                           const void *src_struct);
@@ -228,12 +203,10 @@ bool pb_decode(pb_istream_t *stream, const pb_msgdesc_t *fields,
 bool pb_decode_ex(pb_istream_t *stream, const pb_msgdesc_t *fields,
                   void *dest_struct, unsigned int flags);
 
-bool pb_decode_delimited(pb_istream_t *stream, const pb_msgdesc_t *fields,
-                         void *dest_struct);
-
-bool pb_decode_nullterminated(pb_istream_t *stream,
-                              const pb_msgdesc_t *fields,
-                              void *dest_struct);
+/* macros over pb_decode_ex: */
+#define pb_decode_noinit(s, f, d)         pb_decode_ex(s, f, d, PB_DECODE_NOINIT)
+#define pb_decode_delimited(s, f, d)      pb_decode_ex(s, f, d, PB_DECODE_DELIMITED)
+#define pb_decode_nullterminated(s, f, d) pb_decode_ex(s, f, d, PB_DECODE_NULLTERMINATED)
 
 void pb_release(const pb_msgdesc_t *fields, void *dest_struct);
 ```
@@ -260,14 +233,14 @@ struct pb_ostream_s {
     void *state;
     size_t max_size;
     size_t bytes_written;
-    void *errmsg;
+    const char *errmsg;   /* absent with PB_NO_ERRMSG */
 };
 
 struct pb_istream_s {
     bool (*callback)(pb_istream_t *stream, pb_byte_t *buf, size_t count);
     void *state;
     size_t bytes_left;
-    void *errmsg;
+    const char *errmsg;   /* absent with PB_NO_ERRMSG */
 };
 ```
 
@@ -299,8 +272,8 @@ error.
 ### Optional
 
 ```kconfig
-# Allow runtime malloc for variable-length fields (no per-field max_size needed).
-# Adds heap dependency — must also enable CONFIG_HEAP_MEM_POOL_SIZE or sys-heap.
+# Allow FT_POINTER fields (decoder allocates them).
+# Uses libc realloc()/free() — size the libc heap (e.g. CONFIG_COMMON_LIBC_MALLOC_ARENA_SIZE).
 CONFIG_NANOPB_ENABLE_MALLOC=y
 
 # Max number of proto2 required fields checked for presence. Default & minimum 64.
@@ -346,8 +319,8 @@ per-field codegen. Common keys:
 
 | Key             | Meaning                                                |
 |-----------------|--------------------------------------------------------|
-| `max_size:N`    | Array length for `string`, `bytes`, or repeated fields |
-| `max_count:N`   | Max element count for `repeated` (alternate name)      |
+| `max_size:N`    | Buffer size for `string` (incl. NUL) or `bytes`        |
+| `max_count:N`   | Max element count for `repeated`                       |
 | `max_length:N`  | Max `string` length excluding NUL                      |
 | `fixed_length:true` | Strip the runtime `_size` field; always exactly `max_size` |
 | `fixed_count:true`  | Strip the runtime `_count` field; always exactly `max_count` |
@@ -414,7 +387,8 @@ tests/modules/nanopb/
 │   ├── simple.proto / simple.options
 │   ├── complex.proto              # `import "sub/nested.proto";`
 │   └── sub/nested.proto / nested.options
-└── src/main.c                     # Ztest cases
+├── lib/                           # second target consuming the headers
+└── src/main.c                     # Ztest cases; #include <proto/complex.pb.h>
 ```
 
 ### Docs
@@ -447,9 +421,12 @@ message ComplexMessage {
 ```
 
 ```
-# complex.options
-sub/NestedMessage.name max_size:32
+# sub/nested.options — options live next to the .proto that defines the field
+NestedMessage.name max_size:32
 ```
+
+Both `.proto` files go to `zephyr_nanopb_sources(app proto/complex.proto
+proto/sub/nested.proto)`.
 
 ```c
 ComplexMessage msg = ComplexMessage_init_zero;
@@ -495,10 +472,15 @@ message Payload {
 }
 ```
 
+```
+# payload.options — without this the field is a pb_callback_t
+Payload.data type:FT_POINTER
+```
+
 ```kconfig
 CONFIG_NANOPB=y
 CONFIG_NANOPB_ENABLE_MALLOC=y
-CONFIG_HEAP_MEM_POOL_SIZE=4096
+CONFIG_COMMON_LIBC_MALLOC_ARENA_SIZE=4096   # pb_realloc() is libc realloc()
 ```
 
 ```c

@@ -25,8 +25,8 @@ Devicetree is a tree of nodes and properties. Zephyr uses **bindings** to valida
 
 #### Key Files in a Build
 After building, check these for debugging:
-- `builds/zephyr/zephyr.dts` — Final merged devicetree
-- `builds/zephyr/include/generated/devicetree_generated.h` — Generated macros
+- `builds/<app>/zephyr/zephyr.dts` — Final merged devicetree
+- `builds/<app>/zephyr/include/generated/zephyr/devicetree_generated.h` — Generated macros
 
 ---
 
@@ -380,7 +380,7 @@ DT_REG_SIZE_BY_NAME(node_id, name)
 1. **Check parent's cells** — `reg` format depends on parent's `#address-cells` and `#size-cells`
 2. **Empty ranges** — Use `ranges;` for identity mapping (most common in Zephyr)
 3. **Bus nodes** — Buses like I2C/SPI use `#size-cells = <0>`
-4. **Final addresses** — Check `builds/zephyr/zephyr.dts` to see resolved addresses
+4. **Final addresses** — Check `builds/<app>/zephyr/zephyr.dts` to see resolved addresses
 5. **64-bit systems** — Use `#address-cells = <2>` for addresses > 4GB
 
 ## Advanced Bindings
@@ -905,8 +905,7 @@ i2c_write_dt(&sensor, data, sizeof(data));
 
 /* Get SPI device spec */
 static const struct spi_dt_spec flash = SPI_DT_SPEC_GET(FLASH_NODE,
-                                                        SPI_WORD_SET(8) | SPI_TRANSFER_MSB,
-                                                        0);
+                                                        SPI_WORD_SET(8) | SPI_TRANSFER_MSB);
 
 /* Components */
 DT_REG_ADDR(FLASH_NODE)                /* Chip select index */
@@ -972,10 +971,9 @@ int val = DT_PROP_OR(MY_NODE, optional_prop, DEFAULT_VALUE);
 BUILD_ASSERT(DT_NODE_HAS_STATUS(DT_CHOSEN(zephyr_console), okay),
              "Console device must be enabled");
 
-/* Use in ternary */
-#define MY_SIZE DT_COND_NODE_HAS_PROP(MY_NODE, size, \
-                                       DT_PROP(MY_NODE, size), \
-                                       DEFAULT_SIZE)
+/* Pick at preprocessing time (or just DT_PROP_OR) */
+#define MY_SIZE COND_CODE_1(DT_NODE_HAS_PROP(MY_NODE, size), \
+                            (DT_PROP(MY_NODE, size)), (DEFAULT_SIZE))
 ```
 
 ### Instance Macros (For Drivers)
@@ -1168,8 +1166,8 @@ Consumers reference clocks using `clocks` and optionally `clock-names`:
 | `clocks` | phandle-array | Reference to clock(s) with specifier cells |
 | `clock-names` | string-array | Names for each clock reference |
 | `clock-frequency` | int | Override/specify frequency |
-| `assigned-clocks` | phandle-array | Clocks to configure at boot |
-| `assigned-clock-rates` | array | Rates for assigned-clocks |
+| `assigned-clocks` | phandle-array | Clocks to configure at boot (only in a few vendor bindings, e.g. sam0) |
+| `assigned-clock-rates` | array | Rates for assigned-clocks (same) |
 
 ### Vendor Patterns
 
@@ -1291,10 +1289,10 @@ After building, examine these files:
 
 | File | Purpose |
 |------|---------|
-| `builds/zephyr/zephyr.dts` | Final merged devicetree (overlays applied) |
-| `builds/zephyr/zephyr.dts.pre` | Pre-processed DTS (includes resolved) |
-| `builds/zephyr/include/generated/devicetree_generated.h` | Generated C macros |
-| `builds/zephyr/dts.cmake` | CMake devicetree variables |
+| `builds/<app>/zephyr/zephyr.dts` | Final merged devicetree (overlays applied) |
+| `builds/<app>/zephyr/zephyr.dts.pre` | Pre-processed DTS (includes resolved) |
+| `builds/<app>/zephyr/include/generated/zephyr/devicetree_generated.h` | Generated C macros |
+| `builds/<app>/zephyr/edt.pickle.cmake` | CMake devicetree variables |
 
 ### Common Errors and Fixes
 
@@ -1464,7 +1462,7 @@ gpios = <&gpio0 0 5 GPIO_ACTIVE_LOW>;  /* 3 cells after phandle */
 
 ```bash
 # After build, view merged DTS
-cat builds/zephyr/zephyr.dts
+cat builds/<app>/zephyr/zephyr.dts
 
 # Or use west
 west build -t zephyr.dts
@@ -1474,14 +1472,14 @@ west build -t zephyr.dts
 
 ```bash
 # Search for your node's macros
-grep -r "my_device" builds/zephyr/include/generated/devicetree_generated.h
+grep -r "my_device" builds/<app>/zephyr/include/generated/zephyr/devicetree_generated.h
 ```
 
 #### Validate Devicetree Manually
 
 ```bash
 # Run dtc directly for detailed errors
-dtc -I dts -O dtb -o /dev/null builds/zephyr/zephyr.dts.pre 2>&1
+dtc -I dts -O dtb -o /dev/null builds/<app>/zephyr/zephyr.dts.pre 2>&1
 ```
 
 #### CMake Devicetree Info
@@ -1496,7 +1494,7 @@ west build -t devicetree_info
 #### Verify Overlay Applied
 
 1. Build with overlay
-2. Check `builds/zephyr/zephyr.dts` for your changes
+2. Check `builds/<app>/zephyr/zephyr.dts` for your changes
 3. If changes missing, verify overlay path:
 
 ```bash
@@ -1607,7 +1605,7 @@ The compatible must match both:
 
 ```bash
 # See if driver object exists
-ls builds/zephyr/drivers/*/my_driver.c.obj
+find builds/<app>/zephyr/drivers -name my_driver.c.obj
 ```
 
 ### Tips
@@ -1770,7 +1768,7 @@ DT_DMAS_CTLR_BY_IDX(node_id, idx)        /* Nth DMA controller */
 DT_DMAS_CTLR_BY_NAME(node_id, name)      /* DMA by name */
 DT_DMAS_CELL_BY_NAME(node_id, name, cell) /* Specific cell value */
 DT_DMAS_CELL_BY_IDX(node_id, idx, cell)
-DT_HAS_DMA_CHANNEL(node_id, name)        /* Check if channel exists */
+DT_DMAS_HAS_NAME(node_id, name)          /* Check if channel exists */
 ```
 
 ### Binding Example
@@ -2358,7 +2356,7 @@ Devices reference interrupts and optionally their parent controller:
 | `interrupts` | array | Interrupt specifier(s) |
 | `interrupt-parent` | phandle | Override default interrupt controller |
 | `interrupt-names` | string-array | Names for each interrupt |
-| `interrupts-extended` | phandle-array | Mix different controllers |
+| `interrupts-extended` | compound | Mix different controllers |
 
 ### Cell Formats
 
@@ -2404,7 +2402,7 @@ Use `interrupts-extended` to reference different controllers:
 ```devicetree
 my_device {
     interrupts-extended = <&nvic 5 1>,
-                          <&gpio0 3 (GPIO_INT_EDGE | GPIO_INT_ACTIVE_LOW)>;
+                          <&gpio0 3 GPIO_ACTIVE_LOW>; /* cells per gpio0's #interrupt-cells */
     interrupt-names = "tx", "gpio-alert";
 };
 ```

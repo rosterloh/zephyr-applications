@@ -7,7 +7,7 @@ use and what `<zephyr/usb/usbd.h>` declares.
 | Stack | Kconfig | Header | Status |
 |-------|---------|--------|--------|
 | device_next (`usbd_*`) | `CONFIG_USB_DEVICE_STACK_NEXT` | `<zephyr/usb/usbd.h>` | current; use this |
-| legacy (`usb_*`) | `CONFIG_USB_DEVICE_STACK` | `<zephyr/usb/usb_device.h>` | maintenance only; parts are `__deprecated` |
+| legacy (`usb_*`) | `CONFIG_USB_DEVICE_STACK` | `<zephyr/usb/usb_device.h>` | deprecated (`select DEPRECATED`); APIs are `__deprecated` |
 
 The two are mutually exclusive and share no API. **Check which one an app
 selects before copying code into it** — see the trap at the bottom, which is a
@@ -61,13 +61,13 @@ static int app_usb_init(void)
         return err;
     }
 
-    /* cfg value (bConfigurationValue) is 1-based, not 0 */
     err = usbd_add_configuration(&app_usbd, USBD_SPEED_FS, &app_fs_config);
     if (err) {
         return err;
     }
 
-    /* 4th arg is a NULL-terminated blocklist of class names to skip.
+    /* 3rd arg is the 1-based bConfigurationValue, not 0.
+     * 4th arg is a NULL-terminated blocklist of class names to skip.
      * Pass NULL to register every class built into the image.
      */
     err = usbd_register_all_classes(&app_usbd, USBD_SPEED_FS, 1, NULL);
@@ -179,7 +179,7 @@ usbd_msg_register_cb(&app_usbd, usb_msg_cb);
 Use `usbd_msg_type_string(msg->type)` for a printable name.
 
 **Callback context depends on Kconfig.** With `CONFIG_USBD_MSG_DEFERRED_MODE`
-the callback runs from a workqueue; without it, it runs in the USB stack's
+(default `y`) the callback runs from the system workqueue; without it, it runs in the USB stack's
 own context, where blocking is not allowed. Don't do filesystem or long work
 there unless deferred mode is on.
 
@@ -206,7 +206,8 @@ static struct net_buf *my_control_to_host(struct usbd_class_data *const c_data,
                                           const struct usb_setup_packet *const setup)
 {
     /* Allocate only what you will actually return */
-    struct net_buf *buf = usbd_ep_buf_alloc(c_data, MIN(setup->wLength, sizeof(my_data)));
+    struct net_buf *buf = usbd_ep_ctrl_data_in_alloc(usbd_class_get_ctx(c_data),
+                                                     MIN(setup->wLength, sizeof(my_data)));
 
     if (buf == NULL) {
         return NULL;   /* stack will STALL */
@@ -248,7 +249,7 @@ struct was renamed `uhc_api` → `uhc_driver_api` and must use
 CONFIG_USB_DEVICE_STACK_NEXT=y     # the usbd stack (NOT USB_DEVICE_STACK)
 CONFIG_USBD_CDC_ACM_CLASS=y
 
-# Message callback from a workqueue instead of stack context
+# Message callback from the system workqueue (default y) instead of stack context
 CONFIG_USBD_MSG_DEFERRED_MODE=y
 
 # CDC ACM tuning. Buffer sizing is devicetree, not Kconfig: each instance's
@@ -278,13 +279,13 @@ For a console over USB CDC ACM, prefer the `cdc-acm-console` snippet
   `#if defined(CONFIG_USB_DEVICE_STACK_NEXT)` compiles out silently on a legacy
   build, so a stale `usbd_*` call inside that guard produces **no error until
   someone switches stacks**. Real example in this repo:
-  `applications/motor_controller/src/usb.c` calls
-  `usbd_register_all_classes(&app_usbd, USBD_SPEED_FS, 1)` with the pre-4.x
-  three-argument form; the app builds today only because it selects
-  `CONFIG_USB_DEVICE_STACK=y` and the block is compiled out. Grep for the guard
-  before assuming USB code in an app is live.
+  `applications/motor_controller/src/usb.c` carried the pre-4.x three-argument
+  `usbd_register_all_classes()` call unnoticed while the app selected
+  `CONFIG_USB_DEVICE_STACK=y`; it surfaced only on the move to
+  `CONFIG_USB_DEVICE_STACK_NEXT`. Grep for the guard before assuming USB code in
+  an app is live.
 - **`bConfigurationValue` is 1-based.** Passing `0` as the `cfg` argument to
-  `usbd_add_configuration()`/`usbd_register_*` is not "the first configuration",
+  `usbd_register_class()`/`usbd_register_all_classes()` is not "the first configuration",
   it's the "unconfigured" value and enumeration will misbehave.
 - **Language descriptor must be added first.** String descriptor index 0 is
   reserved for the language list; adding `USBD_DESC_LANG_DEFINE` after the

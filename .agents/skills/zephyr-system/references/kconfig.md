@@ -133,12 +133,17 @@ generated headers must be included as `<zephyr/version.h>` and
 longer resolve. This bites vendored third-party code more than application code;
 re-enabling the legacy symbol is a stopgap, not a fix.
 
-#### A silently-ignored symbol is not a Kconfig error
+#### Undefined aborts; unmet dependencies only warn
 
-Kconfig does not fail on an unknown symbol in `prj.conf` — it is simply dropped.
-So a renamed or removed `CONFIG_*` produces a **successful build with the
-feature off**, not a diagnostic. When a feature seems not to take effect, grep
-the merged config rather than trusting `prj.conf`:
+Assigning an undefined (renamed, removed, typo'd) `CONFIG_*` in a handwritten
+fragment (`prj.conf`, `boards/*.conf`, `EXTRA_CONF_FILE`) aborts with
+`Aborting due to Kconfig warnings`. But a defined symbol whose `depends on` is
+false only gets a `was assigned the value 'y' but got the value 'n'` warning and
+the build **succeeds with the feature off**. A `select` that forces on a symbol
+whose dependencies are false (see "Select Bypassing Dependencies" below) is
+fatal again — e.g. `CONFIG_NETWORKING=n` with `CONFIG_WIFI=y` on native_sim,
+whose board default turns on the WPA supplicant. When a feature seems not to take
+effect, grep the merged config rather than trusting `prj.conf`:
 
 ```bash
 grep FOO builds/<app>/zephyr/.config
@@ -150,15 +155,16 @@ cited `CONFIG_*` against the current tree for exactly this reason.
 #### `CONFIG_*` in `prj.conf` never configures another image
 
 Under sysbuild, `prj.conf` configures your application only. MCUboot and other
-images need `sysbuild/<image>.conf` or `-D<image>_CONFIG_*`. Symbols placed in
-the wrong file are ignored with no warning — see `./sysbuild-mcuboot.md`.
+images need `sysbuild/<image>.conf` or `-D<image>_CONFIG_*`. A symbol placed in
+the wrong file silently configures only the app (or aborts the build if only
+MCUboot defines it) — see `./sysbuild-mcuboot.md`.
 
 #### Architecture-conditional symbols
 
 Some symbols only exist for certain architectures, so a config that works on one
-SoC silently does nothing (or fails to link) on another. Concrete example hit in
+SoC aborts Kconfig as undefined (or fails to compile) on another. Example hit in
 this workspace: `CONFIG_FLASH_BASE_ADDRESS` is defined in `arch/Kconfig` for
-ARM/ARC/X86/RISCV/RX/OpenRISC/POSIX but **not xtensa**, so an xtensa build with
+ARC/ARM/ARM64/X86/RISCV/RX/OpenRISC/POSIX/Hexagon/TriCore but **not xtensa**, so an xtensa build with
 `CONFIG_MCUMGR_GRP_IMG=y` that is neither MCUboot-based nor using mapped
 partitions fails to compile in `img_mgmt.c`. The fix there was to build with
 `--sysbuild` so MCUboot supplies the address.
@@ -496,10 +502,10 @@ config CONFIG_FOO
 
 #### 1. Unmet Direct Dependencies
 
-**Error:**
+**Warning (build continues with `FOO=n`):**
 ```
-warning: FOO (defined at drivers/Kconfig:10) has direct dependency BAR
-but BAR is not currently enabled
+warning: FOO (defined at drivers/Kconfig:10) was assigned the value 'y' but got
+the value 'n'. Check these unsatisfied dependencies: BAR (=n).
 ```
 
 **Cause:** Symbol `FOO` has `depends on BAR`, but `BAR` is not enabled.
@@ -535,11 +541,12 @@ west build -t menuconfig
 2. Check `builds/zephyr/Kconfig.modules` for module inclusion
 3. Verify `zephyr/module.yml` points to correct Kconfig path
 
-#### 3. Unknown Symbol Warning
+#### 3. Unknown Symbol Error
 
-**Error:**
+**Error (fatal for handwritten fragments):**
 ```
-warning: attempt to assign nonexistent symbol FOO
+warning: attempt to assign the value 'y' to the undefined symbol FOO
+error: Aborting due to Kconfig warnings
 ```
 
 **Causes:**
@@ -557,7 +564,8 @@ warning: attempt to assign nonexistent symbol FOO
 
 **Error:**
 ```
-warning: FOO selects BAR, which has unmet direct dependencies (QWERTY)
+warning: BAR (defined at ...) has direct dependencies QWERTY with value n, but is
+currently being y-selected by the following symbols: FOO
 ```
 
 **Cause:** `select` forces a symbol on without checking its `depends on`.

@@ -40,7 +40,8 @@ which usually pins openocd.
 The Zephyr SDK ships openocd; it is **not** on `PATH`:
 
 ```bash
-SDK_OOCD=/home/rio/zephyr-sdk-1.0.1/hosttools/sysroots/x86_64-pokysdk-linux/usr/bin/openocd
+# SDK version: deps/zephyr/SDK_VERSION; `mise run sdk-install` installs it
+SDK_OOCD=${ZEPHYR_SDK_INSTALL_DIR:-$HOME/zephyr-sdk-$(cat deps/zephyr/SDK_VERSION)}/hosttools/sysroots/x86_64-pokysdk-linux/usr/bin/openocd
 $SDK_OOCD -s $(dirname $SDK_OOCD)/../share/openocd/scripts \
   -f interface/stlink.cfg -f target/stm32h7x.cfg \
   -c "init; reset halt; reset run; exit"

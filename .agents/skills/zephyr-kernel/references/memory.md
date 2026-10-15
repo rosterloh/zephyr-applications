@@ -47,7 +47,8 @@ Common memory management issues:
 -   **Fragmentation**: Use slabs or mem_blocks for fixed-size allocations; prefer multiple purpose-specific heaps over one large heap.
 -   **Stack overflow**: Enable `CONFIG_HW_STACK_PROTECTION`; size stacks appropriately with `CONFIG_*_STACK_SIZE`.
 -   **ISR allocation failures**: Never block in ISRs; use `K_NO_WAIT` and handle allocation failures.
--   **Memory leaks**: Track allocations; use heap listeners (`CONFIG_HEAP_LISTENER`) for debugging.
+-   **Memory leaks**: Track allocations; use heap listeners (`CONFIG_SYS_HEAP_LISTENER`) for debugging.
+-   **Shared-object lifetime**: `<zephyr/sys/ref.h>` (4.5) gives `struct sys_ref` + `sys_ref_get()`/`sys_ref_put(ref, release)`; the counter saturates on overflow (leak, not use-after-free) and asserts on underflow.
 -   **Userspace access violations**: Verify memory partitions are correctly configured and threads are assigned to the right domains.
 
 ### Source Locations
@@ -271,11 +272,12 @@ void k_thread_system_pool_assign(struct k_thread *thread);
 // Memory mapping
 void *k_mem_map(size_t size, uint32_t flags);
 void k_mem_unmap(void *addr, size_t size);
-void *k_mem_map_phys_bare(uint8_t *phys, size_t size, uint32_t flags);
+void k_mem_map_phys_bare(uint8_t **virt_ptr, uintptr_t phys, size_t size,
+                         uint32_t flags);  /* internal: <zephyr/kernel/internal/mm.h> */
 
 // Demand paging
 void k_mem_page_in(void *addr, size_t size);
-void k_mem_page_out(void *addr, size_t size);
+int k_mem_page_out(void *addr, size_t size);
 void k_mem_pin(void *addr, size_t size);
 void k_mem_unpin(void *addr, size_t size);
 
@@ -306,7 +308,7 @@ void k_mem_paging_thread_stats_get(k_tid_t thread,
 
 | Option | Description | Default |
 |--------|-------------|---------|
-| `CONFIG_HEAP_LISTENER` | Enable heap allocation callbacks | n |
+| `CONFIG_SYS_HEAP_LISTENER` | Enable heap allocation callbacks (selects hidden `HEAP_LISTENER`) | n |
 | `CONFIG_SYS_HEAP_RUNTIME_STATS` | Enable runtime statistics | n |
 | `CONFIG_SYS_HEAP_ALLOC_LOOPS` | Allocation search iterations | 3 |
 
@@ -315,7 +317,7 @@ void k_mem_paging_thread_stats_get(k_tid_t thread,
 | Option | Description | Default |
 |--------|-------------|---------|
 | `CONFIG_USERSPACE` | Enable userspace support | n |
-| `CONFIG_MAX_DOMAIN_PARTITIONS` | Max partitions per domain | 8 |
+| `CONFIG_MAX_DOMAIN_PARTITIONS` | Max partitions per domain | 16 |
 | `CONFIG_MEM_DOMAIN_ISOLATED_STACKS` | Isolate stacks between threads | y (if supported) |
 | `CONFIG_HW_STACK_PROTECTION` | Hardware stack overflow detection | n |
 
@@ -632,11 +634,10 @@ void setup_thread(void) {
 
 ### Stack Isolation
 
-By default, user threads can access stacks of other threads in same domain. For stricter isolation:
-
-```kconfig
-CONFIG_MEM_DOMAIN_ISOLATED_STACKS=y  # If supported by arch
-```
+`CONFIG_MEM_DOMAIN_ISOLATED_STACKS` is promptless and defaults to `y` when the
+arch supports it (`ARCH_MEM_DOMAIN_SUPPORTS_ISOLATED_STACKS`); there, user
+threads in the same domain cannot touch each other's stacks. Elsewhere they can.
+Don't assign it in `prj.conf` (promptless symbols abort the Kconfig stage).
 
 ### Kconfig
 
@@ -843,7 +844,7 @@ Monitor heap allocations for debugging memory leaks.
 #### Kconfig
 
 ```kconfig
-CONFIG_HEAP_LISTENER=y
+CONFIG_SYS_HEAP_LISTENER=y   # selects the hidden HEAP_LISTENER
 ```
 
 #### Usage
@@ -1280,16 +1281,16 @@ Map specific physical memory (MMIO, shared memory):
 
 ```c
 // Map device registers
-void *regs = k_mem_map_phys_bare((uint8_t *)0x40000000,
-                                  0x1000,
-                                  K_MEM_PERM_RW | K_MEM_CACHE_NONE);
+uint8_t *regs;
+k_mem_map_phys_bare(&regs, 0x40000000, 0x1000,
+                    K_MEM_PERM_RW | K_MEM_CACHE_NONE);
 ```
 
 #### Permission Flags
 
 ```c
 K_MEM_PERM_RW     // Read-write
-K_MEM_PERM_RO     // Read-only
+/* read-only = omit K_MEM_PERM_RW (no K_MEM_PERM_RO flag) */
 K_MEM_PERM_EXEC   // Executable
 K_MEM_PERM_USER   // User-mode accessible
 K_MEM_CACHE_NONE  // Uncached (for MMIO)
@@ -1300,8 +1301,7 @@ K_MEM_CACHE_WT    // Write-through cache
 ### Kconfig
 
 ```kconfig
-# Enable MMU support
-CONFIG_MMU=y
+# CONFIG_MMU is promptless: the SoC selects it when the MMU is active
 
 # Page size (default 4096)
 CONFIG_MMU_PAGE_SIZE=4096

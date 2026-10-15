@@ -247,7 +247,7 @@ static int device_init(const struct device *dev)
 #define DEVICE_INIT(inst)                                       \
     static const struct device_config device_config_##inst = {  \
         .spi = SPI_DT_SPEC_INST_GET(inst,                       \
-                   SPI_WORD_SET(8) | SPI_TRANSFER_MSB, 0),      \
+                   SPI_WORD_SET(8) | SPI_TRANSFER_MSB),         \
     };                                                          \
     DEVICE_DT_INST_DEFINE(inst, device_init, NULL, NULL,        \
                           &device_config_##inst, POST_KERNEL,   \
@@ -301,7 +301,8 @@ static DEVICE_API(sensor, sensor_api) = {
 > section, and `DEVICE_API_GET()` now asserts that the API actually belongs to
 > the requested class. The old form —
 > `static const struct sensor_driver_api foo = {...}` — still compiles but the
-> device fails that assert at runtime.
+> device fails that assert at runtime (`CONFIG_DEVICE_API_ASSERT`, default y
+> when `CONFIG_ASSERT=y`).
 >
 > If your out-of-tree class *extends* an upstream one (embeds the upstream API
 > struct as its **first member**), also register the relationship so
@@ -361,9 +362,9 @@ For test fixtures, fakes, and more: See [driver-testing.md](#driver-testing)
 
 #### Debugging Checklist
 
-1. **Check devicetree**: `builds/zephyr/zephyr.dts`
-2. **Check generated macros**: `builds/zephyr/include/generated/devicetree_generated.h`
-3. **Check Kconfig**: `builds/zephyr/.config`
+1. **Check devicetree**: `builds/<app>/zephyr/zephyr.dts`
+2. **Check generated macros**: `builds/<app>/zephyr/include/generated/zephyr/devicetree_generated.h`
+3. **Check Kconfig**: `builds/<app>/zephyr/.config`
 4. **Check init order**: Add printk in init function
 5. **Check bus parent**: Ensure parent device initializes first
 
@@ -611,8 +612,7 @@ i2c_transfer_dt(&dev_i2c, msgs, 2);
 /* From devicetree - includes bus, CS GPIO, and config */
 static const struct spi_dt_spec spi_dev = SPI_DT_SPEC_GET(
     DT_NODELABEL(my_spi_device),
-    SPI_WORD_SET(8) | SPI_TRANSFER_MSB,
-    0  /* delay */
+    SPI_WORD_SET(8) | SPI_TRANSFER_MSB
 );
 
 int main(void)
@@ -684,7 +684,7 @@ static int spi_write_reg(const struct spi_dt_spec *spi, uint8_t reg,
 | `SPI_TRANSFER_LSB` | LSB first |
 | `SPI_MODE_CPOL` | Clock polarity high |
 | `SPI_MODE_CPHA` | Clock phase: sample on trailing edge |
-| `SPI_MODE_GET(n)` | SPI mode 0-3 |
+| `SPI_MODE_GET(op)` | Extract the mode bits (CPOL/CPHA/LOOP) from `operation` |
 
 ---
 
@@ -1068,7 +1068,7 @@ properties:
 | `base.yaml` | All devices | `status`, `compatible`, `label` |
 | `i2c-device.yaml` | I2C devices | `reg` (I2C address) |
 | `spi-device.yaml` | SPI devices | `reg`, `spi-max-frequency` |
-| `gpio-controller.yaml` | GPIO controllers | `gpio-cells`, `#gpio-cells` |
+| `gpio-controller.yaml` | GPIO controllers | `gpio-controller`, `#gpio-cells`, `ngpios` |
 
 #### For I2C Device
 
@@ -1306,6 +1306,7 @@ Create `drivers/mydriver/CMakeLists.txt`:
 
 ```cmake
 # Only build if Kconfig is enabled
+zephyr_library()
 zephyr_library_sources_ifdef(CONFIG_MYDRIVER mydriver.c)
 ```
 
@@ -1316,7 +1317,8 @@ In your application's `CMakeLists.txt`:
 ```cmake
 cmake_minimum_required(VERSION 3.20.0)
 
-# Add custom drivers BEFORE find_package
+# Add custom drivers BEFORE find_package. The dir must be a module: it needs
+# zephyr/module.yml (e.g. build: {cmake: ., kconfig: Kconfig}), else it is rejected.
 list(APPEND ZEPHYR_EXTRA_MODULES ${CMAKE_CURRENT_SOURCE_DIR}/drivers/mydriver)
 
 # Add custom bindings
@@ -1390,7 +1392,7 @@ int main(void)
     }
 
     /* Access driver API */
-    const struct mydriver_api *api = mydev->api;
+    const struct mydriver_driver_api *api = mydev->api;
     uint8_t value;
     api->read(mydev, &value);
 
@@ -1545,6 +1547,7 @@ DT_INST_FOREACH_STATUS_OKAY(TEMP_SENSOR_DEFINE)
 #### CMakeLists.txt (driver)
 
 ```cmake
+zephyr_library()
 zephyr_library_sources_ifdef(CONFIG_ACME_TEMP_SENSOR temp_sensor.c)
 ```
 
@@ -2152,19 +2155,18 @@ static const struct gpio_dt_spec led = GPIO_DT_SPEC_GET(DT_ALIAS(led0), gpios);
 
 ZTEST(gpio_emul_tests, test_gpio_output)
 {
-    gpio_flags_t flags;
     int val;
 
     /* Configure as output */
     gpio_pin_configure_dt(&led, GPIO_OUTPUT_INACTIVE);
 
-    /* Get emulated pin state */
-    gpio_emul_output_get(led.port, led.pin, &val);
+    /* Get emulated pin state (physical level; returns value or -errno) */
+    val = gpio_emul_output_get(led.port, led.pin);
     zassert_equal(val, 0, "Should start inactive");
 
     /* Set high */
     gpio_pin_set_dt(&led, 1);
-    gpio_emul_output_get(led.port, led.pin, &val);
+    val = gpio_emul_output_get(led.port, led.pin);
     zassert_equal(val, 1, "Should be high");
 }
 
@@ -2510,6 +2512,7 @@ config CUSTOM_LED_INIT_PRIORITY
 
 #include <zephyr/device.h>
 #include <zephyr/drivers/gpio.h>
+#include <zephyr/drivers/led.h>
 #include <zephyr/logging/log.h>
 
 LOG_MODULE_REGISTER(custom_led, CONFIG_LED_LOG_LEVEL);
@@ -2525,7 +2528,7 @@ struct led_data {
 };
 
 /* LED API */
-static int led_on(const struct device *dev)
+static int custom_led_on(const struct device *dev, uint32_t led)
 {
     const struct led_config *cfg = dev->config;
     struct led_data *data = dev->data;
@@ -2535,7 +2538,7 @@ static int led_on(const struct device *dev)
     return 0;
 }
 
-static int led_off(const struct device *dev)
+static int custom_led_off(const struct device *dev, uint32_t led)
 {
     const struct led_config *cfg = dev->config;
     struct led_data *data = dev->data;
@@ -2545,18 +2548,19 @@ static int led_off(const struct device *dev)
     return 0;
 }
 
-static int led_toggle(const struct device *dev)
+static int custom_led_toggle(const struct device *dev, uint32_t led)
 {
     struct led_data *data = dev->data;
 
     if (data->is_on) {
-        return led_off(dev);
+        return custom_led_off(dev, led);
     } else {
-        return led_on(dev);
+        return custom_led_on(dev, led);
     }
 }
 
-static int led_set_brightness(const struct device *dev, uint8_t brightness)
+static int custom_led_set_brightness(const struct device *dev, uint32_t led,
+                                     uint8_t brightness)
 {
     const struct led_config *cfg = dev->config;
     struct led_data *data = dev->data;
@@ -2573,11 +2577,12 @@ static int led_set_brightness(const struct device *dev, uint8_t brightness)
     return 0;
 }
 
-/* Standard LED driver API */
+/* Standard LED driver API: callbacks take an LED index; driver-local
+ * names must not clash with the led_on()/led_off() wrappers in led.h */
 static DEVICE_API(led, led_api) = {
-    .on = led_on,
-    .off = led_off,
-    .set_brightness = led_set_brightness,
+    .on = custom_led_on,
+    .off = custom_led_off,
+    .set_brightness = custom_led_set_brightness,
 };
 
 static int led_init(const struct device *dev)
@@ -3045,8 +3050,8 @@ static int flash_write_enable(const struct spi_dt_spec *spi)
     return spi_write_dt(spi, &tx);
 }
 
-/* Flash API implementation */
-static int flash_read(const struct device *dev, off_t offset,
+/* Flash API implementation (prefixed: flash_read() etc. are flash.h syscalls) */
+static int acme_flash_read(const struct device *dev, off_t offset,
                       void *data, size_t len)
 {
     const struct flash_config *cfg = dev->config;
@@ -3078,7 +3083,7 @@ static int flash_read(const struct device *dev, off_t offset,
     return ret;
 }
 
-static int flash_write(const struct device *dev, off_t offset,
+static int acme_flash_write(const struct device *dev, off_t offset,
                        const void *data, size_t len)
 {
     const struct flash_config *cfg = dev->config;
@@ -3140,7 +3145,7 @@ out:
     return ret;
 }
 
-static int flash_erase(const struct device *dev, off_t offset, size_t size)
+static int acme_flash_erase(const struct device *dev, off_t offset, size_t size)
 {
     const struct flash_config *cfg = dev->config;
     struct flash_data *drv = dev->data;
@@ -3189,7 +3194,7 @@ out:
     return ret;
 }
 
-static const struct flash_parameters *flash_get_parameters(
+static const struct flash_parameters *acme_flash_get_parameters(
     const struct device *dev)
 {
     static const struct flash_parameters params = {
@@ -3200,10 +3205,10 @@ static const struct flash_parameters *flash_get_parameters(
 }
 
 static DEVICE_API(flash, flash_api) = {
-    .read = flash_read,
-    .write = flash_write,
-    .erase = flash_erase,
-    .get_parameters = flash_get_parameters,
+    .read = acme_flash_read,
+    .write = acme_flash_write,
+    .erase = acme_flash_erase,
+    .get_parameters = acme_flash_get_parameters,
 };
 
 static int flash_init(const struct device *dev)
@@ -3246,7 +3251,7 @@ static int flash_init(const struct device *dev)
     static struct flash_data flash_data_##inst;                         \
     static const struct flash_config flash_config_##inst = {            \
         .spi = SPI_DT_SPEC_INST_GET(inst,                               \
-                   SPI_WORD_SET(8) | SPI_TRANSFER_MSB, 0),              \
+                   SPI_WORD_SET(8) | SPI_TRANSFER_MSB),                 \
         .wp = GPIO_DT_SPEC_INST_GET_OR(inst, wp_gpios, {0}),            \
         .size = DT_INST_PROP(inst, size),                               \
         .page_size = DT_INST_PROP(inst, page_size),                     \
@@ -3604,7 +3609,6 @@ See [sensor-drivers.md](sensor-drivers.md) for a complete sensor driver with int
 | `zephyr/drivers/flash/` | Flash memory drivers |
 | `zephyr/drivers/display/` | Display drivers |
 | `zephyr/drivers/led/` | LED drivers |
-| `zephyr/drivers/kscan/` | Keyboard scan drivers |
 | `zephyr/drivers/rtc/` | Real-time clock drivers |
 | `zephyr/drivers/watchdog/` | Watchdog drivers |
 | `zephyr/drivers/counter/` | Counter/Timer drivers |
@@ -3650,16 +3654,16 @@ See [sensor-drivers.md](sensor-drivers.md) for a complete sensor driver with int
 | `zephyr/dts/bindings/spi/` | SPI controller bindings |
 | `zephyr/dts/bindings/sensor/` | Sensor device bindings |
 | `zephyr/dts/bindings/serial/` | UART bindings |
-| `zephyr/dts/bindings/base/` | Base bindings (base.yaml, i2c-device.yaml, etc.) |
+| `zephyr/dts/bindings/base/` | Base bindings (base.yaml, etc.) |
 
 #### Common Base Bindings
 
 | File | Use For |
 |------|---------|
 | `base/base.yaml` | All devices (provides status, compatible) |
-| `base/i2c-device.yaml` | I2C slave devices |
-| `base/spi-device.yaml` | SPI slave devices |
-| `base/uart-device.yaml` | UART child devices |
+| `i2c/i2c-device.yaml` | I2C slave devices |
+| `spi/spi-device.yaml` | SPI slave devices |
+| `serial/uart-device.yaml` | UART child devices |
 | `gpio/gpio-controller.yaml` | GPIO controllers |
 
 #### Finding Bindings by Compatible
@@ -3684,7 +3688,7 @@ ls $ZEPHYR_BASE/dts/bindings/sensor/
 | `zephyr/samples/basic/button/` | GPIO button with interrupt |
 | `zephyr/samples/drivers/` | All driver samples |
 | `zephyr/samples/drivers/gpio/` | GPIO-specific samples |
-| `zephyr/samples/drivers/i2c_scanner/` | I2C bus scanner |
+| `zephyr/samples/drivers/i2c/` | I2C target / RTIO samples (bus scan: `i2c scan` shell cmd) |
 | `zephyr/samples/drivers/spi_flash/` | SPI flash usage |
 | `zephyr/samples/drivers/adc/` | ADC reading samples |
 | `zephyr/samples/drivers/pwm/` | PWM control samples |
@@ -3696,7 +3700,6 @@ ls $ZEPHYR_BASE/dts/bindings/sensor/
 |------|-------------|
 | `zephyr/samples/sensor/` | All sensor samples |
 | `zephyr/samples/sensor/bme280/` | BME280 temperature/pressure/humidity |
-| `zephyr/samples/sensor/bme680/` | BME680 air quality |
 | `zephyr/samples/sensor/lis2dh/` | LIS2DH accelerometer |
 | `zephyr/samples/sensor/lsm6dso/` | LSM6DSO IMU |
 | `zephyr/samples/sensor/thermometer/` | Generic temperature sensor |
@@ -3732,9 +3735,8 @@ ls $ZEPHYR_BASE/dts/bindings/sensor/
 
 | Path | Contents |
 |------|----------|
-| `zephyr/tests/drivers/gpio/gpio_emul/` | GPIO emulator tests |
 | `zephyr/tests/drivers/i2c/i2c_emul/` | I2C emulator tests |
-| `zephyr/tests/drivers/spi/spi_emul/` | SPI emulator tests |
+| `zephyr/tests/drivers/sensor/generic_emul/` | Sensor emulator tests |
 
 #### Running Driver Tests
 
@@ -3743,7 +3745,7 @@ ls $ZEPHYR_BASE/dts/bindings/sensor/
 west twister -T tests/drivers/ -p native_sim
 
 # Run specific driver test
-west twister -T tests/drivers/sensor/bme280/
+west twister -T tests/drivers/sensor/bmi160/
 
 # Run with hardware (e.g., nRF52840 DK)
 west twister -T tests/drivers/gpio/ -p nrf52840dk_nrf52840 --device-testing
@@ -3762,7 +3764,7 @@ west twister -T tests/drivers/gpio/ -p nrf52840dk_nrf52840 --device-testing
 | `zephyr/doc/hardware/peripherals/gpio.rst` | GPIO documentation |
 | `zephyr/doc/hardware/peripherals/i2c.rst` | I2C documentation |
 | `zephyr/doc/hardware/peripherals/spi.rst` | SPI documentation |
-| `zephyr/doc/hardware/peripherals/sensor.rst` | Sensor subsystem docs |
+| `zephyr/doc/hardware/peripherals/sensor/` | Sensor subsystem docs |
 | `zephyr/doc/hardware/porting/` | Porting guides |
 
 #### Online Documentation

@@ -15,14 +15,17 @@ CONFIG_DEBUG_COREDUMP_BACKEND_LOGGING=y    # dump to the log/console, or:
 CONFIG_DEBUG_COREDUMP_BACKEND_FLASH_PARTITION=y   # survive reboot in flash
 CONFIG_DEBUG_COREDUMP_MEMORY_DUMP_MIN=y    # just stacks+regs (small), or:
 CONFIG_DEBUG_COREDUMP_MEMORY_DUMP_THREADS=y       # all thread stacks
-# _MEMORY_DUMP_LINKER_RAM dumps all of RAM — biggest, most complete
+# _MEMORY_DUMP_LINKER_RAM (the default) dumps all of RAM — biggest, most complete
+CONFIG_DEBUG_COREDUMP_THREADS_METADATA=y  # lets the gdbserver list threads
+CONFIG_DEBUG_COREDUMP_SHELL=y             # `coredump` shell command (needs SHELL)
 ```
 
-- **Logging backend**: the dump is printed to the console as a base64/hex
-  block bracketed by `#CD:BEGIN#` … `#CD:END#`. Capture the boot log the
+- **Logging backend**: the dump is logged (at error level) as hex lines
+  prefixed `#CD:`, bracketed by `#CD:BEGIN#` … `#CD:END#`. Capture the boot log the
   usual way (`serial.md`) and save the block.
 - **Flash backend**: the dump persists across the reboot. Pull it later
-  with the `coredump` shell command (`coredump find`, `coredump print`) or
+  with the `coredump` shell command (`coredump find`, `coredump print`,
+  `coredump verify`, `coredump erase`) or
   read the partition over SMP — handy for "it crashed overnight, what
   happened".
 
@@ -37,23 +40,23 @@ mise x -- python $ZEPHYR_BASE/scripts/coredump/coredump_serial_log_parser.py \
 
 # 2. start a gdbserver that speaks the coredump
 mise x -- python $ZEPHYR_BASE/scripts/coredump/coredump_gdbserver.py \
-    builds/<app>/zephyr/zephyr.elf coredump.bin
+    builds/<app>/zephyr/zephyr.elf coredump.bin     # --port, default 1234
 
 # 3. connect normal gdb to it
-arm-none-eabi-gdb builds/<app>/zephyr/zephyr.elf
+arm-zephyr-eabi-gdb builds/<app>/zephyr/zephyr.elf   # SDK gdb for your arch
 (gdb) target remote localhost:1234
 (gdb) bt
 (gdb) info registers
 ```
 
-From here it's an ordinary gdb session — `bt`, `info threads` (if you dumped
-all thread stacks), `frame`, `print` — except the target is the frozen
+From here it's an ordinary gdb session — `bt`, `info threads` (needs `_THREADS_METADATA`
+and the stacks dumped), `frame`, `print` — except the target is the frozen
 crash, not a live board. You can't continue/step (there's no CPU), but you
 get the full backtrace and any RAM you dumped.
 
 ## Traps
 
-- **Dump scope vs. usefulness.** `MEMORY_DUMP_MIN` gives you the faulting
+- **Dump scope vs. usefulness.** The default is `_LINKER_RAM`. `MEMORY_DUMP_MIN` gives you the faulting
   thread's backtrace and not much else; if `bt` bottoms out in garbage or
   you need another thread's state, you needed `_THREADS` or `_LINKER_RAM`.
   Bigger dumps cost flash/log time — start MIN, widen if it's not enough.

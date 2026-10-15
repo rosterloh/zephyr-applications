@@ -287,7 +287,7 @@ uint64_t net_buf_pull_be64(struct net_buf *buf);
 ```c
 size_t net_buf_tailroom(const struct net_buf *buf);  /* Free space at end */
 size_t net_buf_headroom(const struct net_buf *buf);  /* Free space at start */
-uint16_t net_buf_max_len(const struct net_buf *buf); /* Max usable length */
+/* net_buf_max_len()/net_buf_simple_max_len() are deprecated (4.5): use the two above */
 uint8_t *net_buf_tail(const struct net_buf *buf);    /* Pointer to end of data */
 void *net_buf_user_data(const struct net_buf *buf);  /* Pointer to user_data */
 int net_buf_id(const struct net_buf *buf);           /* Zero-based index in pool */
@@ -334,6 +334,7 @@ struct net_buf *net_buf_slist_get(sys_slist_t *list);
 | `CONFIG_NET_BUF_LOG` | Enable debug logging for net_buf operations |
 | `CONFIG_NET_BUF_POOL_USAGE` | Track pool usage statistics (avail_count, max_used) |
 | `CONFIG_NET_BUF_ALIGNMENT` | Data alignment (default: sizeof(void *)) |
+| `CONFIG_NET_BUF_HARDENING` | (4.5, default `n`) Always-on (not assert-gated) bounds check of `len`/`data` before `add`/`push`/`pull`/`remove`; a corrupted buffer is rejected fail-closed (NULL / 0 / no write) instead of overflowing. Small fast-path cost; for security-sensitive builds |
 
 ---
 
@@ -502,7 +503,7 @@ buf = net_buf_skip(buf, bytes_to_skip);
 ```
 
 Internally:
-1. Calls `net_buf_pull_u8` repeatedly
+1. `net_buf_pull()`s `MIN(len, frag->len)` from each fragment
 2. When a fragment is emptied (`len == 0`), deletes it
 3. Moves to next fragment
 

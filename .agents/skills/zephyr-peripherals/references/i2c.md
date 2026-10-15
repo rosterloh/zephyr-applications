@@ -530,7 +530,7 @@ struct i2c_dt_spec {
 
 **Initialization macros:**
 - `I2C_DT_SPEC_GET(node_id)` - Get spec from DT node
-- `I2C_DT_SPEC_GET_BY_IDX(node_id, idx)` - Get spec by index
+- `I2C_DT_SPEC_GET_ON_I3C(node_id)` - Spec for an I2C device on an I3C bus
 - `I2C_DT_SPEC_INST_GET(inst)` - Get spec from instance
 
 #### struct i2c_msg
@@ -589,7 +589,7 @@ struct i2c_target_callbacks {
 | `I2C_SPEED_FAST_PLUS` | 0x3 | 1 MHz |
 | `I2C_SPEED_HIGH` | 0x4 | 3.4 MHz |
 | `I2C_SPEED_ULTRA` | 0x5 | 5 MHz |
-| `I2C_SPEED_DT` | 0x6 | Use devicetree value |
+| `I2C_SPEED_DT` | 0x7 | Use devicetree value |
 
 **Speed macros:**
 - `I2C_SPEED_SET(speed)` - Set speed in config
@@ -847,7 +847,7 @@ typedef int (*i2c_target_read_processed_cb_t)(struct i2c_target_config *config,
 typedef int (*i2c_target_stop_cb_t)(struct i2c_target_config *config);
 
 /* Error occurred */
-typedef int (*i2c_target_error_cb_t)(struct i2c_target_config *config,
+typedef void (*i2c_target_error_cb_t)(struct i2c_target_config *config,
                                       enum i2c_error_reason reason);
 ```
 
@@ -856,7 +856,7 @@ typedef int (*i2c_target_error_cb_t)(struct i2c_target_config *config,
 Requires `CONFIG_I2C_TARGET_BUFFER_MODE=y`:
 
 ```c
-typedef int (*i2c_target_buf_write_received_cb_t)(
+typedef void (*i2c_target_buf_write_received_cb_t)(
     struct i2c_target_config *config,
     uint8_t *ptr, uint32_t len);
 
@@ -874,7 +874,7 @@ Requires `CONFIG_I2C_RTIO=y`. Real-time I/O subsystem integration.
 #### Device Definition
 
 ```c
-I2C_DT_IODEV_DEFINE(name, node_id, addr);
+I2C_DT_IODEV_DEFINE(name, node_id);
 I2C_IODEV_DEFINE(name, bus, addr);
 ```
 
@@ -1015,6 +1015,7 @@ From `dts/bindings/i2c/i2c-controller.yaml`:
 | `clock-frequency` | int | no | Initial clock frequency in Hz |
 | `sq-size` | int | no | RTIO submission queue size (default: 4) |
 | `cq-size` | int | no | RTIO completion queue size (default: 4) |
+| `zephyr,transfer-timeout-ms` | int | no | Transfer timeout; falls back to `CONFIG_I2C_TRANSFER_TIMEOUT_MS` |
 
 #### Basic Controller Example
 
@@ -1263,8 +1264,7 @@ static const struct i2c_dt_spec sensor = I2C_DT_SPEC_GET(SENSOR_NODE);
         #size-cells = <0>;
         reset-gpios = <&gpio5 3 GPIO_ACTIVE_LOW>;
 
-        mux_i2c@0 {
-            compatible = "ti,tca9546a-channel";
+        mux_i2c@0 {   /* channels are child-binding nodes: no compatible */
             reg = <0>;
             #address-cells = <1>;
             #size-cells = <0>;
@@ -1276,7 +1276,6 @@ static const struct i2c_dt_spec sensor = I2C_DT_SPEC_GET(SENSOR_NODE);
         };
 
         mux_i2c@1 {
-            compatible = "ti,tca9546a-channel";
             reg = <1>;
             #address-cells = <1>;
             #size-cells = <0>;
@@ -1519,7 +1518,9 @@ Enable buffer-mode callbacks for target drivers.
 
 ```kconfig
 config I2C_EEPROM_TARGET
-    bool "Virtual I2C Target EEPROM driver"
+    bool "I2C Target EEPROM driver"
+    default y
+    depends on DT_HAS_ZEPHYR_I2C_TARGET_EEPROM_ENABLED
 ```
 Built-in virtual EEPROM target driver.
 
@@ -1547,7 +1548,7 @@ config I2C_EEPROM_TARGET_RUNTIME_ADDR
 config I2C_TARGET_ALLOW_POWER_SAVING
     bool "Allow target to enter low power when idle"
     select EXPERIMENTAL
-    depends on I2C_TARGET && !SOC_IT8XXX2_REG_SET_V1
+    depends on I2C_ITE_ENHANCE && !SOC_IT8XXX2_REG_SET_V1
 ```
 
 ---
@@ -1689,7 +1690,7 @@ own `CONFIG_I2C_DW_RW_TIMEOUT_MS`; that was replaced by the generic option in
 ```kconfig
 config I2C_DW_CLOCK_SPEED
     int "I2C clock speed"
-    default 110 if I2C_RTS5912
+    default 100 if I2C_RTS5912
     default 32
     depends on I2C_DW
 

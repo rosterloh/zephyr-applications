@@ -6,26 +6,27 @@ These commands all run from `uart:~$`. They require the matching Kconfig
 ## Device + kernel
 
 ```
-device list          # all devices with READY / FAILED status
+device list          # all devices: READY, DISABLED (init failed / not ready), or PM state
 kernel version       # Zephyr version
-kernel uptime        # milliseconds since boot
-kernel threads       # thread list + state (+ CPU% with THREAD_RUNTIME_STATS)
-kernel stacks        # per-thread stack size + high-water (THREAD_ANALYZER)
-log info             # registered log modules and their levels
+kernel uptime        # "Uptime: <n> ms"
+kernel thread list   # thread list + state (+ CPU% with THREAD_RUNTIME_STATS)
+kernel thread stacks # per-thread stack size + unused (INIT_STACKS + THREAD_STACK_INFO)
+sched top            # per-thread CPU usage (CONFIG_SCHED_STATS_SHELL, 4.5+)
+log status           # log modules and their current/compiled levels
 log enable dbg <mod> # raise a module's level live — no reflash
 ```
 
 `log enable`/`log disable` change verbosity at runtime, so you can crank a
-suspect module to debug without rebuilding. `kernel stacks` is the proactive
+suspect module to debug without rebuilding. `kernel thread stacks` is the proactive
 stack-overflow check — see `troubleshooting.md`.
 
 ## I2C
 
 ```
-i2c scan i2c@<addr>                       # probe 7-bit addresses 0x03–0x77
+i2c scan i2c@<addr>                       # probe 7-bit addresses 0x04–0x77
 i2c read i2c@<addr> 0x38 0x00 1           # read 1 byte from reg 0x00 at 0x38
 i2c write i2c@<addr> 0x38 0xA5 0x01       # write 0x01 to reg 0xA5
-i2c speed i2c@<addr> 1                    # switch to FAST (400 kHz), re-probe
+i2c speed i2c@<addr> 2                    # I2C_SPEED_* code: 1=100k, 2=400k; re-probe
 i2c recover i2c@<addr>                    # 9 SCL pulses to unstick SDA
 ```
 
@@ -71,16 +72,16 @@ in their GUI; not something to drive over the shell.
 
 ```
 gpio get gpiog 2                          # read PG2 level
-gpio conf gpiog 2 in                      # reconfigure as input
-gpio conf gpiog 2 outh                    # output, drive high
-gpio conf gpiog 2 outl                    # output, drive low
+gpio conf gpiog 2 i                       # input (add u/d for pull-up/down)
+gpio conf gpiog 2 o1                      # output, initialised to logic 1
+gpio set gpiog 2 0                        # drive logic 0
 ```
 
 ## Input subsystem
 
 ```
-input report show                         # list event types (informational)
-input report <type> <code> <value>        # inject a synthetic event
+input dump on                             # print every input event as it arrives
+input report <type> <code> <value> [sync] # inject a synthetic event
 ```
 
 ## Flash + settings

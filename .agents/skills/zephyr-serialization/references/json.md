@@ -31,7 +31,7 @@ int ret = json_obj_encode_buf(sensor_descr, ARRAY_SIZE(sensor_descr), &data, buf
 
 // 4. Decode from JSON
 char json[] = "{\"device_id\":\"sensor-02\",\"temperature\":30,\"active\":false}";
-struct sensor_data parsed;
+struct sensor_data parsed = {0};  // omitted members are left untouched
 int64_t result = json_obj_parse(json, strlen(json), sensor_descr, ARRAY_SIZE(sensor_descr), &parsed);
 ```
 
@@ -52,8 +52,8 @@ CONFIG_JSON_LIBRARY_FP_SUPPORT=y
 | `JSON_TOK_STRING` | `const char *` | `"string"` |
 | `JSON_TOK_STRING_BUF` | `char[]` | `"string"` (copies to buffer) |
 | `JSON_TOK_NUMBER` | `int32_t` | `42` |
-| `JSON_TOK_INT` | `int8_t`, `int16_t` | `-128` |
-| `JSON_TOK_UINT` | `uint8_t`, `uint16_t`, `uint32_t` | `255` |
+| `JSON_TOK_INT` | `int8_t`…`int64_t` (width from the field size) | `-128` |
+| `JSON_TOK_UINT` | `uint8_t`…`uint64_t` (width from the field size) | `255` |
 | `JSON_TOK_INT64` | `int64_t` | `9223372036854775807` |
 | `JSON_TOK_UINT64` | `uint64_t` | `18446744073709551615` |
 | `JSON_TOK_TRUE` / `JSON_TOK_FALSE` | `bool` | `true`/`false` |
@@ -163,8 +163,8 @@ static const struct json_obj_descr example_descr[] = {
 1. **Input modification**: `json_obj_parse()` modifies the input buffer (null-terminates strings in place)
 2. **No UTF-8 validation**: The library does not validate UTF-8 encoding
 3. **Escape handling**: Escape sequences are preserved as-is (e.g., `\t` stays as `\t`)
-4. **Descriptor limit**: Maximum 63 fields per descriptor array
-5. **Return value**: `json_obj_parse()` returns a bitmap of decoded fields (bit N = field N decoded)
+4. **Descriptor limit**: fewer than 63 fields (max 62) per descriptor array — asserted in `json_obj_parse()`
+5. **Return value**: `json_obj_parse()` returns a bitmap of decoded top-level fields (bit N = descriptor N decoded). Members absent from the document are not written, so initialise the struct first
 
 ### References
 
@@ -174,8 +174,8 @@ static const struct json_obj_descr example_descr[] = {
 
 ### Related Skills
 
-- **zephyr-net-socket**: HTTP/CoAP communication (JSON payloads)
-- **zephyr-settings**: Persistent storage (JSON config files)
+- **zephyr-connectivity**: HTTP/CoAP communication (JSON payloads)
+- **zephyr-system**: Persistent storage (JSON config files)
 
 ## Api
 
@@ -200,7 +200,7 @@ Parse JSON object into a C struct.
 - **json**: Input buffer (MODIFIED in place - strings null-terminated)
 - **len**: Length of JSON string
 - **descr**: Descriptor array
-- **descr_len**: Number of descriptors (max 63)
+- **descr_len**: Number of descriptors (< 63)
 - **val**: Output struct pointer
 - **Returns**: Bitmap of decoded fields (bit N set = field N decoded), negative on error
 
@@ -389,9 +389,9 @@ Parse next object from array.
 
 | Return Value | Meaning |
 |--------------|---------|
-| `-EINVAL` | Invalid JSON syntax |
-| `-ENOMEM` | Buffer too small |
-| `-ENOENT` | Required field not found |
+| `-EINVAL` | Invalid JSON syntax / type mismatch |
+| `-ENOMEM` | Encode buffer too small |
+| `-ENOSPC` | Input array longer than the descriptor's `max_len_` |
 | `0` (encode) | Success |
 | `bitmap` (parse) | Fields decoded (check bits) |
 
@@ -519,7 +519,7 @@ All paths relative to Zephyr root (`zephyr/`).
 
 | Resource | Path |
 |----------|------|
-| API docs | `doc/services/misc.rst` (JSON section) |
+| API docs | `doc/services/serialization/json.rst` |
 
 #### Tests
 
@@ -527,7 +527,7 @@ All paths relative to Zephyr root (`zephyr/`).
 |----------|------|
 | Test source | `tests/lib/json/src/main.c` |
 | Test config | `tests/lib/json/prj.conf` |
-| Test spec | `tests/lib/json/testcase.yaml` |
+| Test spec | `tests/lib/json/tests.yaml` |
 
 The test file (`main.c`) contains comprehensive examples including:
 - Nested objects and arrays
@@ -550,11 +550,11 @@ The test file (`main.c`) contains comprehensive examples including:
 
 ```bash
 # Run JSON library tests
-west twister -T tests/lib/json/
+mise x -- west twister -T deps/zephyr/tests/lib/json/
 
-# Build for specific board
-west build -b native_sim tests/lib/json
-west build -t run
+# Build for specific board (native_sim needs a Linux host)
+mise x -- west build -b native_sim -d builds/json_test deps/zephyr/tests/lib/json
+mise x -- west build -d builds/json_test -t run
 ```
 
 ### Key Files to Reference

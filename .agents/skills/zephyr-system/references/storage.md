@@ -174,16 +174,16 @@ CONFIG_ZMS_LOOKUP_CACHE_SIZE=128  # Uses 8 bytes RAM each
 ```c
 // NVS
 struct nvs_fs nvs;
-nvs.flash_device = FIXED_PARTITION_DEVICE(storage_partition);
-nvs.offset = FIXED_PARTITION_OFFSET(storage_partition);
+nvs.flash_device = PARTITION_DEVICE(storage_partition);
+nvs.offset = PARTITION_OFFSET(storage_partition);
 nvs.sector_size = page_size;
 nvs.sector_count = 3;
 nvs_mount(&nvs);
 
 // ZMS (identical pattern)
 struct zms_fs zms;
-zms.flash_device = FIXED_PARTITION_DEVICE(storage_partition);
-zms.offset = FIXED_PARTITION_OFFSET(storage_partition);
+zms.flash_device = PARTITION_DEVICE(storage_partition);
+zms.offset = PARTITION_OFFSET(storage_partition);
 zms.sector_size = page_size;
 zms.sector_count = 4;  // Recommend 2x data size
 zms_mount(&zms);
@@ -473,9 +473,9 @@ storage_partition: partition@310000 {
 #include <zephyr/storage/flash_map.h>
 
 #define STORAGE_PARTITION storage_partition
-#define STORAGE_DEVICE    FIXED_PARTITION_DEVICE(STORAGE_PARTITION)
-#define STORAGE_OFFSET    FIXED_PARTITION_OFFSET(STORAGE_PARTITION)
-#define STORAGE_SIZE      FIXED_PARTITION_SIZE(STORAGE_PARTITION)
+#define STORAGE_DEVICE    PARTITION_DEVICE(STORAGE_PARTITION)
+#define STORAGE_OFFSET    PARTITION_OFFSET(STORAGE_PARTITION)
+#define STORAGE_SIZE      PARTITION_SIZE(STORAGE_PARTITION)
 ```
 
 #### Getting Flash Page Info
@@ -527,14 +527,14 @@ static struct nvs_fs data_fs;
 void init_storage(void)
 {
     /* Settings partition */
-    settings_fs.flash_device = FIXED_PARTITION_DEVICE(settings_partition);
-    settings_fs.offset = FIXED_PARTITION_OFFSET(settings_partition);
+    settings_fs.flash_device = PARTITION_DEVICE(settings_partition);
+    settings_fs.offset = PARTITION_OFFSET(settings_partition);
     /* ... */
     nvs_mount(&settings_fs);
 
     /* Data partition */
-    data_fs.flash_device = FIXED_PARTITION_DEVICE(data_partition);
-    data_fs.offset = FIXED_PARTITION_OFFSET(data_partition);
+    data_fs.flash_device = PARTITION_DEVICE(data_partition);
+    data_fs.offset = PARTITION_OFFSET(data_partition);
     /* ... */
     nvs_mount(&data_fs);
 }
@@ -577,7 +577,7 @@ void init_storage(void)
 void check_partition(void)
 {
     const struct flash_area *fa;
-    int rc = flash_area_open(FIXED_PARTITION_ID(storage_partition), &fa);
+    int rc = flash_area_open(PARTITION_ID(storage_partition), &fa);
     if (rc == 0) {
         printk("Partition: offset=0x%lx, size=%u\n",
                (unsigned long)fa->fa_off, fa->fa_size);
@@ -837,13 +837,13 @@ int main(void)
     char address[16];
 
     /* Setup NVS */
-    fs.flash_device = FIXED_PARTITION_DEVICE(STORAGE_PARTITION);
+    fs.flash_device = PARTITION_DEVICE(STORAGE_PARTITION);
     if (!device_is_ready(fs.flash_device)) {
         printk("Flash device not ready\n");
         return -1;
     }
 
-    fs.offset = FIXED_PARTITION_OFFSET(STORAGE_PARTITION);
+    fs.offset = PARTITION_OFFSET(STORAGE_PARTITION);
     rc = flash_get_page_info_by_offs(fs.flash_device, fs.offset, &info);
     if (rc) {
         printk("Unable to get page info\n");
@@ -1085,13 +1085,13 @@ int main(void)
     uint32_t counter = 0;
 
     /* Setup ZMS */
-    fs.flash_device = FIXED_PARTITION_DEVICE(STORAGE_PARTITION);
+    fs.flash_device = PARTITION_DEVICE(STORAGE_PARTITION);
     if (!device_is_ready(fs.flash_device)) {
         printk("Flash device not ready\n");
         return -1;
     }
 
-    fs.offset = FIXED_PARTITION_OFFSET(STORAGE_PARTITION);
+    fs.offset = PARTITION_OFFSET(STORAGE_PARTITION);
     rc = flash_get_page_info_by_offs(fs.flash_device, fs.offset, &info);
     if (rc) {
         printk("Unable to get page info\n");

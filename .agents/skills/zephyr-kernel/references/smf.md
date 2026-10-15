@@ -216,6 +216,9 @@ struct smf_ctx {
 #endif
     int32_t terminate_val;              // Termination value
     uint32_t internal;                  // Internal state tracking
+#ifdef CONFIG_SMF_INSTRUMENTATION
+    const struct smf_hooks *hooks;      // Set via smf_set_hooks()
+#endif
 };
 ```
 

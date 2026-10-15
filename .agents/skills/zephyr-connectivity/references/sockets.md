@@ -254,7 +254,13 @@ if (ret > 0) {
 
 ### POSIX API Mode
 
-Enable `CONFIG_POSIX_API=y` to use standard function names without `zsock_` prefix:
+Enable `CONFIG_POSIX_API=y` (selects `POSIX_NETWORKING`) to use standard
+function names without `zsock_` prefix; they are declared in the POSIX headers
+(`<sys/socket.h>`, `<netdb.h>`, `<poll.h>`, `<unistd.h>`), not in
+`<zephyr/net/socket.h>`. The unprefixed *types/constants* (`struct sockaddr_in`,
+`AF_INET`, `htons`) are separate: they come from
+`CONFIG_NET_NAMESPACE_COMPAT_MODE` (default y, slated for deprecation); the
+native names are `struct net_sockaddr_in`, `NET_AF_INET`, `net_htons`.
 
 ```c
 /* With CONFIG_POSIX_API=y */
@@ -295,7 +301,7 @@ Both support:
 - IPv4 (A records) and IPv6 (AAAA records)
 - CNAME resolution (automatic chaining)
 - mDNS (`.local` domains)
-- LLMNR (link-local name resolution)
+- LLMNR (link-local name resolution; deprecated in 4.5, use mDNS)
 
 ### getaddrinfo (BSD Sockets API)
 
@@ -515,7 +521,7 @@ Multicast DNS for `.local` domains (RFC 6762).
 
 ```
 CONFIG_MDNS_RESOLVER=y
-CONFIG_MDNS_RESPONDER=y  /* To advertise services */
+CONFIG_MDNS_RESPONDER=y  # To advertise services
 ```
 
 #### mDNS Queries
@@ -545,13 +551,15 @@ Register a hostname for your device:
 Kconfig:
 ```
 CONFIG_MDNS_RESPONDER=y
-CONFIG_MDNS_RESPONDER_DNS_SD=y  /* For service discovery */
-CONFIG_NET_HOSTNAME="zephyr"    /* Responds to zephyr.local */
+CONFIG_MDNS_RESPONDER_DNS_SD=y  # For service discovery
+CONFIG_NET_HOSTNAME="zephyr"  # Responds to zephyr.local
 ```
 
 ### LLMNR Support
 
 Link-Local Multicast Name Resolution (RFC 4795) for local network resolution without DNS server.
+
+**Deprecated in 4.5**: `CONFIG_LLMNR_RESOLVER` / `CONFIG_LLMNR_RESPONDER` now `select DEPRECATED` and will be removed (4.7 at the earliest). Use mDNS (`CONFIG_MDNS_RESOLVER` / `CONFIG_MDNS_RESPONDER`) for new code.
 
 #### Enable LLMNR
 
@@ -611,7 +619,7 @@ CONFIG_DNS_RESOLVER=y
 CONFIG_DNS_SERVER_IP_ADDRESSES=y
 CONFIG_DNS_SERVER1="8.8.8.8"
 CONFIG_DNS_SERVER2="8.8.4.4"
-CONFIG_DNS_SERVER3="2001:4860:4860::8888"  /* IPv6 */
+CONFIG_DNS_SERVER3="2001:4860:4860::8888"  # IPv6
 ```
 
 #### Dynamic Configuration (DHCP)
@@ -647,9 +655,9 @@ int configure_dns_servers(void)
 | Option | Default | Description |
 |--------|---------|-------------|
 | `CONFIG_DNS_RESOLVER` | n | Enable DNS resolver |
-| `CONFIG_DNS_RESOLVER_MAX_QUERY_LEN` | 64 | Max query name length |
+| `CONFIG_DNS_RESOLVER_MAX_QUERY_LEN` | 255 | Max query name length |
 | `CONFIG_DNS_RESOLVER_MAX_ANSWER_SIZE` | 512 | Max DNS response size |
-| `CONFIG_DNS_RESOLVER_MAX_NAME_LEN` | 64 | Max resolved name length |
+| `CONFIG_DNS_RESOLVER_MAX_NAME_LEN` | 20 (46 with IPv6, 128 with DNS_SD) | Max resolved name length |
 | `CONFIG_DNS_RESOLVER_ADDITIONAL_QUERIES` | 1 | Max CNAME chain depth |
 | `CONFIG_DNS_NUM_CONCUR_QUERIES` | 1 | Concurrent query limit |
 
@@ -661,9 +669,9 @@ int configure_dns_servers(void)
 |--------|---------|-------------|
 | `CONFIG_NETWORKING` | n | Enable networking subsystem |
 | `CONFIG_NET_IPV4` | n | Enable IPv4 support |
-| `CONFIG_NET_IPV6` | n | Enable IPv6 support |
+| `CONFIG_NET_IPV6` | y | Enable IPv6 support |
 | `CONFIG_NET_TCP` | n | Enable TCP protocol |
-| `CONFIG_NET_UDP` | n | Enable UDP protocol |
+| `CONFIG_NET_UDP` | y | Enable UDP protocol |
 
 ### BSD Sockets
 
@@ -682,7 +690,7 @@ int configure_dns_servers(void)
 | `CONFIG_NET_SOCKETS_ENABLE_DTLS` | n | Enable DTLS support |
 | `CONFIG_NET_SOCKETS_TLS_MAX_CONTEXTS` | 1 | Max concurrent TLS connections |
 | `CONFIG_NET_SOCKETS_TLS_PRIORITY` | 45 | TLS socket implementation priority |
-| `CONFIG_NET_SOCKETS_DTLS_TIMEOUT` | 30000 | DTLS handshake timeout (ms) |
+| `CONFIG_NET_SOCKETS_DTLS_TIMEOUT` | 5000 | DTLS connection idle timeout (ms) |
 
 ### mbedTLS
 
@@ -710,7 +718,7 @@ are deprecated aliases for `MBEDTLS_SSL_PROTO_TLS1_2`/`_1_3`.
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `CONFIG_TLS_CREDENTIALS` | y | Enable TLS credentials subsystem |
+| `CONFIG_TLS_CREDENTIALS` | n | Enable TLS credentials subsystem |
 | `CONFIG_TLS_MAX_CREDENTIALS_NUMBER` | 4 | Max stored credentials |
 | `CONFIG_TLS_CREDENTIAL_FILENAMES` | n | Reference creds by filename |
 
@@ -722,7 +730,7 @@ are deprecated aliases for `MBEDTLS_SSL_PROTO_TLS1_2`/`_1_3`.
 | `CONFIG_DNS_SERVER_IP_ADDRESSES` | n | Enable static DNS server config |
 | `CONFIG_DNS_SERVER1` | "" | Primary DNS server IP |
 | `CONFIG_DNS_SERVER2` | "" | Secondary DNS server IP |
-| `CONFIG_DNS_RESOLVER_MAX_QUERY_LEN` | 64 | Max query name length |
+| `CONFIG_DNS_RESOLVER_MAX_QUERY_LEN` | 255 | Max query name length |
 | `CONFIG_DNS_RESOLVER_MAX_ANSWER_SIZE` | 512 | Max DNS response size |
 | `CONFIG_DNS_RESOLVER_ADDITIONAL_QUERIES` | 1 | Max CNAME chain depth |
 | `CONFIG_DNS_NUM_CONCUR_QUERIES` | 1 | Concurrent queries |
@@ -734,8 +742,8 @@ are deprecated aliases for `MBEDTLS_SSL_PROTO_TLS1_2`/`_1_3`.
 | `CONFIG_MDNS_RESOLVER` | n | Enable mDNS queries |
 | `CONFIG_MDNS_RESPONDER` | n | Enable mDNS responder |
 | `CONFIG_MDNS_RESPONDER_DNS_SD` | n | Enable DNS-SD in responder |
-| `CONFIG_LLMNR_RESOLVER` | n | Enable LLMNR queries |
-| `CONFIG_LLMNR_RESPONDER` | n | Enable LLMNR responder |
+| `CONFIG_LLMNR_RESOLVER` | n | Enable LLMNR queries (deprecated 4.5) |
+| `CONFIG_LLMNR_RESPONDER` | n | Enable LLMNR responder (deprecated 4.5) |
 | `CONFIG_NET_HOSTNAME` | "zephyr" | Device hostname |
 
 ### Socket Offloading
@@ -762,13 +770,13 @@ are deprecated aliases for `MBEDTLS_SSL_PROTO_TLS1_2`/`_1_3`.
 | `CONFIG_NET_PKT_TX_COUNT` | 4 | Transmit packet count |
 | `CONFIG_NET_BUF_RX_COUNT` | 16 | Receive buffer count |
 | `CONFIG_NET_BUF_TX_COUNT` | 16 | Transmit buffer count |
-| `CONFIG_NET_BUF_DATA_SIZE` | 128 | Buffer fragment size |
+| `CONFIG_NET_BUF_DATA_SIZE` | 128 | Buffer fragment size (fixed-size allocator, the default) |
 
 ### File Descriptors
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `CONFIG_ZVFS_OPEN_ADD_SIZE_NET_SAMPLE` | 0 | Additional FDs for networking |
+| `CONFIG_ZVFS_OPEN_ADD_SIZE_NET` | `NET_MAX_CONTEXTS` | FDs reserved for native sockets |
 | `CONFIG_NET_MAX_CONTEXTS` | 6 | Max network contexts (connections) |
 
 ### Example Configurations
@@ -885,7 +893,7 @@ CONFIG_MBEDTLS_HEAP_SIZE=80000
 
 CONFIG_DNS_RESOLVER=y
 CONFIG_MDNS_RESOLVER=y
-CONFIG_LLMNR_RESOLVER=y
+CONFIG_LLMNR_RESOLVER=y   # deprecated in 4.5; drop when mDNS suffices
 
 CONFIG_NET_PKT_RX_COUNT=32
 CONFIG_NET_PKT_TX_COUNT=32
@@ -957,7 +965,7 @@ Quick reference for finding socket, TLS, and DNS related files in the Zephyr tre
 | `subsys/net/lib/sockets/Kconfig` | Socket configuration options |
 | `subsys/net/lib/dns/Kconfig` | DNS configuration options |
 | `modules/mbedtls/Kconfig` | mbedTLS configuration |
-| `modules/mbedtls/Kconfig.tls-generic` | Generic TLS options |
+| `modules/mbedtls/Kconfig.mbedtls` | TLS/X.509 options (content lengths, SNI, ...) |
 
 ### Samples (samples/net/)
 
@@ -971,7 +979,6 @@ Quick reference for finding socket, TLS, and DNS related files in the Zephyr tre
 | `echo_async/` | Async echo with poll() |
 | `echo_async_select/` | Async echo with select() |
 | `echo_service/` | Socket service example |
-| `tcp/` | Basic TCP example |
 | `http_get/` | HTTPS GET with TLS |
 | `http_client/` | HTTP client |
 | `http_server/` | HTTP server |
@@ -996,7 +1003,7 @@ Quick reference for finding socket, TLS, and DNS related files in the Zephyr tre
 |--------|-------------|
 | `dns_resolve/` | DNS resolution example |
 
-### Documentation (doc/connectivity/networking/)
+### Documentation (doc/services/connectivity/networking/)
 
 | Path | Purpose |
 |------|---------|
@@ -1011,7 +1018,7 @@ Quick reference for finding socket, TLS, and DNS related files in the Zephyr tre
 | `socket/tls/` | TLS socket tests |
 | `socket/udp/` | UDP socket tests |
 | `socket/tcp/` | TCP socket tests |
-| `dns/` | DNS tests |
+| `lib/dns_*/` | DNS tests |
 
 ### Key Paths Summary
 
@@ -1107,7 +1114,6 @@ ssize_t sendto(int sock, const void *buf, size_t len, int flags,
 | Flag | Description |
 |------|-------------|
 | MSG_DONTWAIT | Non-blocking for this call only |
-| MSG_MORE | More data coming (cork) |
 
 #### recv() / recvfrom()
 
@@ -1776,9 +1782,9 @@ Restrict allowed ciphersuites (IANA IDs):
 
 ```c
 int suites[] = {
-    0x009F,  /* TLS_DHE_RSA_WITH_AES_256_GCM_SHA384 */
-    0x00A3,  /* TLS_DHE_DSS_WITH_AES_256_GCM_SHA384 */
-};
+    0xC02B,  /* TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256 */
+    0xC02F,  /* TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256 */
+};  /* mbedTLS 4.x has no finite-field DHE suites; each must also be enabled in Kconfig */
 setsockopt(sock, SOL_TLS, TLS_CIPHERSUITE_LIST, suites, sizeof(suites));
 ```
 
@@ -1910,8 +1916,10 @@ setsockopt(sock, SOL_TLS, TLS_SESSION_CACHE_PURGE, NULL, 0);
 
 Kconfig:
 ```
-CONFIG_NET_SOCKETS_TLS_MAX_CONTEXTS=4
-CONFIG_MBEDTLS_SSL_SESSION_TICKETS=y
+# client-side cache slots (default 1)
+CONFIG_NET_SOCKETS_TLS_MAX_CLIENT_SESSION_COUNT=4
+CONFIG_MBEDTLS_SSL_CACHE_C=y                       # server-side cache
+CONFIG_NET_SOCKETS_TLS_SESSION_CACHE_PERSISTENT=y  # optional: keep across reboots (settings)
 ```
 
 ### Troubleshooting

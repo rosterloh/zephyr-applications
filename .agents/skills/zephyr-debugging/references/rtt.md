@@ -27,6 +27,9 @@ Drop these in a `boards/<board>_debug.conf` overlay (mirror the existing
 
 ## Host side
 
+`mise x -- west rtt -d builds/<app>` opens an RTT terminal through the board's
+runner (jlink, openocd, pyocd or probe-rs) — try it before the manual paths.
+
 ### J-Link
 ```
 JLinkRTTLogger -Device <chip> -If SWD -Speed 4000 -RTTChannel 0 rtt.log
@@ -84,7 +87,7 @@ Halt and backtrace:
 
 ```bash
 probe-rs gdb --chip esp32s3 --gdb-connection-string 127.0.0.1:1337
-# then, in xtensa-esp32s3-elf-gdb:  target remote :1337
+# then, in xtensa-espressif_esp32s3_zephyr-elf-gdb:  target remote :1337
 ```
 
 Generic OpenOCD (SDK or homebrew 0.12.0) does connect the JTAG

@@ -18,7 +18,7 @@ description: >
 
 # Zephyr Boards & Out-of-Tree Modules
 
-Validated against: Zephyr 4.4.99 (47ea4fd92683, 2026-09-18). Re-check with `mise run check-skills`.
+Validated against: Zephyr 4.5.0 (124121fbb079, 2026-10-15). Re-check with `mise run check-skills`.
 
 ## Scope
 
@@ -34,7 +34,7 @@ semantics (see `zephyr-system`), or bringing up a dead board (see
 | Root | Registered by | Boards |
 |------|---------------|--------|
 | `boards/<vendor>/<board>/` | this repo's `zephyr/module.yml` (`board_root: .`) | `robotis_openrb_150`, `adafruit_qt_py_esp32c3` |
-| `deps/modules/lib/rosterloh-drivers/boards/<vendor>/<board>/` | that module's `zephyr/module.yml` (`board_root: .`, `dts_root: .`) | `ros_driver`, `esp32p4_nano`, `esp32p4_wifi6_poe_eth`, `waveshare_esp32_s3_eth` + `boards/shields/*` |
+| `deps/modules/lib/rosterloh-drivers/boards/<vendor>/<board>/` | that module's `zephyr/module.yml` (`board_root: .`, `dts_root: .`) | `ros_driver`, `general_driver`, `esp32p4_nano`, `esp32p4_wifi6_poe_eth`, `waveshare_esp32_s3_eth` + `boards/shields/*` |
 
 Everything else (`adafruit_qt_py_esp32s3`, `rpi_pico`, `xiao_esp32c5`,
 `arduino_nicla_vision`, `native_sim`) is in-tree under `deps/zephyr/boards/`.
@@ -55,7 +55,7 @@ new board.
 
 | File | Job |
 |------|-----|
-| `board.yml` | Identity: name, full_name, vendor, socs, cpuclusters, revisions, variants. |
+| `board.yml` | Identity: name, full_name, vendor, socs (+ per-SoC `variants`), revision. Cpuclusters come from the SoC's `soc.yml`. A `boards:` list may define several boards in one file. |
 | `Kconfig.<board>` | `config BOARD_<NAME>` + `select SOC_*` — hardware facts that cannot be overridden. |
 | `Kconfig.defconfig` | `configdefault` overrides of *subsystem* defaults for this board. |
 | `Kconfig` | Board-scoped tunables, e.g. `HEAP_MEM_POOL_ADD_SIZE_BOARD`. |
@@ -83,11 +83,15 @@ The build target is `<board>[@revision]/<soc>/<cpucluster>`. Zephyr derives the
 cpuclusters from the SoC, so `esp32p4_nano` yields
 `esp32p4_nano/esp32p4/hpcore` and `esp32p4_nano/esp32p4/lpcore` with no extra
 YAML. Revisions are declared explicitly — the in-tree `adafruit_qt_py_esp32s3`
-uses `revision: {format: custom, revisions: ["", "psram"]}`, which is what makes
+uses `revision: {format: custom, default: "", revisions: [{name: ""}, {name: psram}]}`, which is what makes
 `adafruit_qt_py_esp32s3@psram/esp32s3/procpu` a valid target.
 
 That same string is what goes in the twister yaml's `identifier:`, in
-`mise run app --board`, and in the `app` task's allowed-board list.
+`mise run app --board`, and in the `app` task's allowed-board list — so an
+upstream qualifier rename breaks all three. 4.5 deprecates RP2350's bare
+`hazard3`/`m33` cpuclusters for `hazard3_0`/`m33_0` (e.g.
+`rpi_pico2/rp2350a/m33` → `rpi_pico2/rp2350a/m33_0`; out-of-tree boards select
+`SOC_RP2350[AB]_M33_0`/`_HAZARD3_0`).
 
 ## The three Kconfig files, and which one you want
 
@@ -156,11 +160,18 @@ CONFIG_UART_CONSOLE=y
 - **`SOC_NAME`, `SOC_SERIES`, `SOC_FAMILY` and `SOC_V2_DIR` CMake variables are
   deprecated** (4.5 migration guide). Use `CONFIG_SOC`, `CONFIG_SOC_SERIES`,
   `CONFIG_SOC_FAMILY` and `SOC_FULL_DIR` in board/module CMake.
+- **Don't add a `ROM_START_OFFSET` override for MCUboot VTOR alignment.** Since
+  4.5 the Cortex-M MCUboot default derives from `NUM_IRQS` (0x200, then
+  0x400/0x800/0x1000 above 112/240/496 IRQs), so copied overrides are dead
+  weight and a >112-IRQ board without one now boots under MCUboot. Keep one
+  only for extra pre-image metadata.
 - **A module's `board_root` also needs `dts_root`** if the module ships
   bindings, or its boards' DTS will reference compatibles Zephyr can't resolve.
   `rosterloh-drivers` sets both.
 - **Shields are boards' poor cousin and live under `boards/shields/`** in the
-  same root — `mise x -- west build ... --shield <name>`, no `board.yml`.
+  same root — `mise x -- west build ... --shield <name>`. No `board.yml`; each
+  shield has `shield.yml` (name, full_name, vendor, supported_features),
+  `Kconfig.shield` and `<name>.overlay`.
 
 ## Validation Checklist
 

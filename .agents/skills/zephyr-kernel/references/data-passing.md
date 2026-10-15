@@ -69,9 +69,7 @@ No specific config, always available.
 
 #### Message Queue
 
-```kconfig
-CONFIG_NUM_MBOX_ASYNC_MSGS=10  # Max async mailbox messages (if using async)
-```
+No specific config, always available.
 
 #### Mailbox
 
@@ -133,7 +131,7 @@ int k_lifo_alloc_put(struct k_lifo *lifo, void *data);  /* Uses heap */
 void k_stack_init(struct k_stack *stack, stack_data_t *buffer, uint32_t num_entries);
 int k_stack_push(struct k_stack *stack, stack_data_t data);
 int k_stack_pop(struct k_stack *stack, stack_data_t *data, k_timeout_t timeout);
-int k_stack_alloc_init(struct k_stack *stack, uint32_t num_entries);  /* Uses heap */
+int32_t k_stack_alloc_init(struct k_stack *stack, uint32_t num_entries);  /* Uses heap */
 int k_stack_cleanup(struct k_stack *stack);
 ```
 
@@ -184,8 +182,9 @@ void k_pipe_close(struct k_pipe *pipe);
 ```
 
 `k_pipe_write()` / `k_pipe_read()` return **the number of bytes transferred**
-(>= 0), or `-EAGAIN` on timeout, `-ECANCELED` if interrupted by
-`k_pipe_reset()`, `-EPIPE` if the pipe was closed. A short transfer is normal
+(>= 0), or `-EAGAIN` if nothing was transferred before the timeout,
+`-ECANCELED` if interrupted by `k_pipe_reset()`, `-EPIPE` if the pipe was
+closed, `-EOVERFLOW` if `len > INT_MAX`. A short transfer is normal
 — always loop on the returned count.
 
 The pre-4.0 API (`k_pipe_put`, `k_pipe_get`, `k_pipe_alloc_init`,
@@ -663,7 +662,7 @@ SYS_RINGQ_DEFINE(evt_q, sizeof(struct my_event), 16);   /* item size, count */
 struct my_event ev = { .id = 1, .ts = k_uptime_get_32() };
 
 if (sys_ringq_put(&evt_q, &ev) != 0) {
-    /* -ENOMEM: queue full */
+    /* -ENOSPC: queue full */
 }
 
 struct my_event out;
@@ -930,7 +929,8 @@ struct sensor_data data = {.temperature = 25, .humidity = 60};
 /* Publish with timeout */
 int ret = zbus_chan_pub(&sensor_chan, &data, K_MSEC(100));
 if (ret != 0) {
-    /* Handle publish failure (channel busy, timeout) */
+    /* -ENOMSG validator/observer, -EBUSY, -EAGAIN timeout,
+     * -ENOMEM msg_subscriber net_buf pool/heap exhausted (since 4.5) */
 }
 ```
 

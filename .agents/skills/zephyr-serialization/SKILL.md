@@ -15,7 +15,7 @@ description: >
 
 # Zephyr Serialization
 
-Validated against: Zephyr 4.4.99 (47ea4fd92683, 2026-09-18). Re-check with `mise run check-skills`.
+Validated against: Zephyr 4.5.0 (124121fbb079, 2026-10-15). Re-check with `mise run check-skills`.
 
 ## Scope
 
@@ -37,13 +37,12 @@ carry these payloads (CoAP/HTTP/MQTT/SMP) — see `zephyr-connectivity`.
 |----------------------------------------------------------------------|------------------------------|
 | `json_obj_descr[]`, `json_obj_parse`, `JSON_TOK_*`, FP support       | `references/json.md`         |
 | `zcbor_*` manual API, `ZCBOR_STATE_*`, CDDL schemas, zcbor code-gen  | `references/cbor.md`         |
-| `.proto` files, `pb_encode`/`pb_decode`, `zephyr_nanopb_sources()`   | `references/protobuf.md` ⚠️   |
+| `.proto` files, `pb_encode`/`pb_decode`, `zephyr_nanopb_sources()`   | `references/protobuf.md`     |
 
-⚠️ **nanopb is not in this workspace's `west.yml` allowlist**, so
-`deps/modules/lib/nanopb` does not exist and no app here uses protobuf. Adding
-the module is a one-line `west.yml` change plus `mise run west-update` — see the note
-at the top of `references/protobuf.md`. Its `CONFIG_NANOPB*` symbols are
-consequently unverified.
+nanopb is cloned here (allowlisted in `west.yml` for esp-hosted-mcu), but no
+app uses protobuf directly yet. `protoc` comes from `mise.toml`, so build
+through `mise run`/`mise x --` — see the note at the top of
+`references/protobuf.md`.
 
 ## Choosing a format
 
@@ -52,7 +51,7 @@ consequently unverified.
 | Human-readable wire format, REST/web interop           | JSON                          |
 | Smallest binary, schema in version-controlled `.cddl`  | CBOR + CDDL codegen           |
 | Existing IoT protocol payload (CoAP/LwM2M/SUIT/SMP)    | CBOR — schemas already exist  |
-| Cross-language RPC with proto3 ecosystem               | Protobuf (nanopb) — needs the module added first |
+| Cross-language RPC with proto3 ecosystem               | Protobuf (nanopb)             |
 | No codegen toolchain available at build time           | JSON or manual zcbor          |
 | Fixed-size, predictable RAM footprint                  | Protobuf (sized via options)  |
 
@@ -62,9 +61,10 @@ consequently unverified.
   mismatch between `struct` and `json_obj_descr[]` is a parse error,
   not a compile error. `json_obj_parse()` *modifies* the input buffer.
 - **zcbor returns `bool`, not an errno.** Chain calls with `&&` and
-  inspect `zcbor_peek_error()` on failure. Without
-  `CONFIG_ZCBOR_STOP_ON_ERROR`, later calls keep executing after the
-  first failure and may corrupt the cursor.
+  inspect `zcbor_peek_error()` on failure. Unless
+  `CONFIG_ZCBOR_STOP_ON_ERROR=y` *and* `state->constant_state->stop_on_error`
+  is set at runtime, later calls keep executing after the first failure and
+  may corrupt the cursor.
 - **CDDL and `.proto` codegen outputs are build artifacts.** Never
   hand-edit them; regenerate from the schema. Wire regeneration into
   CMake (`add_custom_command DEPENDS ${schema}` for zcbor;
@@ -74,9 +74,10 @@ consequently unverified.
   `CONFIG_JSON_LIBRARY_FP_SUPPORT=y` (pulls full libc). zcbor has it
   by default but a CDDL schema must explicitly use `float`. nanopb
   requires `float`/`double` in the `.proto`; no Kconfig gate.
-- **All three libraries are non-allocating by default.** Nanopb has
-  `CONFIG_NANOPB_ENABLE_MALLOC` for variable-length fields; without
-  it, every repeated/string field needs a `max_size` in `.options`.
+- **All three libraries are non-allocating by default.** In nanopb an
+  unbounded string/bytes/repeated field becomes a `pb_callback_t`; bound it
+  with `max_size`/`max_count` in `.options`, or mark it `type:FT_POINTER`
+  with `CONFIG_NANOPB_ENABLE_MALLOC=y` to heap-allocate.
 
 ## Validation Checklist
 

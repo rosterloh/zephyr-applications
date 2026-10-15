@@ -236,8 +236,8 @@ static int read_data(const struct i2c_dt_spec *i2c, int16_t *data)
 }
 
 /* Sensor API implementation */
-static int sensor_sample_fetch(const struct device *dev,
-                               enum sensor_channel chan)
+static int vnd_sample_fetch(const struct device *dev,
+                            enum sensor_channel chan)
 {
     const struct i2c_sensor_config *cfg = dev->config;
     struct i2c_sensor_data *data = dev->data;
@@ -254,9 +254,9 @@ static int sensor_sample_fetch(const struct device *dev,
     return ret;
 }
 
-static int sensor_channel_get(const struct device *dev,
-                              enum sensor_channel chan,
-                              struct sensor_value *val)
+static int vnd_channel_get(const struct device *dev,
+                           enum sensor_channel chan,
+                           struct sensor_value *val)
 {
     struct i2c_sensor_data *data = dev->data;
 
@@ -273,8 +273,8 @@ static int sensor_channel_get(const struct device *dev,
 }
 
 static DEVICE_API(sensor, sensor_api) = {
-    .sample_fetch = sensor_sample_fetch,
-    .channel_get = sensor_channel_get,
+    .sample_fetch = vnd_sample_fetch,
+    .channel_get = vnd_channel_get, /* own names: sensor_sample_fetch() is a syscall */
 };
 
 /* Initialization */
@@ -538,7 +538,7 @@ static int spi_flash_init(const struct device *dev)
                                                                         \
     static const struct spi_flash_config spi_flash_config_##inst = {    \
         .spi = SPI_DT_SPEC_INST_GET(inst,                               \
-                   SPI_WORD_SET(8) | SPI_TRANSFER_MSB, 0),              \
+                   SPI_WORD_SET(8) | SPI_TRANSFER_MSB),                 \
         .wp = GPIO_DT_SPEC_INST_GET_OR(inst, wp_gpios, {0}),            \
         .size = DT_INST_PROP(inst, size),                               \
         .page_size = DT_INST_PROP(inst, page_size),                     \
@@ -560,7 +560,7 @@ DT_INST_FOREACH_STATUS_OKAY(SPI_FLASH_DEFINE)
 
 | Macro | Purpose |
 |-------|---------|
-| `SPI_DT_SPEC_INST_GET(inst, op, delay)` | Get spi_dt_spec |
+| `SPI_DT_SPEC_INST_GET(inst, op)` | Get spi_dt_spec (CS delay comes from DT `spi-cs-setup-delay-ns`/`spi-cs-hold-delay-ns`) |
 | `spi_is_ready_dt(&spec)` | Check bus ready |
 | `spi_transceive_dt(&spec, tx, rx)` | Full duplex |
 | `spi_write_dt(&spec, tx)` | Write only |

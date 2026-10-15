@@ -179,7 +179,7 @@ if (rc < 0) {
     return rc;
 }
 
-rc = uart_tx(uart_dev, data, len, SYS_FOREVER_MS);
+rc = uart_tx(uart_dev, data, len, SYS_FOREVER_US);
 
 int put_rc = pm_device_runtime_put(uart_dev);
 if (put_rc < 0) {
@@ -205,6 +205,9 @@ Do not:
 - take locks that might deadlock resume/suspend ordering
 - perform long computations
 - assume console logging is free during suspend/resume paths
+- rely on timer-based `k_busy_wait()` in a device resume callback when the
+  state stopped the system timer — devices resume before the timer does unless
+  the experimental `CONFIG_PM_EARLY_SYSTEM_TIMER_RESUME` is enabled
 
 Why `k_sleep()` is wrong here:
 
