@@ -10,6 +10,9 @@
  * pin. From Adafruit's Joy FeatherWing guide: stick on seesaw pins 2/3
  * (logical ADC 0/1), buttons A=6, B=7, Y=9, X=10, Select=14. The INT pin is
  * not wired to the QT Py, so the deadman is polled.
+ *
+ * Needs rosterloh/zephyr-drivers#50 (SAMD09 ADC channel offset); before it,
+ * channels 0/1 read the unconnected inputs 2/3.
  */
 
 &i2c1 {
