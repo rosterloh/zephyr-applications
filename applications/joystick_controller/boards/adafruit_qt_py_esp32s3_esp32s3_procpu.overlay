@@ -76,7 +76,7 @@
 		};
 	};
 
-	deadman: gpio-keys {
+	deadman: deadman-keys {
 		compatible = "gpio-keys";
 		polling-mode;
 
