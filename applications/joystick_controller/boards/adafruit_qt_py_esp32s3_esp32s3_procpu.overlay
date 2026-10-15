@@ -1,38 +1,88 @@
-#include <zephyr/dt-bindings/led/led.h>
+#include <zephyr/dt-bindings/adc/adc.h>
+#include <zephyr/dt-bindings/gpio/gpio.h>
+#include <zephyr/dt-bindings/input/input-event-codes.h>
 
-&led_strip {
-	status = "okay";
-};
+/*
+ * Adafruit Joy FeatherWing (seesaw SAMD09 @ 0x49) on the STEMMA QT bus.
+ * 2-axis stick only, so this build publishes linear.x / linear.y only.
+ *
+ * Verify on hardware: the X/Y channel order, the invert flags and button A's
+ * pin. From Adafruit's Joy FeatherWing guide: stick on seesaw pins 2/3
+ * (logical ADC 0/1), buttons A=6, B=7, Y=9, X=10, Select=14. The INT pin is
+ * not wired to the QT Py, so the deadman is polled.
+ *
+ * Needs rosterloh/zephyr-drivers#50 (SAMD09 ADC channel offset); before it,
+ * channels 0/1 read the unconnected inputs 2/3.
+ */
 
 &i2c1 {
 	clock-frequency = <I2C_BITRATE_FAST>;
 
-	/* Re-enable when the NeoKey 1x4 (Adafruit PID 4980) is connected.
-	 * Also set CONFIG_MFD_ADAFRUIT_SEESAW=y, CONFIG_GPIO_ADAFRUIT_SEESAW=y,
-	 * CONFIG_LED_STRIP=y, and CONFIG_LED_STRIP_ADAFRUIT_SEESAW=y in prj.conf
-	 * or the board .conf.
-
-	neokey_mfd: seesaw@30 {
+	joy_wing: seesaw@49 {
 		compatible = "adafruit,seesaw-mfd";
-		status = "okay";
-		reg = <0x30>;
-		read-delay-us = <100000>;
+		reg = <0x49>;
 
-		neokey_gpio: gpio {
+		joy_adc: adc {
+			compatible = "adafruit,seesaw-adc";
+			#io-channel-cells = <1>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			channel@0 {
+				reg = <0>;
+				zephyr,gain = "ADC_GAIN_1";
+				zephyr,reference = "ADC_REF_INTERNAL";
+				zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
+				zephyr,resolution = <10>;
+			};
+
+			channel@1 {
+				reg = <1>;
+				zephyr,gain = "ADC_GAIN_1";
+				zephyr,reference = "ADC_REF_INTERNAL";
+				zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
+				zephyr,resolution = <10>;
+			};
+		};
+
+		joy_gpio: gpio {
 			compatible = "adafruit,seesaw-gpio";
 			gpio-controller;
 			#gpio-cells = <2>;
-			ngpios = <16>;
+		};
+	};
+};
+
+/ {
+	joystick: analog-axis {
+		compatible = "analog-axis";
+		poll-period-ms = <15>;
+
+		axis-x {
+			io-channels = <&joy_adc 0>;
+			in-min = <0>;
+			in-max = <1023>;
+			in-deadzone = <40>;
+			out-min = <(-1000)>;
+			out-max = <1000>;
+			zephyr,axis = <INPUT_ABS_X>;
 		};
 
-		neokey_leds: neopixel {
-			compatible = "adafruit,seesaw-neopixel";
-			chain-length = <4>;
-			color-mapping = <LED_COLOR_ID_GREEN LED_COLOR_ID_RED LED_COLOR_ID_BLUE>;
-			seesaw-pin = <3>;
-			frequency = <800000>;
+		axis-y {
+			io-channels = <&joy_adc 1>;
+			in-min = <0>;
+			in-max = <1023>;
+			in-deadzone = <40>;
+			out-min = <(-1000)>;
+			out-max = <1000>;
+			zephyr,axis = <INPUT_ABS_Y>;
 		};
 	};
 
-	*/
+	/* Read directly by main every tick: if the seesaw stops answering, the
+	 * read fails and the deadman counts as released instead of stuck held.
+	 */
+	zephyr,user {
+		deadman-gpios = <&joy_gpio 6 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+	};
 };

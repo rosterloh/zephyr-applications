@@ -8,6 +8,7 @@ common:
   build_only: true
   integration_platforms:
     - adafruit_qt_py_esp32s3/esp32s3/procpu
+    - esp32p4_wifi6_poe_eth/esp32p4/hpcore
 tests:
   app.joystick_controller.default: {}
 #  app.joystick_controller.debug:

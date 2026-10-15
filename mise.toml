@@ -410,7 +410,7 @@ run = """
 set -e
 case "${usage_app}" in
     motor_controller)     ALLOWED="robotis_openrb_150"; DEFAULT="robotis_openrb_150" ;;
-    joystick_controller)  ALLOWED="adafruit_qt_py_esp32s3/esp32s3/procpu"; DEFAULT="adafruit_qt_py_esp32s3/esp32s3/procpu" ;;
+    joystick_controller)  ALLOWED="adafruit_qt_py_esp32s3/esp32s3/procpu esp32p4_wifi6_poe_eth/esp32p4/hpcore"; DEFAULT="adafruit_qt_py_esp32s3/esp32s3/procpu" ;;
     embedded_vision)      ALLOWED="arduino_nicla_vision/stm32h747xx/m7"; DEFAULT="arduino_nicla_vision/stm32h747xx/m7" ;;
     force_sensor)         ALLOWED="adafruit_qt_py_esp32c3"; DEFAULT="adafruit_qt_py_esp32c3" ;;
     bt_keys)              ALLOWED="adafruit_qt_py_esp32c3 adafruit_qt_py_esp32s3@psram/esp32s3/procpu"; DEFAULT="adafruit_qt_py_esp32c3" ;;

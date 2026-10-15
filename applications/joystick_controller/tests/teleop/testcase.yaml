@@ -1,0 +1,11 @@
+tests:
+  joystick_controller.teleop:
+    tags:
+      - joystick_controller
+    # Same platform constraint as rasprover/tests/picoserdes: unit_testing
+    # does not build on macOS and native_sim is Linux-only.
+    platform_allow:
+      - qemu_cortex_m3
+      - native_sim
+    integration_platforms:
+      - qemu_cortex_m3

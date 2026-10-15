@@ -1,0 +1,102 @@
+#include <zephyr/dt-bindings/adc/adc.h>
+#include <zephyr/dt-bindings/gpio/gpio.h>
+#include <zephyr/dt-bindings/input/input-event-codes.h>
+
+/*
+ * APEM M-series 3-axis joystick, handle 9 (5 kOhm pots + one pushbutton), on
+ * the 40-pin header:
+ *
+ *   axis  ADC1 ch  GPIO  header pin   wires (per pot)
+ *   X     4        20    13           red = 3V3 (pin 1), blue = GND,
+ *   Y     5        21    11           white = wiper
+ *   Z     6        22    12
+ *   btn   -        23    7            orange/orange: GPIO23 to GND
+ *
+ * Not the BOOT button: GPIO35 is shared with RMII TXD1 while Ethernet is up.
+ * in-min/in-max are full scale until `teleop cal` stores the real range.
+ */
+
+&adc0 {
+	status = "okay";
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	channel@4 {
+		reg = <4>;
+		zephyr,gain = "ADC_GAIN_1_4";
+		zephyr,reference = "ADC_REF_INTERNAL";
+		zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
+		zephyr,resolution = <12>;
+	};
+
+	channel@5 {
+		reg = <5>;
+		zephyr,gain = "ADC_GAIN_1_4";
+		zephyr,reference = "ADC_REF_INTERNAL";
+		zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
+		zephyr,resolution = <12>;
+	};
+
+	channel@6 {
+		reg = <6>;
+		zephyr,gain = "ADC_GAIN_1_4";
+		zephyr,reference = "ADC_REF_INTERNAL";
+		zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
+		zephyr,resolution = <12>;
+	};
+};
+
+/ {
+	/* One analog-axis per channel: without CONFIG_ADC_ESP32_DMA the ESP32 ADC
+	 * driver rejects multi-channel sequences with -ENOTSUP.
+	 */
+	stick_x: stick-x {
+		compatible = "analog-axis";
+		poll-period-ms = <15>;
+
+		axis {
+			io-channels = <&adc0 4>;
+			in-min = <0>;
+			in-max = <4095>;
+			in-deadzone = <80>;
+			out-min = <(-1000)>;
+			out-max = <1000>;
+			zephyr,axis = <INPUT_ABS_X>;
+		};
+	};
+
+	stick_y: stick-y {
+		compatible = "analog-axis";
+		poll-period-ms = <15>;
+
+		axis {
+			io-channels = <&adc0 5>;
+			in-min = <0>;
+			in-max = <4095>;
+			in-deadzone = <80>;
+			out-min = <(-1000)>;
+			out-max = <1000>;
+			zephyr,axis = <INPUT_ABS_Y>;
+		};
+	};
+
+	stick_rz: stick-rz {
+		compatible = "analog-axis";
+		poll-period-ms = <15>;
+
+		axis {
+			io-channels = <&adc0 6>;
+			in-min = <0>;
+			in-max = <4095>;
+			in-deadzone = <80>;
+			out-min = <(-1000)>;
+			out-max = <1000>;
+			zephyr,axis = <INPUT_ABS_RZ>;
+		};
+	};
+
+	/* Read directly by main every tick, so a failed read counts as released. */
+	zephyr,user {
+		deadman-gpios = <&gpio0 23 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+	};
+};
