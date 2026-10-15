@@ -18,6 +18,7 @@ GPS_*                       # example GPS driver class in device-drivers*.md
 CUSTOM_LED_INIT_PRIORITY    # example init-priority in device-drivers.md
 SENSOR_B                    # placeholder in an init-priority ordering example
 MY_FEAT*                    # placeholder in Kconfig dependency examples
+SAMPLE_*                    # app-defined symbols from Zephyr's nanopb sample, cited in protobuf.md
 REQUIRED_FEATURE            # placeholder in kconfig.md
 FEATURE_DISABLED            # placeholder in kconfig.md
 DEBUG_COMMANDS              # placeholder shell command group

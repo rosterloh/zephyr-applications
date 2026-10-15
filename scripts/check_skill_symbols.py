@@ -78,7 +78,8 @@ def kconfig_universe() -> set[str]:
     """Every symbol defined by a `config`/`menuconfig` line under deps/."""
     syms: set[str] = set()
     for path in DEPS.rglob("Kconfig*"):
-        if not path.is_file():
+        # Symbols defined only by a sample or test aren't available to an app.
+        if not path.is_file() or {"samples", "tests"} & set(path.relative_to(DEPS).parts):
             continue
         try:
             text = path.read_text(errors="ignore")
