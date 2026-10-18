@@ -55,12 +55,17 @@ If you must call `west build` directly, always pass `--build-dir builds/<app>` s
 mise run setup            # first-time: west update + SDK install + blobs + zenoh patch
 mise run west-update      # refresh deps/ after pulling new manifest revisions
 mise run sdk-install      # reinstall SDK toolchains (version pinned in deps/zephyr/SDK_VERSION)
-mise run check-skills     # after west-update: flag Zephyr API drift in .agents/skills/
+mise run check-skills     # after west-update: flag Zephyr API drift in the skills
 ```
 
 **Run `check-skills` after every `west-update`.** It validates every `CONFIG_*`
-symbol cited in `.agents/skills/` against the Kconfig tree in `deps/`, and warns
-when a skill's `Validated against:` stamp no longer matches the Zephyr checkout.
+symbol cited in this repo's `.agents/skills/` and in the shared `zephyr-*`
+skills in `~/.agents/skills/` against the Kconfig tree in `deps/`, and warns
+(without failing) when a shared skill's `Validated against:` stamp no longer
+matches the Zephyr checkout. The shared skills are authored in dotfiles
+(`packages/agents/skills/`) and used by other Zephyr workspaces too: keep them
+workspace-neutral and fix or re-stamp them there. Facts about this repo (board
+roots, mise tasks, example apps) go in the local `zephyr-workspace` skill.
 It also checks each skill's structure: every `references/*.md` pointer resolves,
 every reference file is reachable from its `SKILL.md`, and every skill carries a
 `## Validation Checklist`.

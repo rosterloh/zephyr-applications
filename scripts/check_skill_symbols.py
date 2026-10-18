@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate that every CONFIG_* symbol cited in .agents/skills/ exists in deps/.
+"""Validate that every CONFIG_* symbol cited in the Zephyr skills exists in deps/.
 
 The Zephyr skill references are large hand/LLM-authored documents. The failure
 mode that matters is a Kconfig symbol that was renamed or removed upstream.
@@ -8,10 +8,14 @@ into an error, so a stale symbol in `prj.conf` does not quietly do nothing -- it
 aborts the build at the Kconfig stage with "Aborting due to Kconfig warnings",
 pointing at your config rather than at the skill that told you to write it.
 
+The skills are this repo's `.agents/skills/` plus the shared `zephyr-*` skills
+in `~/.agents/skills/` (authored in dotfiles, used by several workspaces).
+
 This scans skill markdown for CONFIG_* tokens and checks each against the
 symbol universe defined by the Kconfig files under deps/. It also compares the
-`Validated against:` stamp in each SKILL.md with the current Zephyr checkout so
-you can see when the references are due for a re-verification pass.
+`Validated against:` stamp in each shared SKILL.md with the current Zephyr
+checkout so you can see when the references are due for a re-verification pass.
+Other workspaces sit on other Zephyr commits, so a stamp mismatch only warns.
 
     mise run check-skills          # report + non-zero exit on unknown symbols
     mise run check-skills --list   # also print every resolved symbol
@@ -35,6 +39,8 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 SKILLS = REPO / ".agents" / "skills"
+USER_SKILLS = Path.home() / ".agents" / "skills"
+SHARED_PREFIX = "zephyr-"
 DEPS = REPO / "deps"
 ZEPHYR = DEPS / "zephyr"
 ALLOWLIST = SKILLS / ".symbol-allowlist.txt"
@@ -74,6 +80,31 @@ def load_allowlist() -> tuple[list[str], dict[str, str]]:
     return patterns, reasons
 
 
+def discover_skills(repo_root: Path, user_root: Path) -> dict[str, Path]:
+    """{skill name: resolved dir} for every repo skill and every shared zephyr-* user skill."""
+    skills: dict[str, Path] = {}
+    if user_root.is_dir():
+        for d in sorted(user_root.glob(f"{SHARED_PREFIX}*")):
+            if (d / "SKILL.md").is_file():
+                skills[d.name] = d.resolve()
+    for d in sorted(repo_root.glob("*")):
+        if (d / "SKILL.md").is_file():
+            skills[d.name] = d.resolve()
+    return skills
+
+
+def shared_skill_names(skills: dict[str, Path], user_root: Path) -> list[str]:
+    """Skills that came from the user root, i.e. the ones that carry a Zephyr stamp."""
+    return sorted(n for n in skills if n.startswith(SHARED_PREFIX) and (user_root / n).is_dir())
+
+
+def duplicate_skills(repo_root: Path, user_root: Path) -> list[str]:
+    """zephyr-* skills present in both roots: the agent would load the name twice."""
+    repo = {d.name for d in repo_root.glob(f"{SHARED_PREFIX}*") if (d / "SKILL.md").is_file()}
+    user = {d.name for d in user_root.glob(f"{SHARED_PREFIX}*") if (d / "SKILL.md").is_file()}
+    return sorted(repo & user)
+
+
 def kconfig_universe() -> set[str]:
     """Every symbol defined by a `config`/`menuconfig` line under deps/."""
     syms: set[str] = set()
@@ -89,13 +120,14 @@ def kconfig_universe() -> set[str]:
     return syms
 
 
-def cited_symbols() -> dict[str, list[str]]:
-    """{symbol: [relative paths citing it]} across all skill markdown."""
+def cited_symbols(skills: dict[str, Path]) -> dict[str, list[str]]:
+    """{symbol: [skill/relative paths citing it]} across all skill markdown."""
     cites: dict[str, list[str]] = {}
-    for path in sorted(SKILLS.rglob("*.md")):
-        rel = str(path.relative_to(SKILLS))
-        for sym in set(CONFIG_TOKEN.findall(path.read_text())):
-            cites.setdefault(sym, []).append(rel)
+    for name, root in sorted(skills.items()):
+        for path in sorted(root.rglob("*.md")):
+            rel = f"{name}/{path.relative_to(root)}"
+            for sym in set(CONFIG_TOKEN.findall(path.read_text())):
+                cites.setdefault(sym, []).append(rel)
     return cites
 
 
@@ -126,16 +158,15 @@ def zephyr_head() -> tuple[str, str]:
     return version, sha
 
 
-def check_stamps(version: str, sha: str) -> list[str]:
-    """Warn about SKILL.md files with a missing or outdated validation stamp.
+def check_stamps(skills: dict[str, Path], shared: list[str], version: str, sha: str) -> list[str]:
+    """Warn about shared SKILL.md files with a missing or outdated validation stamp.
 
-    Only the zephyr-* skills track the tree; others (e.g. mise) version
-    themselves independently.
+    Only the shared zephyr-* skills track the tree; repo skills (mise,
+    zephyr-workspace) version themselves with the repo.
     """
     warnings = []
-    for skill in sorted(SKILLS.glob("zephyr-*/SKILL.md")):
-        name = skill.parent.name
-        m = STAMP.search(skill.read_text())
+    for name in shared:
+        m = STAMP.search((skills[name] / "SKILL.md").read_text())
         if not m:
             warnings.append(f"{name}: no 'Validated against:' stamp")
         elif not sha.startswith(m.group(2)) and not m.group(2).startswith(sha):
@@ -143,7 +174,7 @@ def check_stamps(version: str, sha: str) -> list[str]:
     return warnings
 
 
-def check_references() -> list[str]:
+def check_references(skills: dict[str, Path]) -> list[str]:
     """Report SKILL.md pointers to reference files that don't exist, and
     reference files no SKILL.md points at.
 
@@ -152,17 +183,16 @@ def check_references() -> list[str]:
     reference is worse -- content that is never reachable.
     """
     problems = []
-    for skill in sorted(SKILLS.glob("*/SKILL.md")):
-        body = skill.read_text()
-        name = skill.parent.name
+    for name, root in sorted(skills.items()):
+        body = (root / "SKILL.md").read_text()
         if "## Validation Checklist" not in body:
             problems.append(f"{name}: no '## Validation Checklist' section")
         for other, ref in REF_LINK.findall(body):
-            target = SKILLS / (other or name) / "references" / ref
-            if not target.exists():
-                problems.append(f"{name}: points at missing {target.relative_to(SKILLS)}")
+            owner = other or name
+            if owner not in skills or not (skills[owner] / "references" / ref).exists():
+                problems.append(f"{name}: points at missing {owner}/references/{ref}")
         mentioned = set(re.findall(r"[A-Za-z0-9_.\-]+\.md", body))
-        for path in sorted((skill.parent / "references").glob("*.md")):
+        for path in sorted((root / "references").glob("*.md")):
             if path.name not in mentioned:
                 problems.append(f"{name}: {path.name} is not referenced from SKILL.md")
     return problems
@@ -177,13 +207,16 @@ def main() -> int:
         print("deps/zephyr missing -- run: mise run west-update", file=sys.stderr)
         return 2
 
+    skills = discover_skills(SKILLS, USER_SKILLS)
+    shared = shared_skill_names(skills, USER_SKILLS)
     universe = kconfig_universe()
-    cites = cited_symbols()
+    cites = cited_symbols(skills)
     patterns, reasons = load_allowlist()
     version, sha = zephyr_head()
 
     print(f"Zephyr tree:  {version} ({sha})")
     print(f"Kconfig defs: {len(universe)} symbols under deps/")
+    print(f"Skills:       {len(skills)} ({len(shared)} shared from {USER_SKILLS})")
     print(f"Skills cite:  {len(cites)} distinct CONFIG_* symbols")
 
     unknown: dict[str, list[str]] = {}
@@ -205,13 +238,15 @@ def main() -> int:
 
     print(f"Allowlisted:  {allowed}")
 
-    warnings = check_stamps(version, sha)
+    warnings = check_stamps(skills, shared, version, sha)
     if warnings:
-        print("\nStale or missing validation stamps:")
+        print("\nStale or missing validation stamps (warning; re-verify and re-stamp in dotfiles):")
         for w in warnings:
             print(f"  ! {w}")
 
-    links = check_references()
+    links = check_references(skills) + [
+        f"{n}: in both {SKILLS} and {USER_SKILLS}; delete the repo copy" for n in duplicate_skills(SKILLS, USER_SKILLS)
+    ]
     if links:
         print("\nReference routing problems:")
         for problem in links:
@@ -227,7 +262,7 @@ def main() -> int:
         return 1
 
     print("\nAll cited CONFIG_* symbols resolve against the current tree.")
-    return 1 if warnings or links else 0
+    return 1 if links else 0
 
 
 if __name__ == "__main__":
