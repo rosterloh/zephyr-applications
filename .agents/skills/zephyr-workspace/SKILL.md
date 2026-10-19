@@ -35,8 +35,8 @@ accepts it (see the `mise` skill), even if `west build -b` works.
 
 | Root | Boards |
 |---|---|
-| `boards/<vendor>/<board>/` (this repo is `manifest.self`, `board_root: .`) | `robotis_openrb_150`, `adafruit_qt_py_esp32c3` |
-| `deps/modules/lib/rosterloh-drivers/boards/` (`board_root` + `dts_root`) | `ros_driver`, `general_driver` (`waveshare/driver_boards`), `esp32p4_nano`, `esp32p4_wifi6_poe_eth`, `waveshare_esp32_s3_eth`; shields `adafruit_neokey_1x4`, `adafruit_neoslider`, `adafruit_rotary_encoder`, `arducam_tof_camera`, `raspberry_pi_camera_module_1` |
+| `boards/<vendor>/<board>/` (this repo is `manifest.self`, `board_root: .`) | `robotis_openrb_150` |
+| `deps/modules/lib/rosterloh-drivers/boards/` (`board_root` + `dts_root`) | `adafruit_qt_py_esp32c3`, `m5stack_unit_poe_p4`, `ros_driver`, `general_driver` (`waveshare/driver_boards`), `esp32p4_nano`, `esp32p4_wifi6_poe_eth`, `waveshare_esp32_s3_eth`; shields `adafruit_neokey_1x4`, `adafruit_neoslider`, `adafruit_rotary_encoder`, `arducam_tof_camera`, `raspberry_pi_camera_module_1` |
 | `deps/zephyr/boards/` | everything else used here: `adafruit_qt_py_esp32s3`, `rpi_pico`, `xiao_esp32c5`, `arduino_nicla_vision`, `native_sim` |
 
 rosterloh-drivers is a separate git repo (`rosterloh/zephyr-drivers`, remote
