@@ -444,8 +444,9 @@ arg "<app>" help="App name (e.g. motor_controller)"
 run = "west flash --build-dir builds/${usage_app}"
 
 [tasks."check-skills"]
-run = "python scripts/check_skill_symbols.py"
-description = "Validate CONFIG_* symbols cited in the repo and shared ~/.agents/skills Zephyr skills against deps/, check reference routing, and flag stale validation stamps."
+# The checker ships with the shared zephyr skill (dotfiles), so every Zephyr workspace can run it.
+run = 'python "${HOME}/.agents/skills/zephyr/scripts/check_symbols.py" --workspace "${MISE_PROJECT_ROOT}" --extra-skills "${MISE_PROJECT_ROOT}/.agents/skills"'
+description = "Validate CONFIG_* symbols cited in the shared zephyr skill and this repo's skills against deps/, check reference routing, and flag a stale validation stamp."
 
 [tasks."run-rasprover-sim"]
 run = "west build -b native_sim/native/64 --build-dir builds/rasprover -t run applications/rasprover"

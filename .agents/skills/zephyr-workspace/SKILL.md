@@ -1,9 +1,9 @@
 ---
 name: zephyr-workspace
 description: >
-  Facts specific to the zephyr-applications workspace that the generic zephyr-*
-  skills leave out. Use when building, flashing, debugging or adding a board/app
-  here; when a zephyr-* skill shows a bare `west`/`python3`/`esptool` command or
+  Facts specific to the zephyr-applications workspace that the generic zephyr
+  skill leaves out. Use when building, flashing, debugging or adding a board/app
+  here; when the zephyr skill shows a bare `west`/`python3`/`esptool` command or
   says "check the workspace skill"; or when you need to know which board root,
   module or example app in this repo to look at. Triggers on `mise run app`,
   `mise run flash`, `agent-build`, rosterloh-drivers, applications/<app>,
@@ -12,13 +12,13 @@ description: >
 
 # zephyr-applications workspace
 
-The generic Zephyr knowledge lives in the user-level `zephyr-*` skills
-(`~/.agents/skills`, from dotfiles). This skill maps them onto this repo. Build,
+The generic Zephyr knowledge lives in the user-level `zephyr` skill
+(`~/.agents/skills/zephyr`, from dotfiles). This skill maps them onto this repo. Build,
 task and layout rules are in `AGENTS.md`. Task authoring is in the `mise` skill.
 
 ## Generic command → here
 
-| zephyr-* skills show | Run here |
+| zephyr skill shows | Run here |
 |---|---|
 | `west build -b <board> --build-dir builds/<app> <app-dir>` | `mise run app <app> [--board <qualifier>] [--sysbuild]`, or `mise run agent-build <app>` (tails the log, full log in `logs/<app>-build.log`) |
 | `west flash -d builds/<app>` | `mise run flash <app>` |
@@ -45,14 +45,14 @@ Never vendor its files into this repo.
 
 ## Apps and what they exercise
 
-| Topic in a zephyr-* skill | Look at |
+| Topic in the zephyr skill | Look at |
 |---|---|
 | sysbuild + MCUboot | apps with a `sysbuild.conf`: `bluetooth_proxy_device`, `bt_keys`, `data_collection`, `force_sensor`, `joystick_controller`, `pt_mcp`, `rasprover`. A board-dependent `Kconfig.sysbuild` lives in `bluetooth_proxy_device`. |
-| video / UVC (`video.md`) | `embedded_vision` (Nicla Vision; ESP32-P4-Nano CSI variant) |
-| USB stack mismatch trap (`usb-device.md`) | `motor_controller/src/usb.c` |
+| video / UVC (`zephyr/references/peripherals/video.md`) | `embedded_vision` (Nicla Vision; ESP32-P4-Nano CSI variant) |
+| USB stack mismatch trap (`zephyr/references/peripherals/usb-device.md`) | `motor_controller/src/usb.c` |
 | Pico-ROS / zenoh, Twist pub/sub | `rasprover` (subscriber), `joystick_controller` (publisher, analog-axis input) |
-| stale ZMS after reflash (`storage.md`) | `pt_mcp` on xiao_esp32c5 |
-| SSD1306 + LVGL hang (`lvgl.md`) | `rasprover` ships with the OLED disabled |
+| stale ZMS after reflash (`zephyr/references/system/storage.md`) | `pt_mcp` on xiao_esp32c5 |
+| SSD1306 + LVGL hang (`zephyr/references/peripherals/lvgl.md`) | `rasprover` ships with the OLED disabled |
 | shared app code | `applications/common/<module>/` (see AGENTS.md for why it isn't a `zephyr_library()`) |
 
 protobuf: nanopb is cloned only because esp-hosted-mcu (ESP32-P4) needs it. No
@@ -69,15 +69,16 @@ with an extra overlay that adds a `zephyr,i2c-emul-controller` labelled `i2c0`.
 
 ## check-skills
 
-`mise run check-skills` validates the zephyr-* skills in `~/.agents/skills`
-plus this repo's `.agents/skills` against `deps/`. It checks cited `CONFIG_*`
-symbols, reference routing and validation stamps. The shared skills are also
+`mise run check-skills` runs the zephyr skill's bundled
+`scripts/check_symbols.py` over that skill plus this repo's `.agents/skills`,
+against `deps/`. It checks cited `CONFIG_*`
+symbols, reference routing and validation stamps. The shared skill is also
 used by other workspaces on other Zephyr commits, so a stamp mismatch is a
 warning to re-check, not a failure.
 
 ## Validation Checklist
 
-- [ ] Commands taken from a zephyr-* skill were run through `mise run`/`mise x --`,
+- [ ] Commands taken from the zephyr skill were run through `mise run`/`mise x --`,
       with build output under `builds/<app>`.
 - [ ] A new board builds through `mise run app <app> --board <qualifier>`, not
       just bare `west build`.

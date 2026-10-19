@@ -58,14 +58,17 @@ mise run sdk-install      # reinstall SDK toolchains (version pinned in deps/zep
 mise run check-skills     # after west-update: flag Zephyr API drift in the skills
 ```
 
-**Run `check-skills` after every `west-update`.** It validates every `CONFIG_*`
-symbol cited in this repo's `.agents/skills/` and in the shared `zephyr-*`
-skills in `~/.agents/skills/` against the Kconfig tree in `deps/`, and warns
-(without failing) when a shared skill's `Validated against:` stamp no longer
-matches the Zephyr checkout. The shared skills are authored in dotfiles
-(`packages/agents/skills/`) and used by other Zephyr workspaces too: keep them
-workspace-neutral and fix or re-stamp them there. Facts about this repo (board
-roots, mise tasks, example apps) go in the local `zephyr-workspace` skill.
+**Use the `zephyr` skill for any firmware work here**, plus the local
+`zephyr-workspace` skill for this repo's tasks, board roots and example apps.
+
+**Run `check-skills` after every `west-update`.** It runs the checker bundled
+with the shared `zephyr` skill (`~/.agents/skills/zephyr/scripts/check_symbols.py`,
+authored in dotfiles `packages/agents/skills/zephyr`). It validates every
+`CONFIG_*` cited in that skill and in this repo's `.agents/skills/` against the
+Kconfig tree in `deps/`, and warns (without failing) when the skill's
+`Validated against:` stamp no longer matches the Zephyr checkout. The shared
+skill is used by other Zephyr workspaces too, so keep it workspace-neutral and
+fix or re-stamp it in dotfiles. Facts about this repo go in `zephyr-workspace`.
 It also checks each skill's structure: every `references/*.md` pointer resolves,
 every reference file is reachable from its `SKILL.md`, and every skill carries a
 `## Validation Checklist`.
