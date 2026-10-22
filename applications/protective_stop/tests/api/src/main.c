@@ -25,13 +25,29 @@
 #include "lockstep.h"
 #include "session.h"
 
-/* CONFIG_PROTECTIVE_STOP_ADMIN_PASSWORD is "s3cret" in this suite's Kconfig. */
+/* CONFIG_PROTECTIVE_STOP_ADMIN_PASSWORD is "s3cret" in this suite's Kconfig;
+ * the admin_disabled variant in testcase.yaml empties it, as shipped.
+ */
 #define AUTH_OK         "Basic YWRtaW46czNjcmV0"     /* admin:s3cret */
 #define AUTH_UPSTREAM   "Basic YWRtaW46bWljcm9saW5r" /* admin:microlink */
 #define AUTH_LONGER     "Basic YWRtaW46czNjcmV0Mg==" /* admin:s3cret2 */
 #define AUTH_SHORTER    "Basic YWRtaW46czNjcmU="     /* admin:s3cre */
 #define AUTH_WRONG_USER "Basic cm9vdDpzM2NyZXQ="     /* root:s3cret */
 #define AUTH_NO_COLON   "Basic YWRtaW5zM2NyZXQ="     /* admins3cret */
+#define AUTH_EMPTY_PW   "Basic YWRtaW46"             /* admin: */
+
+static bool admin_configured(void)
+{
+	return CONFIG_PROTECTIVE_STOP_ADMIN_PASSWORD[0] != '\0';
+}
+
+/* Cases that need a password skip in the admin_disabled variant. */
+#define REQUIRE_ADMIN()                                                                            \
+	do {                                                                                       \
+		if (!admin_configured()) {                                                         \
+			ztest_test_skip();                                                         \
+		}                                                                                  \
+	} while (false)
 
 static char body[PSTOP_API_BODY_MAX];
 static struct pstop_api_response rsp;
@@ -154,6 +170,8 @@ ZTEST(http_util, test_basic_auth)
 	zassert_false(http_basic_auth_ok("Basic ", "admin", "s3cret"), "empty credentials");
 	zassert_false(http_basic_auth_ok("", "admin", "s3cret"), "empty header");
 	zassert_false(http_basic_auth_ok(NULL, "admin", "s3cret"), "no header");
+	zassert_false(http_basic_auth_ok(AUTH_EMPTY_PW, "admin", ""),
+		      "an empty password never matches, not even \"admin:\"");
 }
 
 ZTEST_SUITE(http_util, NULL, NULL, NULL, NULL, NULL);
@@ -382,6 +400,8 @@ ZTEST(api, test_legacy_single_peer_is_slot_0)
 
 ZTEST(api, test_role_needs_admin)
 {
+	REQUIRE_ADMIN();
+
 	static const char *const bad[] = {
 		NULL, "", AUTH_UPSTREAM, AUTH_WRONG_USER, AUTH_LONGER,
 	};
@@ -398,6 +418,8 @@ ZTEST(api, test_role_needs_admin)
 
 ZTEST(api, test_role_get_and_set)
 {
+	REQUIRE_ADMIN();
+
 	pstop_api_role(false, "/api/role", AUTH_OK, body, sizeof(body), &rsp);
 	zassert_equal(rsp.status, 200);
 	assert_body("{\"ok\":true,\"role\":\"stop_only\"}");
@@ -417,6 +439,8 @@ ZTEST(api, test_role_get_and_set)
 
 ZTEST(api, test_role_rejects_unknown_roles)
 {
+	REQUIRE_ADMIN();
+
 	pstop_api_role(true, "/api/role?role=admin", AUTH_OK, body, sizeof(body), &rsp);
 	zassert_equal(rsp.status, 400);
 	pstop_api_role(true, "/api/role", AUTH_OK, body, sizeof(body), &rsp);
@@ -426,6 +450,8 @@ ZTEST(api, test_role_rejects_unknown_roles)
 
 ZTEST(api, test_admin_status)
 {
+	REQUIRE_ADMIN();
+
 	pstop_api_admin_status(NULL, body, sizeof(body), &rsp);
 	zassert_equal(rsp.status, 401);
 	zassert_true(rsp.auth_challenge);
@@ -438,6 +464,8 @@ ZTEST(api, test_admin_status)
 
 ZTEST(api, test_admin_restart)
 {
+	REQUIRE_ADMIN();
+
 	pstop_api_admin_restart(AUTH_UPSTREAM, body, sizeof(body), &rsp);
 	zassert_equal(rsp.status, 401);
 	zassert_false(rsp.restart, "no restart without auth");
@@ -465,6 +493,32 @@ ZTEST(api, test_state_reports_a_late_sampler)
 	zassert_true(body_has(expected), "want %s in %s", expected, body);
 	(void)snprintf(expected, sizeof(expected), "\"pstop_mm_timeout\":%u,", before + 1U);
 	zassert_true(body_has(expected), "want %s", expected);
+}
+
+ZTEST(api, test_admin_disabled_without_a_password)
+{
+	static const char *const auths[] = {
+		NULL, "", AUTH_EMPTY_PW, AUTH_OK, AUTH_UPSTREAM,
+	};
+
+	if (admin_configured()) {
+		ztest_test_skip();
+	}
+
+	/* 403, not 401: no credentials can succeed, so none are asked for. */
+	for (size_t i = 0; i < ARRAY_SIZE(auths); i++) {
+		pstop_api_role(true, "/api/role?role=operator", auths[i], body, sizeof(body), &rsp);
+		zassert_equal(rsp.status, 403, "role, auth %zu", i);
+		zassert_false(rsp.auth_challenge, "role, auth %zu", i);
+
+		pstop_api_admin_status(auths[i], body, sizeof(body), &rsp);
+		zassert_equal(rsp.status, 403, "status, auth %zu", i);
+
+		pstop_api_admin_restart(auths[i], body, sizeof(body), &rsp);
+		zassert_equal(rsp.status, 403, "restart, auth %zu", i);
+		zassert_false(rsp.restart, "restart, auth %zu", i);
+	}
+	zassert_false(app_settings_is_operator(), "never promoted");
 }
 
 ZTEST_SUITE(api, NULL, api_setup, api_before, NULL, NULL);

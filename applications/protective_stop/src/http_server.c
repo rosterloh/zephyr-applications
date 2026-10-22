@@ -25,11 +25,6 @@
 
 LOG_MODULE_REGISTER(pstop_http, LOG_LEVEL_INF);
 
-/* Upstream's admin password, published in its docs: fine on a bench, not
- * on a deployed remote.
- */
-#define PUBLIC_DEFAULT_PASSWORD "microlink"
-
 #define RESTART_DELAY_MS 500
 
 HTTP_SERVER_REGISTER_HEADER_CAPTURE(capture_authorization, "Authorization");
@@ -177,9 +172,8 @@ int pstop_http_start(void)
 {
 	int ret;
 
-	if (strcmp(CONFIG_PROTECTIVE_STOP_ADMIN_PASSWORD, PUBLIC_DEFAULT_PASSWORD) == 0) {
-		LOG_WRN("admin password is the public default; set "
-			"CONFIG_PROTECTIVE_STOP_ADMIN_PASSWORD before deploying");
+	if (CONFIG_PROTECTIVE_STOP_ADMIN_PASSWORD[0] == '\0') {
+		LOG_WRN("admin routes disabled: CONFIG_PROTECTIVE_STOP_ADMIN_PASSWORD is not set");
 	}
 
 	ret = http_server_start();

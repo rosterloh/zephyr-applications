@@ -56,11 +56,13 @@ config PROTECTIVE_STOP_HTTP_PORT
 
 config PROTECTIVE_STOP_ADMIN_PASSWORD
 	string "Admin password for /admin/* and /api/role"
-	default "microlink"
+	default ""
 	help
-	  The user is "admin". The default is upstream's, which its tooling
-	  assumes and its docs publish; the remote warns at boot while it is
-	  still set.
+	  The user is "admin". Empty (the default) leaves the admin routes
+	  disabled: they answer 403 to every request, so a remote that was
+	  never given a password cannot be re-roled or restarted over the
+	  network. Set it in a local, uncommitted conf fragment, e.g.
+	  --extra-conf admin.conf.
 
 endif # PROTECTIVE_STOP_HTTP
 

@@ -103,6 +103,14 @@ static void init_rsp(struct pstop_api_response *rsp)
 
 static bool admin_ok(const char *auth, char *buf, size_t cap, struct pstop_api_response *rsp)
 {
+	if (CONFIG_PROTECTIVE_STOP_ADMIN_PASSWORD[0] == '\0') {
+		/* No password configured: no credentials can be right, and
+		 * asking for them would only invite guessing.
+		 */
+		reply(buf, cap, rsp, 403,
+		      "{\"ok\":false,\"error\":\"admin disabled: no password configured\"}");
+		return false;
+	}
 	if (http_basic_auth_ok(auth, PSTOP_API_ADMIN_USER, CONFIG_PROTECTIVE_STOP_ADMIN_PASSWORD)) {
 		return true;
 	}

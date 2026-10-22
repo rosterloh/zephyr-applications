@@ -38,7 +38,8 @@ int http_parse_ipv4(const char *s, uint32_t *out);
 int http_parse_u32(const char *s, uint32_t *out);
 
 /* Check an Authorization header value ("Basic <base64 user:password>")
- * against the expected credentials. NULL or malformed input is a rejection.
+ * against the expected credentials. NULL or malformed input, or an empty
+ * expected password, is a rejection.
  * The password comparison does not stop at the first differing byte.
  */
 bool http_basic_auth_ok(const char *header, const char *user, const char *password);

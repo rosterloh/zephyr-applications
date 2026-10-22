@@ -35,9 +35,15 @@ An HTTP server on port 80 (8080 on native_sim) speaks upstream's
 | `GET/POST /api/role[?role=operator\|stop_only]` | admin | live, no reboot |
 | `GET /admin/api/status`, `POST /admin/api/restart` | admin | |
 
-Admin is HTTP Basic, user `admin`, password `CONFIG_PROTECTIVE_STOP_ADMIN_PASSWORD`
-(upstream's public default `microlink` until you change it; the remote warns at
-boot). Peer changes are picked up by the comparator on its next tick.
+Admin is HTTP Basic, user `admin`, password `CONFIG_PROTECTIVE_STOP_ADMIN_PASSWORD`.
+There is no default: until one is set the admin routes answer 403 and the
+remote warns at boot. Keep it out of the repo with a local fragment:
+
+    echo 'CONFIG_PROTECTIVE_STOP_ADMIN_PASSWORD="..."' > ~/pstop-admin.conf
+    mise x -- west build -b native_sim/native/64 --build-dir builds/protective_stop \
+        applications/protective_stop -- -DEXTRA_CONF_FILE=$HOME/pstop-admin.conf
+
+Peer changes are picked up by the comparator on its next tick.
 
 Not yet ported: the admin HTML pages, `/api/ring`, `/api/health`,
 `/api/last_log`, settings/WiFi/coredump admin routes. `/api/admission` is a

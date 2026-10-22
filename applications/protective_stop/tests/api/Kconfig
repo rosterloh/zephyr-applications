@@ -1,9 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 
-# Not upstream's default: proves the admin routes read the password from
-# Kconfig rather than a literal.
+# The app ships with no password (admin disabled). This suite sets one so the
+# admin cases have something to authenticate against; the admin_disabled
+# variant in testcase.yaml empties it again.
 config PROTECTIVE_STOP_ADMIN_PASSWORD
-	string
+	string "Admin password"
 	default "s3cret"
 
 source "Kconfig.zephyr"

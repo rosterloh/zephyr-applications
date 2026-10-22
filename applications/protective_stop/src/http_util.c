@@ -158,7 +158,8 @@ bool http_basic_auth_ok(const char *header, const char *user, const char *passwo
 	size_t pw_len;
 	uint8_t diff;
 
-	if ((header == NULL) || (user == NULL) || (password == NULL)) {
+	/* An empty password would make "admin:" a valid credential. */
+	if ((header == NULL) || (user == NULL) || (password == NULL) || (*password == '\0')) {
 		return false;
 	}
 	if (strncmp(header, scheme, sizeof(scheme) - 1U) != 0) {
