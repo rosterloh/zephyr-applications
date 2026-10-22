@@ -30,8 +30,13 @@
  * tick immediately overwrites whatever it pokes into the sampler generations.
  * It sorts before test_01 by construction, which is convenient but not
  * load-bearing the way test_01..test_04's ordering is.
+ *
+ * test_06 onward each re-settle and re-bond via settle_bonded() before
+ * asserting anything, so they depend on the earlier cases only for time
+ * moving forward.
  */
 
+#include <errno.h>
 #include <string.h>
 
 #include <zephyr/net/socket.h>
@@ -63,6 +68,11 @@ static void recorded_reset(void)
 {
 	recorded_count = 0U;
 }
+
+/* When set, the fake machine refuses us: it answers every frame with UNBOND,
+ * as an upstream machine does once its denylist names us (test_09).
+ */
+static bool fake_machine_unbond;
 
 /* A minimal fake machine: it acks a BOND request with a heartbeat_timeout,
  * because pstop_session_poll() only reaches PSTOP_SESS_BONDED on a decoded
@@ -96,9 +106,15 @@ static void fake_machine_service(void)
 	}
 
 	device_id_set(&machine_id, FAKE_MACHINE_ID);
-	pstop_create_ok_message(&reply, req.stamp, req.stamp, &machine_id, &req.id,
-				req.counter + 1U, req.counter);
-	reply.heartbeat_timeout = FAKE_MACHINE_HB_MS;
+	if (fake_machine_unbond) {
+		pstop_create_generic_message(&reply, PSTOP_MESSAGE_UNBOND, req.stamp, req.stamp,
+					     &machine_id, &req.id, req.counter + 1U, req.counter);
+		reply.heartbeat_timeout = 0U;
+	} else {
+		pstop_create_ok_message(&reply, req.stamp, req.stamp, &machine_id, &req.id,
+					req.counter + 1U, req.counter);
+		reply.heartbeat_timeout = FAKE_MACHINE_HB_MS;
+	}
 
 	pstop_message_encode(&reply, out);
 	(void)zsock_sendto(fake_machine_sock, out, sizeof(out), 0, (struct sockaddr *)&from,
@@ -243,6 +259,17 @@ ZTEST(lockstep, test_03_split_channels_silence_every_session)
 	zassert_equal(s->sent, sent_before, "a channel split must silence transmission");
 	zassert_true(pstop_lockstep_mismatches() > mismatches_before,
 		     "the mismatch must be counted");
+
+	/* And attributed: which slot, where the frames split, and what each
+	 * sampler read. Pole 0 is closed (OK), pole 1 open (STOP).
+	 */
+	struct pstop_lockstep_diag diag;
+
+	pstop_lockstep_diag_get(&diag);
+	zassert_equal(diag.mismatch_slot, 0U, "the mismatch must name its slot");
+	zassert_true(diag.mismatch_offset < PSTOP_MESSAGE_SIZE, "the offset must be in the frame");
+	zassert_equal(diag.mismatch_verdict[0], PSTOP_MESSAGE_OK, "channel 0 read closed");
+	zassert_equal(diag.mismatch_verdict[1], PSTOP_MESSAGE_STOP, "channel 1 read open");
 }
 
 ZTEST(lockstep, test_04_recovers_when_the_split_heals)
@@ -382,6 +409,145 @@ ZTEST(lockstep, test_05_wire_carries_exactly_one_arming_edge)
 	}
 
 	assert_exactly_one_arming_edge();
+}
+
+/* Run agreeing, closed, serviced ticks until bonded and transmitting. Returns
+ * the time after the last tick.
+ */
+static uint64_t settle_bonded(uint64_t now)
+{
+	const struct pstop_session *s = pstop_lockstep_session(0);
+
+	estop_sim_set_pole(0, true);
+	estop_sim_set_pole(1, true);
+	for (unsigned int i = 0U; i < 20U; i++) {
+		pstop_lockstep_tick(now);
+		fake_machine_service();
+		now += 100ULL;
+	}
+	zassert_equal(s->state, PSTOP_SESS_BONDED, "must be bonded");
+	return now;
+}
+
+/* A sampler that publishes after the shared window has closed taints the
+ * tick, even though its frame carries the current generation and agrees with
+ * the other sampler's. Before upstream #154 the second sampler got a fresh
+ * 80 ms of its own, so a frame up to 160 ms late could still be sent.
+ */
+ZTEST(lockstep, test_06_late_sampler_taints_the_tick)
+{
+	const struct pstop_session *s = pstop_lockstep_session(0);
+	struct pstop_lockstep_diag diag;
+	uint32_t sent_before;
+	uint32_t missed_before;
+	uint32_t mismatches_before;
+	uint64_t now;
+
+	now = settle_bonded(16000ULL);
+	sent_before = s->sent;
+	missed_before = pstop_lockstep_missed_deadlines();
+	mismatches_before = pstop_lockstep_mismatches();
+
+	/* Ten ticks span two due ticks at the 500 ms send period. */
+	for (unsigned int i = 0U; i < 10U; i++) {
+		pstop_lockstep_test_tick_late(now, BIT(1));
+		fake_machine_service();
+		now += 100ULL;
+	}
+
+	zassert_equal(s->sent, sent_before, "a tick with a late sampler must send nothing");
+	zassert_equal(pstop_lockstep_missed_deadlines(), missed_before + 10U,
+		      "every late tick must be counted");
+	zassert_equal(pstop_lockstep_mismatches(), mismatches_before,
+		      "a late sampler is not a content mismatch");
+
+	pstop_lockstep_diag_get(&diag);
+	zassert_equal(diag.late_mask, BIT(1), "the late sampler must be named");
+
+	for (unsigned int i = 0U; i < 10U; i++) {
+		pstop_lockstep_tick(now);
+		fake_machine_service();
+		now += 100ULL;
+	}
+	zassert_true(s->sent > sent_before, "transmission must resume once both are on time");
+}
+
+static void flip_role(void)
+{
+	(void)app_settings_set_operator(!app_settings_is_operator());
+}
+
+/* The role is live, so it can change between the two samplers' builds. Each
+ * sampler reading settings itself would encode different padding1 bytes and
+ * silence every session for a tick; one snapshot per tick keeps them equal.
+ */
+ZTEST(lockstep, test_07_role_change_mid_tick_does_not_split)
+{
+	const struct pstop_session *s = pstop_lockstep_session(0);
+	uint32_t sent_before;
+	uint32_t mismatches_before;
+	uint64_t now;
+
+	now = settle_bonded(20000ULL);
+	sent_before = s->sent;
+	mismatches_before = pstop_lockstep_mismatches();
+
+	pstop_lockstep_test_between_samplers = flip_role;
+	for (unsigned int i = 0U; i < 10U; i++) {
+		pstop_lockstep_tick(now);
+		fake_machine_service();
+		now += 100ULL;
+	}
+	pstop_lockstep_test_between_samplers = NULL;
+	(void)app_settings_set_operator(false);
+
+	zassert_equal(pstop_lockstep_mismatches(), mismatches_before,
+		      "a role change between samplers must not split their encodings");
+	zassert_true(s->sent > sent_before, "transmission must continue through role changes");
+}
+
+/* A machine that answers UNBOND parks the slot: no frames at all, not a BOND
+ * every PSTOP_BOND_RETRY_MS. A rebond request is the way out.
+ */
+ZTEST(lockstep, test_08_unbond_parks_until_rebond_requested)
+{
+	const struct pstop_session *s = pstop_lockstep_session(0);
+	uint32_t sent_parked;
+	uint64_t now;
+
+	now = settle_bonded(24000ULL);
+
+	fake_machine_unbond = true;
+	for (unsigned int i = 0U; i < 10U; i++) {
+		pstop_lockstep_tick(now);
+		fake_machine_service();
+		now += 100ULL;
+	}
+	zassert_equal(s->state, PSTOP_SESS_REJECTED, "UNBOND must park the slot");
+
+	/* Parked for longer than PSTOP_BOND_RETRY_MS and the rebond watchdog:
+	 * nothing may go out.
+	 */
+	sent_parked = s->sent;
+	for (unsigned int i = 0U; i < 80U; i++) {
+		pstop_lockstep_tick(now);
+		fake_machine_service();
+		now += 100ULL;
+	}
+	zassert_equal(s->sent, sent_parked, "a parked slot must send nothing");
+	zassert_equal(s->state, PSTOP_SESS_REJECTED, "only a rebond request un-parks");
+
+	fake_machine_unbond = false;
+	zassert_ok(pstop_lockstep_request_rebond(0), "rebond request");
+	zassert_equal(pstop_lockstep_request_rebond(PSTOP_MAX_MACHINES), -EINVAL,
+		      "an out-of-range slot must be refused");
+	for (unsigned int i = 0U; i < 5U; i++) {
+		pstop_lockstep_tick(now);
+		fake_machine_service();
+		now += 100ULL;
+	}
+	zassert_equal(s->state, PSTOP_SESS_BONDED, "a rebond request must bond again");
+	zassert_true(s->sent > sent_parked, "the rebond must reach the wire");
 }
 
 ZTEST_SUITE(lockstep, NULL, suite_setup, NULL, NULL, NULL);

@@ -11,7 +11,6 @@
 #include <zephyr/net/socket.h>
 #include <zephyr/sys/byteorder.h>
 
-#include "pstop_aux_channel.h"
 #include "session.h"
 
 LOG_MODULE_REGISTER(pstop_session, LOG_LEVEL_INF);
@@ -60,6 +59,7 @@ int pstop_session_open(struct pstop_session *s, int slot, const struct pstop_pee
 	s->replies = 0U;
 	s->send_fail = 0U;
 	s->rebonds = 0U;
+	s->unbonds = 0U;
 	s->last_msg = PSTOP_MESSAGE_UNKNOWN;
 
 	(void)memset(&s->peer_addr, 0, sizeof(s->peer_addr));
@@ -116,6 +116,9 @@ uint64_t pstop_session_rebond_after_ms(const struct pstop_session *s)
 
 bool pstop_session_due(const struct pstop_session *s, uint64_t now_ms)
 {
+	if (s->state == PSTOP_SESS_REJECTED) {
+		return false;
+	}
 	if (s->state == PSTOP_SESS_BONDING) {
 		return (now_ms - s->last_bond_ms) >= PSTOP_BOND_RETRY_MS;
 	}
@@ -125,12 +128,12 @@ bool pstop_session_due(const struct pstop_session *s, uint64_t now_ms)
 	return (now_ms - s->last_send_ms) >= pstop_session_send_period_ms(s);
 }
 
-void pstop_session_build(struct pstop_session *s, uint8_t verdict, uint64_t now_ms, uint8_t *out48)
+void pstop_session_build(struct pstop_session *s, uint8_t verdict, pstop_aux_role_t role,
+			 uint64_t now_ms, uint8_t *out48)
 {
 	pstop_msg_t msg;
 	device_id_t me;
 	uint8_t type;
-	pstop_aux_role_t role;
 
 	device_id_set(&me, app_settings_device_id());
 
@@ -149,11 +152,9 @@ void pstop_session_build(struct pstop_session *s, uint8_t verdict, uint64_t now_
 					     s->proto.last_received_counter);
 	}
 
-	/* The role is latched by the machine at bond time, so it must be
-	 * carried on the BOND frame too -- there is no later chance to
-	 * correct it.
+	/* The machine re-reads the role on every frame, and seeds it from
+	 * the BOND, so every frame carries it.
 	 */
-	role = app_settings_is_operator() ? PSTOP_AUX_ROLE_OPERATOR : PSTOP_AUX_ROLE_STOP_ONLY;
 	pstop_aux_encode_role(&msg, role);
 
 	pstop_message_encode(&msg, out48);
@@ -226,6 +227,37 @@ void pstop_session_poll(struct pstop_session *s, uint64_t now_ms)
 			continue;
 		}
 
+		/* UNBOND means the machine does not hold a bond for us: its
+		 * allow/denylist refused us, at BOND or live mid-session, or it
+		 * restarted and forgot us. Park the session from any state, as
+		 * upstream's remote does: knocking every PSTOP_BOND_RETRY_MS on
+		 * a machine that refuses us is noise. UNBOND is not a heartbeat
+		 * ack either, so its zeroed counter and stamp are not adopted
+		 * and last_reply_ms stays put: a parked slot must read as dead,
+		 * not healthy. This remote never sends UNBOND itself, so there
+		 * is no legitimate echo to confuse it with.
+		 */
+		if (msg.message == PSTOP_MESSAGE_UNBOND) {
+			if (s->state != PSTOP_SESS_REJECTED) {
+				LOG_WRN("slot %d %s rejected by machine (UNBOND), parked until "
+					"rebond",
+					s->slot,
+					(s->state == PSTOP_SESS_BONDED) ? "session" : "BOND");
+			}
+			s->state = PSTOP_SESS_REJECTED;
+			s->last_msg = msg.message;
+			s->unbonds++;
+			continue;
+		}
+
+		/* A parked session ignores everything else until rebonded: a
+		 * late reply to a frame sent before the UNBOND must not
+		 * un-park it.
+		 */
+		if (s->state == PSTOP_SESS_REJECTED) {
+			continue;
+		}
+
 		s->proto.last_received_counter = msg.counter;
 		s->proto.last_received_stamp = msg.stamp;
 		s->last_reply_ms = now_ms;
@@ -262,6 +294,11 @@ void pstop_session_watchdog(struct pstop_session *s, uint64_t now_ms)
 	 */
 	LOG_WRN("slot %d silent for %u ms, re-bonding", s->slot,
 		(unsigned int)(now_ms - s->last_reply_ms));
+	pstop_session_rebond(s);
+}
+
+void pstop_session_rebond(struct pstop_session *s)
+{
 	s->state = PSTOP_SESS_IDLE;
 	s->hb_ms = 0U;
 	s->rebonds++;
