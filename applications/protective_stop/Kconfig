@@ -2,4 +2,70 @@
 
 mainmenu "protective_stop"
 
+config ZVFS_OPEN_ADD_SIZE_PROTECTIVE_STOP
+	int
+	default 7 if PROTECTIVE_STOP_HTTP
+	default 4
+	help
+	  File descriptors this app holds open: one UDP socket per machine
+	  slot (PSTOP_MAX_MACHINES, 4), plus the control plane's listening
+	  socket and one per HTTP_SERVER_MAX_CLIENTS (2). Counted here because
+	  native_sim's offloaded sockets reserve none of their own.
+
+menu "protective_stop"
+
+config ZVFS_OPEN_ADD_SIZE_PROTECTIVE_STOP
+	int
+	default 7 if PROTECTIVE_STOP_HTTP
+	default 4
+	help
+	  File descriptors this app holds open: one UDP socket per machine
+	  slot (PSTOP_MAX_MACHINES, 4), plus the control plane's listening
+	  socket and one per HTTP_SERVER_MAX_CLIENTS (2). Counted here because
+	  native_sim's offloaded sockets reserve none of their own.
+
+config PROTECTIVE_STOP_LOCAL_PORT
+	int "First local UDP port for machine sessions"
+	default 18891 if BOARD_NATIVE_SIM
+	default 8891
+	help
+	  Slot i sends from this port + i. Upstream uses 8891..8894. native_sim
+	  shares the host's ports, and upstream's multi-machine test runs its
+	  machines on 8890..8893 of that same host, so the simulator moves
+	  out of their way.
+
+config PROTECTIVE_STOP_HTTP
+	bool "Control plane (HTTP)"
+	default y
+	select HTTP_SERVER
+	select HTTP_SERVER_CAPTURE_HEADERS
+	select BASE64
+	select REBOOT
+	help
+	  /state.json and upstream's /api routes, so upstream's tooling can
+	  provision and observe this remote.
+
+if PROTECTIVE_STOP_HTTP
+
+config PROTECTIVE_STOP_HTTP_PORT
+	int "Control plane TCP port"
+	default 8080 if BOARD_NATIVE_SIM
+	default 80
+	help
+	  native_sim binds the host's own port, and 80 needs root there.
+
+config PROTECTIVE_STOP_ADMIN_PASSWORD
+	string "Admin password for /admin/* and /api/role"
+	default ""
+	help
+	  The user is "admin". Empty (the default) leaves the admin routes
+	  disabled: they answer 403 to every request, so a remote that was
+	  never given a password cannot be re-roled or restarted over the
+	  network. Set it in a local, uncommitted conf fragment, e.g.
+	  --extra-conf admin.conf.
+
+endif # PROTECTIVE_STOP_HTTP
+
+endmenu
+
 source "Kconfig.zephyr"

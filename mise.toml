@@ -101,8 +101,14 @@ mise run patch-zenoh
 '''
 
 [tasks."blobs-fetch"]
-run = "west blobs fetch hal_espressif hal_infineon"
-description = "Fetch required binary blobs: Espressif HAL (WiFi/BLE firmware) and Infineon HAL (CYW43439 firmware for pico_fw, Nicla Vision)."
+# Infineon: only the radio firmware under img/. Its flash-loader blobs are
+# debugger-only and fetched from a moving upstream branch, so their pinned
+# checksums break without warning (PSE84_SMIF.FLM, 2026-10-22).
+run = [
+  "west blobs fetch hal_espressif",
+  "west blobs fetch hal_infineon --allow-regex 'img/'",
+]
+description = "Fetch required binary blobs: Espressif HAL (WiFi/BLE firmware) and Infineon HAL radio firmware (CYW43439 for pico_fw, Nicla Vision)."
 
 [tasks."sdk-install"]
 description = "Install Zephyr SDK toolchains for this project's targets (version pinned in deps/zephyr/SDK_VERSION). No-op beyond CMake registration when everything is already present."

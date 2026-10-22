@@ -17,6 +17,10 @@ LOG_MODULE_REGISTER(app_settings, LOG_LEVEL_INF);
 
 #define PSTOP_SETTINGS_ROOT "pstop"
 
+/* Guards peers[]: the HTTP thread writes slots while the comparator reads
+ * them. device_id and is_operator are single words, read whole.
+ */
+static K_MUTEX_DEFINE(peers_lock);
 static struct pstop_peer peers[PSTOP_MAX_MACHINES];
 static uint32_t device_id;
 static bool is_operator;
@@ -82,12 +86,16 @@ int app_settings_init(void)
 	return 0;
 }
 
-const struct pstop_peer *app_settings_peer(int slot)
+int app_settings_peer_get(int slot, struct pstop_peer *out)
 {
-	if ((slot < 0) || (slot >= PSTOP_MAX_MACHINES)) {
-		return NULL;
+	if ((slot < 0) || (slot >= PSTOP_MAX_MACHINES) || (out == NULL)) {
+		return -EINVAL;
 	}
-	return &peers[slot];
+
+	(void)k_mutex_lock(&peers_lock, K_FOREVER);
+	*out = peers[slot];
+	(void)k_mutex_unlock(&peers_lock);
+	return 0;
 }
 
 static int save_peer(int slot, const struct pstop_peer *peer)
@@ -107,18 +115,19 @@ int app_settings_set_peer(int slot, uint32_t ip, uint16_t port, uint32_t id)
 		return -EINVAL;
 	}
 
+	(void)memset(&peer, 0, sizeof(peer));
 	peer.ip = ip;
 	peer.port = port;
 	peer.id = id;
 	peer.configured = true;
 
+	(void)k_mutex_lock(&peers_lock, K_FOREVER);
 	ret = save_peer(slot, &peer);
-	if (ret != 0) {
-		return ret;
+	if (ret == 0) {
+		peers[slot] = peer;
 	}
-
-	peers[slot] = peer;
-	return 0;
+	(void)k_mutex_unlock(&peers_lock);
+	return ret;
 }
 
 int app_settings_clear_peer(int slot)
@@ -132,13 +141,13 @@ int app_settings_clear_peer(int slot)
 
 	(void)memset(&peer, 0, sizeof(peer));
 
+	(void)k_mutex_lock(&peers_lock, K_FOREVER);
 	ret = save_peer(slot, &peer);
-	if (ret != 0) {
-		return ret;
+	if (ret == 0) {
+		peers[slot] = peer;
 	}
-
-	peers[slot] = peer;
-	return 0;
+	(void)k_mutex_unlock(&peers_lock);
+	return ret;
 }
 
 uint32_t app_settings_device_id(void)

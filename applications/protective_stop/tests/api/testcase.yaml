@@ -1,0 +1,22 @@
+tests:
+  protective_stop.api:
+    tags:
+      - protective_stop
+      - pstop
+      - http
+    platform_allow:
+      - native_sim/native/64
+    integration_platforms:
+      - native_sim/native/64
+  # The shipped default: no password, admin routes refuse everything.
+  protective_stop.api.admin_disabled:
+    tags:
+      - protective_stop
+      - pstop
+      - http
+    platform_allow:
+      - native_sim/native/64
+    integration_platforms:
+      - native_sim/native/64
+    extra_configs:
+      - CONFIG_PROTECTIVE_STOP_ADMIN_PASSWORD=""
