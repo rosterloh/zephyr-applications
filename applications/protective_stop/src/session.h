@@ -22,6 +22,7 @@
 #include <zephyr/net/socket.h>
 
 #include "app_settings.h"
+#include "pstop_aux_channel.h"
 #include "pstop/protocol_data.h"
 #include "pstop/pstop_msg.h"
 
@@ -56,6 +57,12 @@ enum pstop_sess_state {
 	PSTOP_SESS_IDLE = 0,
 	PSTOP_SESS_BONDING = 1,
 	PSTOP_SESS_BONDED = 2,
+	/* The machine answered UNBOND: admission refused, or it holds no bond
+	 * for us. Parked, with no automatic retries, until
+	 * pstop_session_rebond() or a reboot. Same value as upstream's
+	 * SESS_REJECTED, which /state.json reports as state 3.
+	 */
+	PSTOP_SESS_REJECTED = 3,
 };
 
 struct pstop_session {
@@ -78,7 +85,7 @@ struct pstop_session {
 	uint32_t replies;
 	uint32_t send_fail;
 	uint32_t rebonds;
-	uint32_t unbonds; /* UNBOND replies: refused admission or a forgotten bond */
+	uint32_t unbonds; /* UNBOND replies, each of which parks the session */
 	uint8_t last_msg;
 };
 
@@ -108,8 +115,12 @@ bool pstop_session_due(const struct pstop_session *s, uint64_t now_ms);
 /* Encode this tick's 48-byte frame into out48. SIDE-EFFECT FREE: calling it
  * twice with the same arguments must produce identical bytes, because both
  * lockstep samplers call it and the comparator byte-compares the results.
+ * The role is an argument, not read from settings here, so the comparator can
+ * snapshot it once per tick: a role change landing between the two samplers'
+ * builds would otherwise split their encodings.
  */
-void pstop_session_build(struct pstop_session *s, uint8_t verdict, uint64_t now_ms, uint8_t *out48);
+void pstop_session_build(struct pstop_session *s, uint8_t verdict, pstop_aux_role_t role,
+			 uint64_t now_ms, uint8_t *out48);
 
 /* Transmit a frame the comparator has already validated, then advance the
  * counter. Counter advances ONLY here, so the machine sees contiguous
@@ -124,5 +135,10 @@ void pstop_session_poll(struct pstop_session *s, uint64_t now_ms);
 
 /* Re-bond if the machine has gone quiet for longer than the derived window. */
 void pstop_session_watchdog(struct pstop_session *s, uint64_t now_ms);
+
+/* Start bonding afresh from any state. The only exit from
+ * PSTOP_SESS_REJECTED short of a reboot; harmless in any other state.
+ */
+void pstop_session_rebond(struct pstop_session *s);
 
 #endif /* PROTECTIVE_STOP_SESSION_H */

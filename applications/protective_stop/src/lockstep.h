@@ -39,9 +39,13 @@
  */
 #define PSTOP_TICK_MS 100U
 
-/* Each sampler must publish within this long of the tick, leaving the
- * comparator slack to drain replies and re-align. A missed deadline is
- * counted separately from a mismatch -- see pstop_lockstep_missed_deadlines().
+/* BOTH samplers must publish within this long of the tick, leaving the
+ * comparator slack to drain replies and re-align. It is one absolute deadline
+ * shared by both waits, not one per sampler: two sequential 80 ms waits would
+ * let the second sampler publish up to 160 ms late and still transmit, and
+ * would blame a both-late tick on the first sampler alone. A tick where either
+ * sampler lands outside the window is tainted and sends nothing, counted
+ * separately from a mismatch -- see pstop_lockstep_missed_deadlines().
  */
 #define PSTOP_SAMPLER_DEADLINE_MS 80U
 
@@ -74,6 +78,36 @@ uint32_t pstop_lockstep_missed_deadlines(void);
 /* Read a slot's session, or NULL if the slot is out of range. */
 const struct pstop_session *pstop_lockstep_session(int slot);
 
+/* Ask the comparator to re-bond a slot at the start of its next tick. The only
+ * way out of PSTOP_SESS_REJECTED short of a reboot. Safe from any thread: it
+ * only sets a flag the comparator consumes. Returns 0, or -EINVAL for a slot
+ * out of range.
+ */
+int pstop_lockstep_request_rebond(int slot);
+
+/* What the comparator knew about its most recent faults. The two counters say
+ * how often; this says which side and when, so a late sampler can be told
+ * apart from two samplers that disagreed (upstream's pstop_mm_last).
+ */
+struct pstop_lockstep_diag {
+	/* Last tick tainted by a sampler outside the publish window. */
+	uint8_t late_mask;       /* bit c set = sampler c was late */
+	uint32_t late_by_ms;     /* worst lateness past the deadline, if known */
+	uint64_t late_uptime_ms; /* valid once missed_deadlines > 0 */
+
+	/* Last tick where the two encodings disagreed. */
+	uint8_t mismatch_slot;
+	uint8_t mismatch_offset;     /* first differing byte in the 48-byte frame */
+	uint8_t mismatch_verdict[2]; /* each sampler's verdict on that tick */
+	uint64_t mismatch_uptime_ms; /* valid once mismatches > 0 */
+
+	/* Worst observed notify-to-publish latency per sampler. */
+	uint32_t latency_max_ms[2];
+};
+
+/* Copy out the comparator's fault attribution. Safe from any thread. */
+void pstop_lockstep_diag_get(struct pstop_lockstep_diag *out);
+
 #ifdef CONFIG_ZTEST
 /* Test-only: white-box access to the generation-stamp completion check.
  *
@@ -87,6 +121,17 @@ const struct pstop_session *pstop_lockstep_session(int slot);
 void pstop_lockstep_test_set_sampler_gen(int channel, uint32_t gen);
 uint32_t pstop_lockstep_test_tick_gen(void);
 bool pstop_lockstep_test_samplers_published(void);
+
+/* Test-only: run one synchronous tick as if the samplers in late_mask had
+ * published only after the window closed. Their frames are current, so only
+ * the window check can refuse them.
+ */
+void pstop_lockstep_test_tick_late(uint64_t now_ms, uint8_t late_mask);
+
+/* Test-only: called between the two samplers of a synchronous tick, to land a
+ * change (a role flip) exactly where it would split their encodings.
+ */
+extern void (*pstop_lockstep_test_between_samplers)(void);
 #endif /* CONFIG_ZTEST */
 
 #endif /* PROTECTIVE_STOP_LOCKSTEP_H */

@@ -85,8 +85,8 @@ ZTEST(pstop_session, test_counter_advances_only_on_commit)
 	 * this is exactly what the two lockstep samplers do, and if build()
 	 * advanced the counter they would never match.
 	 */
-	pstop_session_build(&sess, PSTOP_MESSAGE_OK, 5000ULL, a);
-	pstop_session_build(&sess, PSTOP_MESSAGE_OK, 5000ULL, b);
+	pstop_session_build(&sess, PSTOP_MESSAGE_OK, PSTOP_AUX_ROLE_STOP_ONLY, 5000ULL, a);
+	pstop_session_build(&sess, PSTOP_MESSAGE_OK, PSTOP_AUX_ROLE_STOP_ONLY, 5000ULL, b);
 	zassert_mem_equal(a, b, PSTOP_MESSAGE_SIZE, "two builds must agree");
 
 	/* Pin the property at the state level too, not just at the output:
@@ -104,12 +104,12 @@ ZTEST(pstop_session, test_committed_sends_have_contiguous_counters)
 	pstop_msg_t msg;
 	uint32_t first;
 
-	pstop_session_build(&sess, PSTOP_MESSAGE_OK, 5000ULL, buf);
+	pstop_session_build(&sess, PSTOP_MESSAGE_OK, PSTOP_AUX_ROLE_STOP_ONLY, 5000ULL, buf);
 	pstop_message_decode(&msg, buf);
 	first = msg.counter;
 	(void)pstop_session_commit_send(&sess, buf, 5000ULL);
 
-	pstop_session_build(&sess, PSTOP_MESSAGE_OK, 5500ULL, buf);
+	pstop_session_build(&sess, PSTOP_MESSAGE_OK, PSTOP_AUX_ROLE_STOP_ONLY, 5500ULL, buf);
 	pstop_message_decode(&msg, buf);
 
 	/* Contiguous, NOT +5 for the five 100 ms ticks that elapsed. The
@@ -123,7 +123,7 @@ ZTEST(pstop_session, test_first_message_is_a_bond)
 	uint8_t buf[PSTOP_MESSAGE_SIZE];
 	pstop_msg_t msg;
 
-	pstop_session_build(&sess, PSTOP_MESSAGE_OK, 1000ULL, buf);
+	pstop_session_build(&sess, PSTOP_MESSAGE_OK, PSTOP_AUX_ROLE_STOP_ONLY, 1000ULL, buf);
 	pstop_message_decode(&msg, buf);
 
 	zassert_equal(msg.message, PSTOP_MESSAGE_BOND,
@@ -137,11 +137,11 @@ ZTEST(pstop_session, test_bonded_session_carries_the_verdict)
 
 	sess.state = PSTOP_SESS_BONDED;
 
-	pstop_session_build(&sess, PSTOP_MESSAGE_STOP, 1000ULL, buf);
+	pstop_session_build(&sess, PSTOP_MESSAGE_STOP, PSTOP_AUX_ROLE_STOP_ONLY, 1000ULL, buf);
 	pstop_message_decode(&msg, buf);
 	zassert_equal(msg.message, PSTOP_MESSAGE_STOP, "verdict must reach the wire");
 
-	pstop_session_build(&sess, PSTOP_MESSAGE_OK, 1000ULL, buf);
+	pstop_session_build(&sess, PSTOP_MESSAGE_OK, PSTOP_AUX_ROLE_STOP_ONLY, 1000ULL, buf);
 	pstop_message_decode(&msg, buf);
 	zassert_equal(msg.message, PSTOP_MESSAGE_OK, "verdict must reach the wire");
 }
@@ -152,7 +152,7 @@ ZTEST(pstop_session, test_addressing_matches_the_peer)
 	pstop_msg_t msg;
 
 	(void)app_settings_set_device_id(0xC0A80105U);
-	pstop_session_build(&sess, PSTOP_MESSAGE_OK, 1000ULL, buf);
+	pstop_session_build(&sess, PSTOP_MESSAGE_OK, PSTOP_AUX_ROLE_STOP_ONLY, 1000ULL, buf);
 	pstop_message_decode(&msg, buf);
 
 	zassert_equal(msg.receiver_id.data, peer.id, "receiver must be the machine id");
@@ -198,14 +198,12 @@ ZTEST(pstop_session, test_bond_frame_carries_stop_only_role)
 	uint8_t buf[PSTOP_MESSAGE_SIZE];
 	pstop_msg_t msg;
 
-	(void)app_settings_set_operator(false);
-
-	pstop_session_build(&sess, PSTOP_MESSAGE_OK, 1000ULL, buf);
+	pstop_session_build(&sess, PSTOP_MESSAGE_OK, PSTOP_AUX_ROLE_STOP_ONLY, 1000ULL, buf);
 	pstop_message_decode(&msg, buf);
 
 	zassert_equal(msg.message, PSTOP_MESSAGE_BOND, "unbonded session must send a BOND frame");
 	zassert_equal(pstop_aux_decode_role(&msg), PSTOP_AUX_ROLE_STOP_ONLY,
-		      "BOND frame must announce stop-only when not an operator");
+		      "BOND frame must announce the stop-only role it was given");
 }
 
 ZTEST(pstop_session, test_bond_frame_carries_operator_role)
@@ -213,9 +211,7 @@ ZTEST(pstop_session, test_bond_frame_carries_operator_role)
 	uint8_t buf[PSTOP_MESSAGE_SIZE];
 	pstop_msg_t msg;
 
-	(void)app_settings_set_operator(true);
-
-	pstop_session_build(&sess, PSTOP_MESSAGE_OK, 1000ULL, buf);
+	pstop_session_build(&sess, PSTOP_MESSAGE_OK, PSTOP_AUX_ROLE_OPERATOR, 1000ULL, buf);
 	pstop_message_decode(&msg, buf);
 
 	zassert_equal(msg.message, PSTOP_MESSAGE_BOND, "unbonded session must send a BOND frame");
@@ -229,13 +225,11 @@ ZTEST(pstop_session, test_heartbeat_frame_carries_stop_only_role)
 	pstop_msg_t msg;
 
 	sess.state = PSTOP_SESS_BONDED;
-	(void)app_settings_set_operator(false);
-
-	pstop_session_build(&sess, PSTOP_MESSAGE_OK, 1000ULL, buf);
+	pstop_session_build(&sess, PSTOP_MESSAGE_OK, PSTOP_AUX_ROLE_STOP_ONLY, 1000ULL, buf);
 	pstop_message_decode(&msg, buf);
 
 	zassert_equal(pstop_aux_decode_role(&msg), PSTOP_AUX_ROLE_STOP_ONLY,
-		      "heartbeat frame must announce stop-only when not an operator");
+		      "heartbeat frame must announce the stop-only role it was given");
 }
 
 ZTEST(pstop_session, test_heartbeat_frame_carries_operator_role)
@@ -244,9 +238,7 @@ ZTEST(pstop_session, test_heartbeat_frame_carries_operator_role)
 	pstop_msg_t msg;
 
 	sess.state = PSTOP_SESS_BONDED;
-	(void)app_settings_set_operator(true);
-
-	pstop_session_build(&sess, PSTOP_MESSAGE_OK, 1000ULL, buf);
+	pstop_session_build(&sess, PSTOP_MESSAGE_OK, PSTOP_AUX_ROLE_OPERATOR, 1000ULL, buf);
 	pstop_message_decode(&msg, buf);
 
 	zassert_equal(pstop_aux_decode_role(&msg), PSTOP_AUX_ROLE_OPERATOR,
@@ -351,7 +343,7 @@ static void make_unbond(pstop_msg_t *msg)
 	msg->heartbeat_timeout = 0U;
 }
 
-ZTEST(pstop_session, test_poll_unbond_does_not_bond)
+ZTEST(pstop_session, test_unbond_parks_a_bonding_session)
 {
 	pstop_msg_t msg;
 
@@ -361,20 +353,20 @@ ZTEST(pstop_session, test_poll_unbond_does_not_bond)
 
 	pstop_session_poll(&sess, 5000ULL);
 
-	zassert_equal(sess.state, PSTOP_SESS_BONDING, "a refused BOND must not read as bonded");
+	zassert_equal(sess.state, PSTOP_SESS_REJECTED, "a refused BOND must park the session");
 	zassert_equal(sess.last_reply_ms, 0U, "UNBOND is not a reply");
 	zassert_equal(sess.proto.last_received_counter, 0U, "must not adopt UNBOND's counter");
 	zassert_equal(sess.last_msg, PSTOP_MESSAGE_UNBOND, "UNBOND must be visible");
 	zassert_equal(sess.unbonds, 1U, "UNBOND must be counted");
 }
 
-ZTEST(pstop_session, test_unbond_while_bonded_lets_the_watchdog_rebond)
+ZTEST(pstop_session, test_unbond_parks_a_bonded_session)
 {
 	pstop_msg_t msg;
 	uint64_t now;
 
-	/* Bonded, last real reply at t=1000. The machine then restarts and
-	 * answers every heartbeat with UNBOND.
+	/* Bonded, last real reply at t=1000. The machine then denylists us
+	 * live, or restarts, and answers the next heartbeat with UNBOND.
 	 */
 	sess.state = PSTOP_SESS_BONDED;
 	sess.hb_ms = 400U;
@@ -385,11 +377,65 @@ ZTEST(pstop_session, test_unbond_while_bonded_lets_the_watchdog_rebond)
 	send_from_peer(&msg);
 	pstop_session_poll(&sess, now);
 
+	zassert_equal(sess.state, PSTOP_SESS_REJECTED, "UNBOND must park a bonded session");
 	zassert_equal(sess.last_reply_ms, 1000ULL, "UNBOND must not refresh liveness");
 
+	/* No automatic way out: the watchdog must not turn parking back into
+	 * a knock every PSTOP_BOND_RETRY_MS.
+	 */
 	pstop_session_watchdog(&sess, now);
-	zassert_equal(sess.state, PSTOP_SESS_IDLE, "a session hearing only UNBOND must re-bond");
+	zassert_equal(sess.state, PSTOP_SESS_REJECTED, "the watchdog must leave a parked session");
+	zassert_equal(sess.rebonds, 0U, "parking is not a rebond");
+}
+
+ZTEST(pstop_session, test_parked_session_sends_nothing)
+{
+	sess.state = PSTOP_SESS_REJECTED;
+
+	zassert_false(pstop_session_due(&sess, 0ULL), "a parked session is never due");
+	zassert_false(pstop_session_due(&sess, 1000000ULL), "a parked session is never due");
+}
+
+ZTEST(pstop_session, test_parked_session_ignores_late_replies)
+{
+	pstop_msg_t msg;
+	device_id_t me;
+	device_id_t machine;
+
+	/* An ack to a heartbeat sent before the UNBOND, arriving after it,
+	 * must not un-park the session.
+	 */
+	sess.state = PSTOP_SESS_REJECTED;
+	device_id_set(&me, app_settings_device_id());
+	device_id_set(&machine, peer.id);
+	pstop_create_ok_message(&msg, 1000ULL, 0ULL, &machine, &me, 3U, 2U);
+	msg.heartbeat_timeout = 400U;
+	send_from_peer(&msg);
+
+	pstop_session_poll(&sess, 5000ULL);
+
+	zassert_equal(sess.state, PSTOP_SESS_REJECTED, "a late ack must not un-park");
+	zassert_equal(sess.last_reply_ms, 0U, "a late ack must not refresh liveness");
+}
+
+ZTEST(pstop_session, test_rebond_leaves_rejected)
+{
+	uint8_t buf[PSTOP_MESSAGE_SIZE];
+	pstop_msg_t msg;
+
+	sess.state = PSTOP_SESS_REJECTED;
+	sess.proto.msg_counter = 42U;
+
+	pstop_session_rebond(&sess);
+
+	zassert_equal(sess.state, PSTOP_SESS_IDLE, "rebond must leave REJECTED");
 	zassert_equal(sess.rebonds, 1U, "rebond must be counted");
+	zassert_true(pstop_session_due(&sess, 0ULL), "a rebonded session is due at once");
+
+	pstop_session_build(&sess, PSTOP_MESSAGE_OK, PSTOP_AUX_ROLE_STOP_ONLY, 1000ULL, buf);
+	pstop_message_decode(&msg, buf);
+	zassert_equal(msg.message, PSTOP_MESSAGE_BOND, "a rebonded session must BOND first");
+	zassert_equal(msg.counter, 1U, "rebond must restart the counter baseline");
 }
 
 ZTEST_SUITE(pstop_session, NULL, suite_setup, test_before, test_after, NULL);

@@ -91,8 +91,13 @@ int main(void)
 
 		if ((mismatches != last_mismatches) || (gated_ticks != last_gated_ticks) ||
 		    (missed_deadlines != last_missed_deadlines)) {
-			LOG_INF("lockstep health: mismatches=%u gated_ticks=%u missed_deadlines=%u",
-				mismatches, gated_ticks, missed_deadlines);
+			struct pstop_lockstep_diag diag;
+
+			pstop_lockstep_diag_get(&diag);
+			LOG_INF("lockstep health: mismatches=%u gated_ticks=%u missed_deadlines=%u "
+				"last_late=%#x worst_latency=%u/%u ms",
+				mismatches, gated_ticks, missed_deadlines, diag.late_mask,
+				diag.latency_max_ms[0], diag.latency_max_ms[1]);
 			last_mismatches = mismatches;
 			last_gated_ticks = gated_ticks;
 			last_missed_deadlines = missed_deadlines;

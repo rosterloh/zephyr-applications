@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#include <errno.h>
 #include <string.h>
 
 #include <zephyr/kernel.h>
@@ -39,6 +40,28 @@ static uint8_t frames[ESTOP_CHANNELS][PSTOP_MAX_MACHINES][PSTOP_MESSAGE_SIZE];
  */
 static uint64_t tick_now_ms;
 static bool tick_due[PSTOP_MAX_MACHINES];
+
+/* The role, snapshotted once per tick with the rest. The role can change at
+ * runtime (and will over HTTP in slice 3); if each sampler read settings
+ * itself, a change landing between their builds would split the encodings.
+ */
+static pstop_aux_role_t tick_role;
+
+/* Each sampler's verdict this tick, for mismatch attribution. */
+static uint8_t sampler_verdict[ESTOP_CHANNELS];
+
+/* Uptime at which each sampler last published, for latency attribution. */
+static atomic_t sampler_done_ms[ESTOP_CHANNELS];
+
+/* Rebond requests from other threads, consumed by begin_tick(). */
+static atomic_t rebond_requests;
+
+static struct pstop_lockstep_diag diag;
+static struct k_spinlock diag_lock;
+
+#ifdef CONFIG_ZTEST
+void (*pstop_lockstep_test_between_samplers)(void);
+#endif
 
 /* Which tick generation is in flight, and which generation each sampler last
  * completed. A counting semaphore cannot carry this: see the header comment
@@ -125,13 +148,16 @@ static void sampler_pass(int channel, uint32_t gen)
 {
 	uint8_t verdict = estop_channel_sample(channel, &estop[channel]);
 
+	sampler_verdict[channel] = verdict;
+
 	for (int slot = 0; slot < PSTOP_MAX_MACHINES; slot++) {
 		if (slot_active[slot] && tick_due[slot]) {
-			pstop_session_build(&sessions[slot], verdict, tick_now_ms,
+			pstop_session_build(&sessions[slot], verdict, tick_role, tick_now_ms,
 					    frames[channel][slot]);
 		}
 	}
 
+	atomic_set(&sampler_done_ms[channel], (atomic_val_t)k_uptime_get_32());
 	atomic_set(&sampler_gen[channel], (atomic_val_t)gen);
 }
 
@@ -147,6 +173,54 @@ static bool samplers_published(uint32_t gen)
 		}
 	}
 	return true;
+}
+
+/* Attribute a content mismatch: which slot, where the frames first differ, and
+ * what each sampler read. The scan is bounded by the memcmp that already
+ * failed, so it always finds a byte.
+ */
+static void record_mismatch(int slot)
+{
+	k_spinlock_key_t key;
+	uint8_t offset = 0U;
+
+	while ((offset < PSTOP_MESSAGE_SIZE) &&
+	       (frames[0][slot][offset] == frames[1][slot][offset])) {
+		offset++;
+	}
+
+	key = k_spin_lock(&diag_lock);
+	diag.mismatch_slot = (uint8_t)slot;
+	diag.mismatch_offset = offset;
+	diag.mismatch_verdict[0] = sampler_verdict[0];
+	diag.mismatch_verdict[1] = sampler_verdict[1];
+	diag.mismatch_uptime_ms = (uint64_t)k_uptime_get();
+	k_spin_unlock(&diag_lock, key);
+
+	LOG_WRN("lockstep mismatch: slot %d byte %u, verdicts %02x/%02x", slot, offset,
+		sampler_verdict[0], sampler_verdict[1]);
+}
+
+/* Attribute a tainted tick to the sampler(s) that missed the window. */
+static void record_late(uint8_t late_mask, uint32_t late_by_ms)
+{
+	k_spinlock_key_t key = k_spin_lock(&diag_lock);
+
+	diag.late_mask = late_mask;
+	diag.late_by_ms = late_by_ms;
+	diag.late_uptime_ms = (uint64_t)k_uptime_get();
+	k_spin_unlock(&diag_lock, key);
+}
+
+/* Fold one sampler's notify-to-publish latency into the running worst. */
+static void record_latency(int channel, uint32_t latency_ms)
+{
+	k_spinlock_key_t key = k_spin_lock(&diag_lock);
+
+	if (latency_ms > diag.latency_max_ms[channel]) {
+		diag.latency_max_ms[channel] = latency_ms;
+	}
+	k_spin_unlock(&diag_lock, key);
 }
 
 /* Compare every due slot's pair of encodings, then transmit only if ALL of
@@ -174,6 +248,7 @@ static void comparator_pass(void)
 		}
 		if (memcmp(frames[0][slot], frames[1][slot], PSTOP_MESSAGE_SIZE) != 0) {
 			all_agreed = false;
+			record_mismatch(slot);
 			break;
 		}
 	}
@@ -206,7 +281,17 @@ static uint32_t begin_tick(uint64_t now_ms)
 	 * generation is guaranteed to see these writes, not a stale snapshot
 	 * from the prior tick.
 	 */
+	atomic_val_t rebond = atomic_clear(&rebond_requests);
+
+	for (int slot = 0; slot < PSTOP_MAX_MACHINES; slot++) {
+		if (slot_active[slot] && ((rebond & BIT(slot)) != 0)) {
+			LOG_INF("slot %d rebond requested (state %d)", slot, sessions[slot].state);
+			pstop_session_rebond(&sessions[slot]);
+		}
+	}
+
 	tick_now_ms = now_ms;
+	tick_role = app_settings_is_operator() ? PSTOP_AUX_ROLE_OPERATOR : PSTOP_AUX_ROLE_STOP_ONLY;
 	for (int slot = 0; slot < PSTOP_MAX_MACHINES; slot++) {
 		tick_due[slot] = slot_active[slot] && pstop_session_due(&sessions[slot], now_ms);
 	}
@@ -218,14 +303,26 @@ static uint32_t begin_tick(uint64_t now_ms)
 /* Compare-or-decline, then poll and watchdog every active session. Shared by
  * the synchronous and threaded paths: the only difference between them is how
  * the samplers ran, not what happens once they have (or have not).
+ *
+ * late_mask names the samplers that did not publish inside the window. A late
+ * frame can still carry the current generation, so the window and the
+ * generation are both required: the generation proves which tick a frame is
+ * for, the window proves it was fresh enough to send.
  */
-static void run_tick_body(uint64_t now_ms, uint32_t gen)
+static void run_tick_body(uint64_t now_ms, uint32_t gen, uint8_t late_mask, uint32_t late_by_ms)
 {
-	if (samplers_published(gen)) {
+	for (int c = 0; c < ESTOP_CHANNELS; c++) {
+		if ((uint32_t)atomic_get(&sampler_gen[c]) != gen) {
+			late_mask |= BIT(c);
+		}
+	}
+
+	if ((late_mask == 0U) && samplers_published(gen)) {
 		comparator_pass();
 	} else {
-		LOG_WRN("sampler(s) missed tick %u", gen);
+		LOG_WRN("sampler(s) %#x missed tick %u", late_mask, gen);
 		missed_deadlines++;
+		record_late(late_mask, late_by_ms);
 	}
 
 	for (int slot = 0; slot < PSTOP_MAX_MACHINES; slot++) {
@@ -236,15 +333,25 @@ static void run_tick_body(uint64_t now_ms, uint32_t gen)
 	}
 }
 
-void pstop_lockstep_tick(uint64_t now_ms)
+static void tick_sync(uint64_t now_ms, uint8_t late_mask)
 {
 	uint32_t gen = begin_tick(now_ms);
 
 	for (int c = 0; c < ESTOP_CHANNELS; c++) {
 		sampler_pass(c, gen);
+#ifdef CONFIG_ZTEST
+		if ((c == 0) && (pstop_lockstep_test_between_samplers != NULL)) {
+			pstop_lockstep_test_between_samplers();
+		}
+#endif
 	}
 
-	run_tick_body(now_ms, gen);
+	run_tick_body(now_ms, gen, late_mask, 0U);
+}
+
+void pstop_lockstep_tick(uint64_t now_ms)
+{
+	tick_sync(now_ms, 0U);
 }
 
 uint32_t pstop_lockstep_mismatches(void)
@@ -268,6 +375,23 @@ const struct pstop_session *pstop_lockstep_session(int slot)
 		return NULL;
 	}
 	return &sessions[slot];
+}
+
+int pstop_lockstep_request_rebond(int slot)
+{
+	if ((slot < 0) || (slot >= PSTOP_MAX_MACHINES)) {
+		return -EINVAL;
+	}
+	(void)atomic_or(&rebond_requests, (atomic_val_t)BIT(slot));
+	return 0;
+}
+
+void pstop_lockstep_diag_get(struct pstop_lockstep_diag *out)
+{
+	k_spinlock_key_t key = k_spin_lock(&diag_lock);
+
+	*out = diag;
+	k_spin_unlock(&diag_lock, key);
 }
 
 static void sampler_thread(void *p1, void *p2, void *p3)
@@ -298,6 +422,9 @@ static void comparator_thread(void *p1, void *p2, void *p3)
 	for (;;) {
 		uint64_t now_ms;
 		uint32_t gen;
+		int64_t deadline;
+		uint8_t late_mask;
+		uint32_t late_by_ms;
 
 		next += PSTOP_TICK_MS;
 
@@ -308,24 +435,45 @@ static void comparator_thread(void *p1, void *p2, void *p3)
 		 */
 		now_ms = (uint64_t)k_uptime_get();
 		gen = begin_tick(now_ms);
+		deadline = (int64_t)now_ms + PSTOP_SAMPLER_DEADLINE_MS;
+		late_mask = 0U;
+		late_by_ms = 0U;
+
+		/* Drop a give left over from a sampler that finished after the
+		 * previous tick's window, so it cannot satisfy this tick's take.
+		 */
+		for (int c = 0; c < ESTOP_CHANNELS; c++) {
+			k_sem_reset(done_sem[c]);
+		}
 
 		for (int c = 0; c < ESTOP_CHANNELS; c++) {
 			k_sem_give(go_sem[c]);
 		}
 
-		/* The semaphore only carries wakeup here, not correctness: a
-		 * timed-out take just means don't wait longer, not that the
-		 * sampler's own generation stamp (checked in run_tick_body()
-		 * via samplers_published()) is untrustworthy. A sampler that
-		 * gives late still cannot make its stale frame look current.
+		/* One absolute deadline for both takes: the second sampler
+		 * gets whatever the first left, never a fresh 80 ms. Both
+		 * takes always run, so a give that is already pending is
+		 * consumed even when the window has closed. A timed-out take
+		 * taints the tick even if the sampler publishes before
+		 * run_tick_body() looks: a frame that missed the window is not
+		 * fresh, whatever its generation says.
 		 */
 		for (int c = 0; c < ESTOP_CHANNELS; c++) {
-			if (k_sem_take(done_sem[c], K_MSEC(PSTOP_SAMPLER_DEADLINE_MS)) != 0) {
-				LOG_WRN("sampler %d missed its deadline", c);
+			if (k_sem_take(done_sem[c], K_TIMEOUT_ABS_MS(deadline)) != 0) {
+				late_mask |= BIT(c);
+			} else {
+				record_latency(c, (uint32_t)atomic_get(&sampler_done_ms[c]) -
+							  (uint32_t)now_ms);
 			}
 		}
 
-		run_tick_body(now_ms, gen);
+		if (late_mask != 0U) {
+			int64_t over = k_uptime_get() - deadline;
+
+			late_by_ms = (over > 0) ? (uint32_t)over : 0U;
+		}
+
+		run_tick_body(now_ms, gen, late_mask, late_by_ms);
 
 		k_sleep(K_TIMEOUT_ABS_MS(next));
 	}
@@ -373,5 +521,10 @@ uint32_t pstop_lockstep_test_tick_gen(void)
 bool pstop_lockstep_test_samplers_published(void)
 {
 	return samplers_published((uint32_t)atomic_get(&tick_gen));
+}
+
+void pstop_lockstep_test_tick_late(uint64_t now_ms, uint8_t late_mask)
+{
+	tick_sync(now_ms, late_mask);
 }
 #endif /* CONFIG_ZTEST */
