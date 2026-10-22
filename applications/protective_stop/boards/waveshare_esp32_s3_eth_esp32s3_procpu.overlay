@@ -1,0 +1,39 @@
+/*
+ * Copyright (c) 2026 Richard Osterloh <richard.osterloh@gmail.com>
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * Dual-channel stop-switch loopback, as wired in the pstop enclosure.
+ *
+ * Each channel runs out of a drive pin, through one pole of the external DPST
+ * normally-closed switch, and back into a sense pin pulled DOWN -- so an open
+ * loop, a cut wire or a pulled plug all read 0 = STOP. The two channels are
+ * independent so that a single-pole fault makes the two lockstep samplers
+ * disagree, which silences transmission and stops every bonded machine.
+ *
+ *     channel A:  GPIO39 (drive) --> DPST pole 1 --> GPIO40 (sense)
+ *     channel B:  GPIO41 (drive) --> DPST pole 2 --> GPIO42 (sense)
+ *
+ * These are enclosure wiring, not board hardware, which is why they live in
+ * an app overlay rather than in the board definition. Pin numbering matches
+ * upstream's ESP-IDF firmware (firmware/main/main.c) so the same harness fits
+ * either build.
+ *
+ * GPIO39-42 sit on gpio1, which covers pins 32-48 on the ESP32-S3, hence the
+ * offsets 7-10 below.
+ *
+ * NOT here, deliberately: the 16-LED ring on GPIO17 and the onboard WS2812
+ * status pixel on GPIO21. Both are slice 4; the status pixel additionally
+ * belongs in the board definition, not this overlay, because it is soldered
+ * to the board.
+ */
+
+#include <zephyr/dt-bindings/gpio/gpio.h>
+
+/ {
+	zephyr,user {
+		estop-a-out-gpios = <&gpio1 7 GPIO_ACTIVE_HIGH>;  /* GPIO39 */
+		estop-a-in-gpios  = <&gpio1 8 GPIO_ACTIVE_HIGH>;  /* GPIO40 */
+		estop-b-out-gpios = <&gpio1 9 GPIO_ACTIVE_HIGH>;  /* GPIO41 */
+		estop-b-in-gpios  = <&gpio1 10 GPIO_ACTIVE_HIGH>; /* GPIO42 */
+	};
+};
