@@ -14,6 +14,7 @@
 
 #include "app_settings.h"
 #include "estop_gpio.h"
+#include "http_server.h"
 #include "lockstep.h"
 #include "pstop/config.h"
 
@@ -21,16 +22,16 @@ LOG_MODULE_REGISTER(pstop, LOG_LEVEL_INF);
 
 /* Fallback peer, applied only when nothing has been provisioned yet. Matches
  * upstream's machine_app defaults so a fresh native_sim build talks to it
- * without any configuration. Slice 3's POST /api/pstop_peers replaces this.
+ * without any configuration. POST /api/pstop_peers overrides it.
  */
 #define DEFAULT_MACHINE_IP   0x7F000001U /* 127.0.0.1 */
 #define DEFAULT_MACHINE_PORT 8890U
 #define DEFAULT_MACHINE_ID   0x01020304U
 #define DEFAULT_DEVICE_ID    0xC0A80105U /* 192.168.1.5 */
 
-/* Lockstep health counters are otherwise silent between /state.json polls
- * (slice 3). Logging on change here is enough to see a stuck-gate or a
- * mismatch spike without polling.
+/* Lockstep health counters are otherwise silent between /state.json polls.
+ * Logging on change here is enough to see a stuck-gate or a mismatch spike
+ * without polling.
  */
 #define COUNTER_LOG_PERIOD_MS 5000U
 
@@ -47,7 +48,10 @@ int main(void)
 		return ret;
 	}
 
-	if (app_settings_peer(0)->configured == false) {
+	struct pstop_peer peer0;
+
+	(void)app_settings_peer_get(0, &peer0);
+	if (!peer0.configured) {
 		LOG_WRN("no peer provisioned; using the built-in default");
 		(void)app_settings_set_peer(0, DEFAULT_MACHINE_IP, DEFAULT_MACHINE_PORT,
 					    DEFAULT_MACHINE_ID);
@@ -76,6 +80,13 @@ int main(void)
 	ret = pstop_lockstep_start();
 	if (ret != 0) {
 		return ret;
+	}
+
+	if (IS_ENABLED(CONFIG_PROTECTIVE_STOP_HTTP)) {
+		/* A control plane that fails to start leaves the remote stopping
+		 * machines as before, just unprovisionable: keep running.
+		 */
+		(void)pstop_http_start();
 	}
 
 	uint32_t last_mismatches = 0;

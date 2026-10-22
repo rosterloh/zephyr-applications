@@ -53,8 +53,11 @@ static uint8_t sampler_verdict[ESTOP_CHANNELS];
 /* Uptime at which each sampler last published, for latency attribution. */
 static atomic_t sampler_done_ms[ESTOP_CHANNELS];
 
-/* Rebond requests from other threads, consumed by begin_tick(). */
+/* Rebond and reconfigure requests from other threads, one bit per slot,
+ * consumed by begin_tick().
+ */
 static atomic_t rebond_requests;
+static atomic_t reconfigure_requests;
 
 static struct pstop_lockstep_diag diag;
 static struct k_spinlock diag_lock;
@@ -95,6 +98,37 @@ static K_SEM_DEFINE(done_sem_1, 0, 1);
 static struct k_sem *const go_sem[ESTOP_CHANNELS] = {&go_sem_0, &go_sem_1};
 static struct k_sem *const done_sem[ESTOP_CHANNELS] = {&done_sem_0, &done_sem_1};
 
+/* (Re)build one slot's session from its settings: close whatever is open,
+ * then open afresh if the slot is configured. A reconfigured slot starts from
+ * IDLE with zeroed counters, bonding to the new machine on its next tick.
+ * Runs only on the comparator's thread (or before it starts), so the sampler
+ * builds never see a session change under them.
+ */
+static bool slot_apply_config(int slot)
+{
+	struct pstop_peer peer;
+	int ret;
+
+	if (slot_active[slot]) {
+		pstop_session_close(&sessions[slot]);
+	}
+	slot_active[slot] = false;
+	sessions[slot].sock = -1;
+
+	if ((app_settings_peer_get(slot, &peer) != 0) || !peer.configured) {
+		return false;
+	}
+
+	ret = pstop_session_open(&sessions[slot], slot, &peer);
+	if (ret != 0) {
+		LOG_ERR("slot %d open failed: %d", slot, ret);
+		return false;
+	}
+
+	slot_active[slot] = true;
+	return true;
+}
+
 int pstop_lockstep_init(void)
 {
 	int opened = 0;
@@ -104,24 +138,10 @@ int pstop_lockstep_init(void)
 	}
 
 	for (int slot = 0; slot < PSTOP_MAX_MACHINES; slot++) {
-		const struct pstop_peer *peer = app_settings_peer(slot);
-		int ret;
-
 		slot_active[slot] = false;
-		sessions[slot].sock = -1;
-
-		if ((peer == NULL) || !peer->configured) {
-			continue;
+		if (slot_apply_config(slot)) {
+			opened++;
 		}
-
-		ret = pstop_session_open(&sessions[slot], slot, peer);
-		if (ret != 0) {
-			LOG_ERR("slot %d open failed: %d", slot, ret);
-			continue;
-		}
-
-		slot_active[slot] = true;
-		opened++;
 	}
 
 	if (opened == 0) {
@@ -195,6 +215,7 @@ static void record_mismatch(int slot)
 	diag.mismatch_verdict[0] = sampler_verdict[0];
 	diag.mismatch_verdict[1] = sampler_verdict[1];
 	diag.mismatch_uptime_ms = (uint64_t)k_uptime_get();
+	diag.last_kind = PSTOP_LOCKSTEP_EVENT_CONTENT;
 	k_spin_unlock(&diag_lock, key);
 
 	LOG_WRN("lockstep mismatch: slot %d byte %u, verdicts %02x/%02x", slot, offset,
@@ -209,6 +230,7 @@ static void record_late(uint8_t late_mask, uint32_t late_by_ms)
 	diag.late_mask = late_mask;
 	diag.late_by_ms = late_by_ms;
 	diag.late_uptime_ms = (uint64_t)k_uptime_get();
+	diag.last_kind = PSTOP_LOCKSTEP_EVENT_TIMEOUT;
 	k_spin_unlock(&diag_lock, key);
 }
 
@@ -281,7 +303,15 @@ static uint32_t begin_tick(uint64_t now_ms)
 	 * generation is guaranteed to see these writes, not a stale snapshot
 	 * from the prior tick.
 	 */
+	atomic_val_t reconfigure = atomic_clear(&reconfigure_requests);
 	atomic_val_t rebond = atomic_clear(&rebond_requests);
+
+	for (int slot = 0; slot < PSTOP_MAX_MACHINES; slot++) {
+		if ((reconfigure & BIT(slot)) != 0) {
+			LOG_INF("slot %d reconfigured: %s", slot,
+				slot_apply_config(slot) ? "active" : "idle");
+		}
+	}
 
 	for (int slot = 0; slot < PSTOP_MAX_MACHINES; slot++) {
 		if (slot_active[slot] && ((rebond & BIT(slot)) != 0)) {
@@ -375,6 +405,39 @@ const struct pstop_session *pstop_lockstep_session(int slot)
 		return NULL;
 	}
 	return &sessions[slot];
+}
+
+int pstop_lockstep_request_reconfigure(int slot)
+{
+	if ((slot < 0) || (slot >= PSTOP_MAX_MACHINES)) {
+		return -EINVAL;
+	}
+	(void)atomic_or(&reconfigure_requests, (atomic_val_t)BIT(slot));
+	return 0;
+}
+
+bool pstop_lockstep_slot_active(int slot)
+{
+	return (slot >= 0) && (slot < PSTOP_MAX_MACHINES) && slot_active[slot];
+}
+
+void pstop_lockstep_loop_health(int channel, bool *high_ok, bool *low_ok)
+{
+	if ((channel < 0) || (channel >= ESTOP_CHANNELS)) {
+		*high_ok = false;
+		*low_ok = false;
+		return;
+	}
+	*high_ok = estop[channel].high_ok;
+	*low_ok = estop[channel].low_ok;
+}
+
+uint8_t pstop_lockstep_last_verdict(int channel)
+{
+	if ((channel < 0) || (channel >= ESTOP_CHANNELS)) {
+		return PSTOP_MESSAGE_STOP;
+	}
+	return sampler_verdict[channel];
 }
 
 int pstop_lockstep_request_rebond(int slot)

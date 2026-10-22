@@ -26,8 +26,15 @@
 #include "pstop/protocol_data.h"
 #include "pstop/pstop_msg.h"
 
-/* Local UDP source ports: slot i binds PSTOP_LOCAL_PORT + i. */
+/* Local UDP source ports: slot i binds PSTOP_LOCAL_PORT + i. Upstream's
+ * 8891..8894 unless the app moves them (the unit suites don't build the
+ * app's Kconfig, so they keep upstream's).
+ */
+#ifdef CONFIG_PROTECTIVE_STOP_LOCAL_PORT
+#define PSTOP_LOCAL_PORT CONFIG_PROTECTIVE_STOP_LOCAL_PORT
+#else
 #define PSTOP_LOCAL_PORT 8891
+#endif
 
 /* Transmit every heartbeat_timeout/2, clamped to this window. The lower bound
  * is the 10 Hz lockstep tick: sampling is a safety property and never slows.

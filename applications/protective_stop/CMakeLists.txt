@@ -15,4 +15,16 @@ target_sources(app PRIVATE
   src/lockstep.c
 )
 
+if(CONFIG_PROTECTIVE_STOP_HTTP)
+  target_sources(app PRIVATE
+    src/http_util.c
+    src/api.c
+    src/http_server.c
+  )
+  zephyr_linker_sources(SECTIONS sections-rom.ld)
+  zephyr_linker_section(NAME http_resource_desc_pstop_http
+    KVMA RAM_REGION GROUP RODATA_REGION
+  )
+endif()
+
 target_include_directories(app PRIVATE src)

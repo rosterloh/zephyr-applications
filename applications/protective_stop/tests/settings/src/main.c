@@ -7,6 +7,8 @@
  * exercises the real persistence path rather than a RAM stub.
  */
 
+#include <errno.h>
+
 #include <zephyr/settings/settings.h>
 #include <zephyr/ztest.h>
 
@@ -21,9 +23,10 @@ static void *suite_setup(void)
 ZTEST(app_settings, test_peers_default_to_unconfigured)
 {
 	for (int slot = 0; slot < PSTOP_MAX_MACHINES; slot++) {
-		const struct pstop_peer *p = app_settings_peer(slot);
+		struct pstop_peer peer;
+		const struct pstop_peer *p = &peer;
 
-		zassert_not_null(p, "slot %d", slot);
+		zassert_ok(app_settings_peer_get(slot, &peer), "slot %d", slot);
 		/* A fresh slot must not be configured: an unconfigured slot is
 		 * never heartbeated, so a garbage default would silently point
 		 * the remote at an unintended address.
@@ -37,11 +40,12 @@ ZTEST(app_settings, test_peers_default_to_unconfigured)
 
 ZTEST(app_settings, test_set_and_read_back_peer)
 {
-	const struct pstop_peer *p;
+	struct pstop_peer peer;
+	const struct pstop_peer *p = &peer;
 
 	zassert_ok(app_settings_set_peer(1, 0xC0A80164U, 8890U, 0x01020304U), "set");
 
-	p = app_settings_peer(1);
+	zassert_ok(app_settings_peer_get(1, &peer), "get");
 	zassert_true(p->configured, "configured");
 	zassert_equal(p->ip, 0xC0A80164U, "ip");
 	zassert_equal(p->port, 8890U, "port");
@@ -50,11 +54,15 @@ ZTEST(app_settings, test_set_and_read_back_peer)
 
 ZTEST(app_settings, test_clear_peer)
 {
+	struct pstop_peer peer;
+
 	zassert_ok(app_settings_set_peer(2, 0x0A000001U, 8890U, 0x11U), "set");
-	zassert_true(app_settings_peer(2)->configured, "configured");
+	zassert_ok(app_settings_peer_get(2, &peer), "get");
+	zassert_true(peer.configured, "configured");
 
 	zassert_ok(app_settings_clear_peer(2), "clear");
-	zassert_false(app_settings_peer(2)->configured, "cleared");
+	zassert_ok(app_settings_peer_get(2, &peer), "get");
+	zassert_false(peer.configured, "cleared");
 }
 
 ZTEST(app_settings, test_out_of_range_slot_is_rejected)
@@ -62,7 +70,11 @@ ZTEST(app_settings, test_out_of_range_slot_is_rejected)
 	zassert_not_equal(app_settings_set_peer(-1, 1U, 1U, 1U), 0, "negative slot");
 	zassert_not_equal(app_settings_set_peer(PSTOP_MAX_MACHINES, 1U, 1U, 1U), 0,
 			  "slot past the end");
-	zassert_is_null(app_settings_peer(PSTOP_MAX_MACHINES), "peer past the end");
+	struct pstop_peer peer;
+
+	zassert_equal(app_settings_peer_get(PSTOP_MAX_MACHINES, &peer), -EINVAL,
+		      "peer past the end");
+	zassert_equal(app_settings_peer_get(-1, &peer), -EINVAL, "negative peer");
 }
 
 ZTEST(app_settings, test_role_defaults_to_stop_only)
@@ -103,7 +115,10 @@ ZTEST(app_settings, test_peer_survives_reload)
 
 	zassert_ok(app_settings_init(), "reload");
 
-	const struct pstop_peer *p = app_settings_peer(3);
+	struct pstop_peer peer;
+	const struct pstop_peer *p = &peer;
+
+	zassert_ok(app_settings_peer_get(3, &peer), "get");
 
 	zassert_true(p->configured, "configured after reload");
 	zassert_equal(p->ip, 0xC0A80101U, "ip after reload");

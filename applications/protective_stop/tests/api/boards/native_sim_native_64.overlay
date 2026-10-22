@@ -1,0 +1,24 @@
+/*
+ * Copyright (c) 2026 Richard Osterloh <richard.osterloh@gmail.com>
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * Dual-channel stop-switch loopback, modelled on gpio_emul.
+ *
+ * On hardware each channel runs out of a drive pin, through one pole of the
+ * external DPST normally-closed switch, and back into a sense pin pulled DOWN
+ * (so an open loop or a cut wire reads 0 = STOP). native_sim has no wire, so
+ * estop_gpio.c mirrors OUT onto IN through a simulated pole; see
+ * estop_sim_set_pole().
+ *
+ * Pin numbers mirror the hardware build (39/40, 41/42) purely so the two
+ * overlays read alike; on gpio_emul any pin below ngpios would do.
+ */
+
+/ {
+	zephyr,user {
+		estop-a-out-gpios = <&gpio0 0 GPIO_ACTIVE_HIGH>;
+		estop-a-in-gpios  = <&gpio0 1 GPIO_ACTIVE_HIGH>;
+		estop-b-out-gpios = <&gpio0 2 GPIO_ACTIVE_HIGH>;
+		estop-b-in-gpios  = <&gpio0 3 GPIO_ACTIVE_HIGH>;
+	};
+};

@@ -78,6 +78,25 @@ uint32_t pstop_lockstep_missed_deadlines(void);
 /* Read a slot's session, or NULL if the slot is out of range. */
 const struct pstop_session *pstop_lockstep_session(int slot);
 
+/* Ask the comparator to re-read a slot's peer from settings at the start of
+ * its next tick: a changed slot re-opens and bonds afresh, a cleared one goes
+ * idle. This is how the HTTP API applies peer changes live. Safe from any
+ * thread. Returns 0, or -EINVAL for a slot out of range.
+ */
+int pstop_lockstep_request_reconfigure(int slot);
+
+/* True if a slot has an open session (configured and bound). */
+bool pstop_lockstep_slot_active(int slot);
+
+/* A channel's latest loop-health reads: the drive-high phase read back high,
+ * the drive-low phase read back low. Both true = the loop is closed. Upstream
+ * reports these as e_hi<c>/e_lo<c>.
+ */
+void pstop_lockstep_loop_health(int channel, bool *high_ok, bool *low_ok);
+
+/* A channel's verdict on the most recent tick (PSTOP_MESSAGE_OK or _STOP). */
+uint8_t pstop_lockstep_last_verdict(int channel);
+
 /* Ask the comparator to re-bond a slot at the start of its next tick. The only
  * way out of PSTOP_SESS_REJECTED short of a reboot. Safe from any thread: it
  * only sets a flag the comparator consumes. Returns 0, or -EINVAL for a slot
@@ -89,7 +108,17 @@ int pstop_lockstep_request_rebond(int slot);
  * how often; this says which side and when, so a late sampler can be told
  * apart from two samplers that disagreed (upstream's pstop_mm_last).
  */
+/* Which fault the diag record's most recent event was. */
+enum pstop_lockstep_event {
+	PSTOP_LOCKSTEP_EVENT_NONE = 0,
+	PSTOP_LOCKSTEP_EVENT_TIMEOUT = 1, /* a sampler missed the window */
+	PSTOP_LOCKSTEP_EVENT_CONTENT = 2, /* both published, frames differed */
+};
+
 struct pstop_lockstep_diag {
+	/* Whichever of the two records below was written last. */
+	uint8_t last_kind; /* enum pstop_lockstep_event */
+
 	/* Last tick tainted by a sampler outside the publish window. */
 	uint8_t late_mask;       /* bit c set = sampler c was late */
 	uint32_t late_by_ms;     /* worst lateness past the deadline, if known */

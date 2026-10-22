@@ -33,10 +33,11 @@ struct pstop_peer {
  */
 int app_settings_init(void);
 
-/* Read a peer slot. Returns NULL if slot is out of range. The returned
- * pointer stays valid for the process lifetime.
+/* Copy a peer slot out. Returns 0, or -EINVAL for a slot out of range. Safe
+ * from any thread: the HTTP API rewrites slots while the comparator reads
+ * them, so callers get a consistent copy, never a pointer into the table.
  */
-const struct pstop_peer *app_settings_peer(int slot);
+int app_settings_peer_get(int slot, struct pstop_peer *out);
 
 /* Set and persist a peer slot. Returns 0 or -errno (-EINVAL for a bad slot). */
 int app_settings_set_peer(int slot, uint32_t ip, uint16_t port, uint32_t id);
@@ -52,9 +53,11 @@ int app_settings_clear_peer(int slot);
 uint32_t app_settings_device_id(void);
 int app_settings_set_device_id(uint32_t id);
 
-/* Self-claimed role, announced in every pstop frame. Defaults to stop-only:
- * the machine ANDs this claim with its own operator allowlist, so claiming
- * operator is necessary but not sufficient to re-arm.
+/* Self-claimed role, announced in every pstop frame and re-read by the
+ * machine on every frame, so a change applies live. Defaults to stop-only.
+ * Since upstream #130 the machine has no operator list: this claim alone
+ * decides whether the remote may re-arm. Admission (may it bond at all) is
+ * the machine's allow/denylist.
  */
 bool app_settings_is_operator(void);
 int app_settings_set_operator(bool op);
