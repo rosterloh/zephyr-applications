@@ -144,4 +144,49 @@ ZTEST(app_settings, test_device_id_survives_reload)
 	zassert_equal(app_settings_device_id(), 0xDEADBEEFU, "device id after reload");
 }
 
+ZTEST(app_settings, test_unpinned_device_id_is_derived)
+{
+	zassert_ok(app_settings_set_device_id(0U), "unpin");
+	zassert_equal(app_settings_device_id(), 0U);
+	/* With HWINFO the id is 0x01 then the MAC's low 24 bits; native_sim's
+	 * hwinfo gives a host id in its place.
+	 */
+	zassert_equal(app_settings_effective_device_id() >> 24, 0x01U, "upstream's family byte");
+
+	zassert_ok(app_settings_set_device_id(0xC0A80105U), "pin");
+	zassert_equal(app_settings_effective_device_id(), 0xC0A80105U, "a pin wins");
+}
+
+ZTEST(app_settings, test_ring_offset_survives_reload)
+{
+	zassert_equal(app_settings_set_ring_offset(16U), -EINVAL, "0..15 only");
+	zassert_ok(app_settings_set_ring_offset(9U), "set");
+
+	zassert_ok(app_settings_init(), "reload");
+
+	zassert_equal(app_settings_ring_offset(), 9U, "ring offset after reload");
+}
+
+ZTEST(app_settings, test_wifi_list_survives_reload)
+{
+	struct pstop_wifi_net nets[PSTOP_WIFI_MAX] = {
+		{.ssid = "home", .pass = "supersecret"},
+		{.ssid = "guest", .pass = ""},
+	};
+	struct pstop_wifi_net net;
+
+	zassert_ok(app_settings_wifi_set_all(nets), "set");
+
+	zassert_ok(app_settings_init(), "reload");
+
+	zassert_ok(app_settings_wifi_get(0, &net));
+	zassert_str_equal(net.ssid, "home");
+	zassert_str_equal(net.pass, "supersecret");
+	zassert_ok(app_settings_wifi_get(1, &net));
+	zassert_str_equal(net.ssid, "guest");
+	zassert_ok(app_settings_wifi_get(3, &net));
+	zassert_str_equal(net.ssid, "", "unused entries stay empty");
+	zassert_equal(app_settings_wifi_get(PSTOP_WIFI_MAX, &net), -EINVAL);
+}
+
 ZTEST_SUITE(app_settings, NULL, suite_setup, NULL, NULL, NULL);

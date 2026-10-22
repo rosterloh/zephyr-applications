@@ -5,8 +5,10 @@
  * protective_stop: a Zephyr pstop REMOTE.
  *
  * Init order matters. Settings first (the peer table decides which sessions
- * exist), then the stop-switch GPIOs (so the first sampler tick reads real
- * pins), then the sessions, and only then the threads.
+ * exist), then the health counters (they hook the comparator before it
+ * starts), the stop-switch GPIOs (so the first sampler tick reads real pins),
+ * then the sessions, and only then the threads. The uplinks, LEDs and
+ * control plane come last: the remote stops machines without any of them.
  */
 
 #include <zephyr/kernel.h>
@@ -14,11 +16,17 @@
 
 #include "app_settings.h"
 #include "estop_gpio.h"
+#include "health.h"
 #include "http_server.h"
+#include "leds.h"
 #include "lockstep.h"
 #include "pstop/config.h"
+#include "pstop_log.h"
+#include "uplink.h"
+#include "verbose.h"
+#include "wifi.h"
 
-LOG_MODULE_REGISTER(pstop, LOG_LEVEL_INF);
+LOG_MODULE_REGISTER(pstop, PSTOP_LOG_LEVEL);
 
 /* Fallback peer, applied only when nothing has been provisioned yet. Matches
  * upstream's machine_app defaults so a fresh native_sim build talks to it
@@ -27,17 +35,18 @@ LOG_MODULE_REGISTER(pstop, LOG_LEVEL_INF);
 #define DEFAULT_MACHINE_IP   0x7F000001U /* 127.0.0.1 */
 #define DEFAULT_MACHINE_PORT 8890U
 #define DEFAULT_MACHINE_ID   0x01020304U
-#define DEFAULT_DEVICE_ID    0xC0A80105U /* 192.168.1.5 */
 
 /* Lockstep health counters are otherwise silent between /state.json polls.
  * Logging on change here is enough to see a stuck-gate or a mismatch spike
- * without polling.
+ * without polling. The same period paces the wear counters' flushes.
  */
 #define COUNTER_LOG_PERIOD_MS 5000U
 
 int main(void)
 {
 	int ret;
+
+	pstop_verbose_init();
 
 	LOG_INF("protective_stop remote: pstop v%u, %u-byte frames", (unsigned int)PSTOP_VERSION,
 		(unsigned int)PSTOP_MESSAGE_SIZE);
@@ -57,13 +66,13 @@ int main(void)
 					    DEFAULT_MACHINE_ID);
 	}
 
-	if (app_settings_device_id() == 0U) {
-		/* Slice 4 derives this from the active uplink. Until then a
-		 * pinned id keeps the machine's operator allowlist stable.
-		 */
-		LOG_WRN("no device id provisioned; using the built-in default");
-		(void)app_settings_set_device_id(DEFAULT_DEVICE_ID);
-	}
+	LOG_INF("device id %08x (%s)", app_settings_effective_device_id(),
+		(app_settings_device_id() != 0U) ? "pinned" : "from the MAC");
+
+	/* Wear counting is not a safety function: a failed load starts from
+	 * zero and the remote runs on.
+	 */
+	(void)health_init();
 
 	ret = estop_gpio_init();
 	if (ret != 0) {
@@ -82,6 +91,19 @@ int main(void)
 		return ret;
 	}
 
+	/* None of these gate the stop path: a remote with no uplink or no
+	 * LEDs still drives its sessions, which simply never bond.
+	 */
+	if (uplink_init() != 0) {
+		LOG_WRN("no network interfaces");
+	}
+	if (pstop_wifi_start() == 0) {
+		LOG_INF("wifi station started");
+	}
+	if (leds_start() != 0) {
+		LOG_WRN("LEDs unavailable");
+	}
+
 	if (IS_ENABLED(CONFIG_PROTECTIVE_STOP_HTTP)) {
 		/* A control plane that fails to start leaves the remote stopping
 		 * machines as before, just unprovisionable: keep running.
@@ -95,6 +117,7 @@ int main(void)
 
 	while (true) {
 		k_sleep(K_MSEC(COUNTER_LOG_PERIOD_MS));
+		health_poll();
 
 		uint32_t mismatches = pstop_lockstep_mismatches();
 		uint32_t gated_ticks = pstop_lockstep_gated_ticks();

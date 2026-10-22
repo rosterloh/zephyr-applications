@@ -11,9 +11,10 @@
 #include <zephyr/net/socket.h>
 #include <zephyr/sys/byteorder.h>
 
+#include "pstop_log.h"
 #include "session.h"
 
-LOG_MODULE_REGISTER(pstop_session, LOG_LEVEL_INF);
+LOG_MODULE_REGISTER(pstop_session, PSTOP_LOG_LEVEL);
 
 int pstop_session_open(struct pstop_session *s, int slot, const struct pstop_peer *peer)
 {
@@ -135,7 +136,7 @@ void pstop_session_build(struct pstop_session *s, uint8_t verdict, pstop_aux_rol
 	device_id_t me;
 	uint8_t type;
 
-	device_id_set(&me, app_settings_device_id());
+	device_id_set(&me, app_settings_effective_device_id());
 
 	/* An unbonded session must bond before it can heartbeat. */
 	type = (s->state == PSTOP_SESS_BONDED) ? verdict : PSTOP_MESSAGE_BOND;
@@ -263,6 +264,8 @@ void pstop_session_poll(struct pstop_session *s, uint64_t now_ms)
 		s->last_reply_ms = now_ms;
 		s->last_msg = msg.message;
 		s->replies++;
+		LOG_DBG("slot %d reply: msg %u counter %u hb %u ms", s->slot, msg.message,
+			(unsigned int)msg.counter, (unsigned int)msg.heartbeat_timeout);
 
 		/* The machine governs the rate: it advertises its per-operator
 		 * window in every reply, including the bond ack. A reply

@@ -33,7 +33,17 @@ An HTTP server on port 80 (8080 on native_sim) speaks upstream's
 | `POST /api/pstop_peers?slot=N&ip=&port=[&id=0x..]` | none | set a machine slot; `&clear=1` idles it, `&rebond=1` is the way out of REJECTED |
 | `POST /api/pstop_peer?ip=&port=` | none | legacy single-machine form, slot 0 |
 | `GET/POST /api/role[?role=operator\|stop_only]` | admin | live, no reboot |
+| `POST /api/ring_offset?n=0..15` | none | which physical pixel is LED 1; persisted |
+| `POST /api/ring_led1?on=0\|1` | none | locate: only LED 1, white; expires after 5 min |
+| `GET /api/health` | none | lifetime wear counters and warnings (upstream's format) |
+| `POST /api/health/reset?what=button\|all&confirm=1` | admin | after a switch swap, or a refurbished unit |
+| `GET /api/last_log` | none | tail of the previous boot's log (survives a reset, not a power cycle) |
+| `GET /api/coredump` | admin | raw dump from the coredump partition, 404 when none |
+| `GET /admin/` | admin | admin page: status, machines, role, ring, WiFi, device id, health |
 | `GET /admin/api/status`, `POST /admin/api/restart` | admin | |
+| `GET/POST /admin/api/settings` | admin | JSON `{"ring_offset":N,"device_id":N}`; device id 0 = from the MAC |
+| `GET/POST /admin/api/wifi` | admin | JSON `{"networks":[{"ssid","pass"}]}`, up to 4; `"********"` keeps a stored password |
+| `GET /admin/api/verbose`, `POST /admin/api/verbose/toggle` | admin | debug logging on/off at runtime |
 
 Admin is HTTP Basic, user `admin`, password `CONFIG_PROTECTIVE_STOP_ADMIN_PASSWORD`.
 There is no default: until one is set the admin routes answer 403 and the
@@ -45,9 +55,8 @@ remote warns at boot. Keep it out of the repo with a local fragment:
 
 Peer changes are picked up by the comparator on its next tick.
 
-Not yet ported: the admin HTML pages, `/api/ring`, `/api/health`,
-`/api/last_log`, settings/WiFi/coredump admin routes. `/api/admission` is a
-machine-side route and has no meaning here.
+Not ported: upstream's microlink/Tailscale, OTA and USB routes (this remote has
+none of those), and `/api/admission`, which is machine-side.
 
 Upstream's one-remote-many-machines test runs against the simulator as is:
 
@@ -59,6 +68,23 @@ Upstream's one-remote-many-machines test runs against the simulator as is:
 The simulator's sessions send from 18891+ rather than upstream's 8891+
 (`CONFIG_PROTECTIVE_STOP_LOCAL_PORT`) because that test's machines listen on
 8890+ of the same host.
+
+## Hardware (Waveshare ESP32-S3-ETH)
+
+| | |
+|---|---|
+| Stop switch | DPST loopback, GPIO39->40 and GPIO41->42 (app overlay) |
+| LED ring | 16 x WS2812 on GPIO17, RMT channel 1 (app overlay, alias `pstop-ring`) |
+| Status pixel | onboard WS2812 on GPIO21, RMT channel 0 (board, alias `led-strip`) |
+| Ethernet | onboard W5500 on SPI2, DHCP; preferred while it holds a lease |
+| WiFi | station, DHCP; joins the stored networks in order when Ethernet is down |
+
+The device id is `0x01` followed by the low 24 bits of the factory MAC, as
+upstream derives it, unless pinned through `/admin/api/settings`. Remotes that
+ran slices 1-3 have `0xC0A80105` pinned; post `{"device_id":0}` to move them
+to the MAC-derived id (and update the machine's allowlist to match).
+
+The ring and status pixel colours are upstream's: see `src/ring.h`.
 
 ## Interop
 

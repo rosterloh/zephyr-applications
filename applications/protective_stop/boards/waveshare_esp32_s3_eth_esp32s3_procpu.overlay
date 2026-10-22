@@ -21,13 +21,15 @@
  * GPIO39-42 sit on gpio1, which covers pins 32-48 on the ESP32-S3, hence the
  * offsets 7-10 below.
  *
- * NOT here, deliberately: the 16-LED ring on GPIO17 and the onboard WS2812
- * status pixel on GPIO21. Both are slice 4; the status pixel additionally
- * belongs in the board definition, not this overlay, because it is soldered
- * to the board.
+ * The 16-LED WS2812 status ring is enclosure wiring too: its data line is
+ * GPIO17, driven from RMT transmit channel 1 (channel 0 drives the onboard
+ * status pixel on GPIO21, which being soldered to the board lives in the
+ * board definition as led-strip). leds.c finds the ring as pstop-ring.
  */
 
 #include <zephyr/dt-bindings/gpio/gpio.h>
+#include <zephyr/dt-bindings/led/led.h>
+#include <zephyr/dt-bindings/pinctrl/esp32s3-pinctrl.h>
 
 / {
 	zephyr,user {
@@ -35,5 +37,28 @@
 		estop-a-in-gpios  = <&gpio1 8 GPIO_ACTIVE_HIGH>;  /* GPIO40 */
 		estop-b-out-gpios = <&gpio1 9 GPIO_ACTIVE_HIGH>;  /* GPIO41 */
 		estop-b-in-gpios  = <&gpio1 10 GPIO_ACTIVE_HIGH>; /* GPIO42 */
+	};
+
+	aliases {
+		pstop-ring = &pstop_ring;
+	};
+
+	pstop_ring: pstop_ring {
+		compatible = "worldsemi,ws2812-pulse-io";
+		pulse-ios = <&rmt 1>;
+		chain-length = <16>;
+		color-mapping = <LED_COLOR_ID_GREEN
+				 LED_COLOR_ID_RED
+				 LED_COLOR_ID_BLUE>;
+		reset-delay = <300>;
+	};
+};
+
+/* Both RMT transmit pins in one state: the controller applies one pinctrl
+ * state for all its channels.
+ */
+&rmt_ws2812 {
+	group1 {
+		pinmux = <RMT_OUT0_GPIO21>, <RMT_OUT1_GPIO17>;
 	};
 };

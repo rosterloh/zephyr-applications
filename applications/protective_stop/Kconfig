@@ -64,7 +64,59 @@ config PROTECTIVE_STOP_ADMIN_PASSWORD
 	  network. Set it in a local, uncommitted conf fragment, e.g.
 	  --extra-conf admin.conf.
 
+config PROTECTIVE_STOP_VERBOSE
+	bool "Runtime verbose logging"
+	default y
+	select LOG_RUNTIME_FILTERING
+	help
+	  Compile this app's debug log lines in, filtered out at runtime
+	  until POST /admin/api/verbose/toggle lets them through: a line per
+	  machine reply, per HTTP request and per WiFi decision.
+
 endif # PROTECTIVE_STOP_HTTP
+
+menu "Health counters"
+
+config PROTECTIVE_STOP_BUTTON_RATED_OPS
+	int "Stop switch rated operations"
+	default 100000
+	range 0 1000000000
+	help
+	  Datasheet mechanical life of the stop switch (upstream's NKK FF01:
+	  100,000 operations minimum). /api/health reports wear as a
+	  percentage of this. 0 disables the wear warning.
+
+config PROTECTIVE_STOP_BUTTON_WARN_PCT
+	int "Button wear warning threshold (percent of rated operations)"
+	default 80
+	range 0 99
+
+config PROTECTIVE_STOP_MISMATCH_WARN_MIN
+	int "Loop-mismatch warning: minimum lifetime events"
+	default 50
+	range 1 1000000
+
+config PROTECTIVE_STOP_MISMATCH_WARN_PER_1000
+	int "Loop-mismatch warning: events per 1000 presses"
+	default 20
+	range 0 1000
+
+config PROTECTIVE_STOP_HEALTH_FLUSH_MIN_S
+	int "Minimum seconds between counter flushes"
+	default 60
+	range 5 3600
+	help
+	  Bounds flash wear: changed counters wait at least this long.
+
+config PROTECTIVE_STOP_HEALTH_FLUSH_MAX_S
+	int "Maximum seconds between counter flushes"
+	default 600
+	range 30 86400
+	help
+	  Cumulative uptime is flushed at least this often, so a power pull
+	  loses at most this much of it.
+
+endmenu
 
 endmenu
 

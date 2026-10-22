@@ -13,5 +13,13 @@ target_sources(app PRIVATE
   ${APP_SRC}/app_settings.c
   ${APP_SRC}/estop_gpio.c
   ${APP_SRC}/estop_verdict.c
+  ${APP_SRC}/health_logic.c
+  ${APP_SRC}/health.c
+  ${APP_SRC}/ring.c
+  ${APP_SRC}/leds.c
+  ${APP_SRC}/uplink.c
+  ${APP_SRC}/wifi.c
+  ${APP_SRC}/crash.c
+  ${APP_SRC}/verbose.c
 )
 target_include_directories(app PRIVATE ${APP_SRC})
