@@ -78,6 +78,7 @@ struct pstop_session {
 	uint32_t replies;
 	uint32_t send_fail;
 	uint32_t rebonds;
+	uint32_t unbonds; /* UNBOND replies: refused admission or a forgotten bond */
 	uint8_t last_msg;
 };
 

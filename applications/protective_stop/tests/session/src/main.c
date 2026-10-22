@@ -220,8 +220,7 @@ ZTEST(pstop_session, test_bond_frame_carries_operator_role)
 
 	zassert_equal(msg.message, PSTOP_MESSAGE_BOND, "unbonded session must send a BOND frame");
 	zassert_equal(pstop_aux_decode_role(&msg), PSTOP_AUX_ROLE_OPERATOR,
-		      "BOND frame must announce operator role once claimed -- the machine latches "
-		      "this at bond time and never re-reads it");
+		      "BOND frame must announce operator role once claimed");
 }
 
 ZTEST(pstop_session, test_heartbeat_frame_carries_stop_only_role)
@@ -302,6 +301,95 @@ ZTEST(pstop_session, test_poll_ignores_reply_from_non_peer_source)
 
 	zassert_equal(sess.state, PSTOP_SESS_IDLE, "must not bond from a non-peer source");
 	zassert_equal(sess.last_reply_ms, last_reply_before, "must not adopt a non-peer reply");
+}
+
+/* Deliver a frame to the session as if the bonded machine sent it. */
+static void send_from_peer(const pstop_msg_t *msg)
+{
+	uint8_t buf[PSTOP_MESSAGE_SIZE];
+	struct sockaddr_in local;
+	struct sockaddr_in dest;
+	int sock;
+	ssize_t n;
+
+	pstop_message_encode(msg, buf);
+
+	sock = zsock_socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+	zassert_true(sock >= 0, "peer socket");
+
+	(void)memset(&local, 0, sizeof(local));
+	local.sin_family = AF_INET;
+	local.sin_port = htons(peer.port);
+	local.sin_addr.s_addr = htonl(INADDR_ANY);
+	zassert_ok(zsock_bind(sock, (struct sockaddr *)&local, sizeof(local)), "bind peer");
+
+	(void)memset(&dest, 0, sizeof(dest));
+	dest.sin_family = AF_INET;
+	dest.sin_port = htons((uint16_t)(PSTOP_LOCAL_PORT + sess.slot));
+	dest.sin_addr.s_addr = htonl(peer.ip);
+
+	n = zsock_sendto(sock, buf, sizeof(buf), 0, (struct sockaddr *)&dest, sizeof(dest));
+	zassert_equal(n, (ssize_t)PSTOP_MESSAGE_SIZE, "peer send");
+	(void)zsock_close(sock);
+
+	k_msleep(50);
+}
+
+static void make_unbond(pstop_msg_t *msg)
+{
+	device_id_t me;
+	device_id_t machine;
+
+	device_id_set(&me, app_settings_device_id());
+	device_id_set(&machine, peer.id);
+
+	/* What pstop_c's machine answers to a refused BOND, or to a heartbeat
+	 * from a remote it holds no bond for: UNBOND with a zero window.
+	 */
+	pstop_create_generic_message(msg, PSTOP_MESSAGE_UNBOND, 1000ULL, 0ULL, &machine, &me, 7U,
+				     0U);
+	msg->heartbeat_timeout = 0U;
+}
+
+ZTEST(pstop_session, test_poll_unbond_does_not_bond)
+{
+	pstop_msg_t msg;
+
+	sess.state = PSTOP_SESS_BONDING;
+	make_unbond(&msg);
+	send_from_peer(&msg);
+
+	pstop_session_poll(&sess, 5000ULL);
+
+	zassert_equal(sess.state, PSTOP_SESS_BONDING, "a refused BOND must not read as bonded");
+	zassert_equal(sess.last_reply_ms, 0U, "UNBOND is not a reply");
+	zassert_equal(sess.proto.last_received_counter, 0U, "must not adopt UNBOND's counter");
+	zassert_equal(sess.last_msg, PSTOP_MESSAGE_UNBOND, "UNBOND must be visible");
+	zassert_equal(sess.unbonds, 1U, "UNBOND must be counted");
+}
+
+ZTEST(pstop_session, test_unbond_while_bonded_lets_the_watchdog_rebond)
+{
+	pstop_msg_t msg;
+	uint64_t now;
+
+	/* Bonded, last real reply at t=1000. The machine then restarts and
+	 * answers every heartbeat with UNBOND.
+	 */
+	sess.state = PSTOP_SESS_BONDED;
+	sess.hb_ms = 400U;
+	sess.last_reply_ms = 1000ULL;
+
+	make_unbond(&msg);
+	now = 1000ULL + pstop_session_rebond_after_ms(&sess);
+	send_from_peer(&msg);
+	pstop_session_poll(&sess, now);
+
+	zassert_equal(sess.last_reply_ms, 1000ULL, "UNBOND must not refresh liveness");
+
+	pstop_session_watchdog(&sess, now);
+	zassert_equal(sess.state, PSTOP_SESS_IDLE, "a session hearing only UNBOND must re-bond");
+	zassert_equal(sess.rebonds, 1U, "rebond must be counted");
 }
 
 ZTEST_SUITE(pstop_session, NULL, suite_setup, test_before, test_after, NULL);

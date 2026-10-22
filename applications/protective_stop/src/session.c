@@ -60,6 +60,7 @@ int pstop_session_open(struct pstop_session *s, int slot, const struct pstop_pee
 	s->replies = 0U;
 	s->send_fail = 0U;
 	s->rebonds = 0U;
+	s->unbonds = 0U;
 	s->last_msg = PSTOP_MESSAGE_UNKNOWN;
 
 	(void)memset(&s->peer_addr, 0, sizeof(s->peer_addr));
@@ -149,9 +150,8 @@ void pstop_session_build(struct pstop_session *s, uint8_t verdict, uint64_t now_
 					     s->proto.last_received_counter);
 	}
 
-	/* The role is latched by the machine at bond time, so it must be
-	 * carried on the BOND frame too -- there is no later chance to
-	 * correct it.
+	/* The machine re-reads the role on every frame, and seeds it from
+	 * the BOND, so every frame carries it.
 	 */
 	role = app_settings_is_operator() ? PSTOP_AUX_ROLE_OPERATOR : PSTOP_AUX_ROLE_STOP_ONLY;
 	pstop_aux_encode_role(&msg, role);
@@ -223,6 +223,22 @@ void pstop_session_poll(struct pstop_session *s, uint64_t now_ms)
 		 */
 		if (msg.checksum != msg.calculated_checksum) {
 			LOG_WRN("slot %d bad checksum", s->slot);
+			continue;
+		}
+
+		/* UNBOND means the machine does not hold a bond for us: it was
+		 * refused admission, or the machine restarted and forgot us.
+		 * It is not a heartbeat ack, so it must neither bond the
+		 * session nor refresh its liveness. Left alone, the watchdog
+		 * re-bonds a session that only hears UNBOND, while a BONDING
+		 * one keeps retrying at PSTOP_BOND_RETRY_MS.
+		 */
+		if (msg.message == PSTOP_MESSAGE_UNBOND) {
+			if (s->last_msg != PSTOP_MESSAGE_UNBOND) {
+				LOG_WRN("slot %d machine replied UNBOND", s->slot);
+			}
+			s->last_msg = msg.message;
+			s->unbonds++;
 			continue;
 		}
 
