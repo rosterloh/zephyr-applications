@@ -56,4 +56,45 @@ void pstop_api_admin_status(const char *auth, char *buf, size_t cap,
 void pstop_api_admin_restart(const char *auth, char *buf, size_t cap,
 			     struct pstop_api_response *rsp);
 
+/* POST /api/ring_offset?n=N -- which physical pixel is LED 1 (0..15). */
+void pstop_api_ring_offset(const char *url, char *buf, size_t cap, struct pstop_api_response *rsp);
+
+/* POST /api/ring_led1?on=0|1 -- locate mode, auto-expiring after 5 min. */
+void pstop_api_ring_led1(const char *url, char *buf, size_t cap, struct pstop_api_response *rsp);
+
+/* GET /api/health -- lifetime wear counters and the warning board. */
+void pstop_api_health(char *buf, size_t cap, struct pstop_api_response *rsp);
+
+/* POST /api/health/reset?what=button|all&confirm=1 -- admin. */
+void pstop_api_health_reset(const char *url, const char *auth, char *buf, size_t cap,
+			    struct pstop_api_response *rsp);
+
+/* GET /api/coredump -- admin. On 200, *size is the dump's length and the
+ * caller streams it with crash_read(); otherwise buf holds the error body.
+ */
+void pstop_api_coredump(const char *auth, char *buf, size_t cap, struct pstop_api_response *rsp,
+			size_t *size);
+
+/* GET /admin/ -- admin. Only the gate: on 200 the caller serves the page. */
+void pstop_api_admin_page(const char *auth, char *buf, size_t cap, struct pstop_api_response *rsp);
+
+/* GET|POST /admin/api/settings -- admin. POST takes a JSON body with any of
+ * "ring_offset" (0..15) and "device_id" (0 = derive from the MAC). body is
+ * parsed in place.
+ */
+void pstop_api_admin_settings(bool post, char *body, size_t body_len, const char *auth, char *buf,
+			      size_t cap, struct pstop_api_response *rsp);
+
+/* GET|POST /admin/api/wifi -- admin. GET lists the stored networks with
+ * passwords masked; POST replaces the list from {"networks":[{"ssid","pass"}]}
+ * where a pass of "********" keeps that network's stored password. body is
+ * parsed in place.
+ */
+void pstop_api_admin_wifi(bool post, char *body, size_t body_len, const char *auth, char *buf,
+			  size_t cap, struct pstop_api_response *rsp);
+
+/* GET /admin/api/verbose, POST /admin/api/verbose/toggle -- admin. */
+void pstop_api_admin_verbose(bool toggle, const char *auth, char *buf, size_t cap,
+			     struct pstop_api_response *rsp);
+
 #endif /* PROTECTIVE_STOP_API_H */

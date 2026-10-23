@@ -12,8 +12,9 @@
 #endif
 
 #include "estop_gpio.h"
+#include "pstop_log.h"
 
-LOG_MODULE_REGISTER(estop_gpio, LOG_LEVEL_INF);
+LOG_MODULE_REGISTER(estop_gpio, PSTOP_LOG_LEVEL);
 
 #define ZUSER DT_PATH(zephyr_user)
 

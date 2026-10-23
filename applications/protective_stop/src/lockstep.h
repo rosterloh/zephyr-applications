@@ -61,6 +61,13 @@ void pstop_lockstep_tick(uint64_t now_ms);
 /* Spawn the two sampler threads and the comparator thread. */
 int pstop_lockstep_start(void);
 
+/* Called on the comparator thread after every primed tick both samplers
+ * published, with each channel's verdict. For wear counting, not safety: it
+ * must be quick and must not block. Set it before pstop_lockstep_start().
+ */
+typedef void (*pstop_lockstep_tick_observer_t)(uint32_t tick, uint8_t verdict0, uint8_t verdict1);
+void pstop_lockstep_set_tick_observer(pstop_lockstep_tick_observer_t fn);
+
 /* Lifetime count of ticks where the two encodings disagreed. */
 uint32_t pstop_lockstep_mismatches(void);
 

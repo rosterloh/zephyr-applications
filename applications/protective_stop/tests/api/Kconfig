@@ -7,4 +7,10 @@ config PROTECTIVE_STOP_ADMIN_PASSWORD
 	string "Admin password"
 	default "s3cret"
 
+# Built in, as in the app, so the toggle has something to flip.
+config PROTECTIVE_STOP_VERBOSE
+	bool "Runtime verbose logging"
+	default y
+	select LOG_RUNTIME_FILTERING
+
 source "Kconfig.zephyr"

@@ -21,9 +21,12 @@
 #include "api.h"
 #include "app_settings.h"
 #include "estop_gpio.h"
+#include "health.h"
 #include "http_util.h"
+#include "leds.h"
 #include "lockstep.h"
 #include "session.h"
+#include "verbose.h"
 
 /* CONFIG_PROTECTIVE_STOP_ADMIN_PASSWORD is "s3cret" in this suite's Kconfig;
  * the admin_disabled variant in testcase.yaml empties it, as shipped.
@@ -184,12 +187,15 @@ static void *api_setup(void)
 {
 	zassert_ok(app_settings_init(), "settings");
 	zassert_ok(app_settings_set_device_id(0xC0A80105U), "device id");
+	zassert_ok(health_init(), "health");
 	zassert_ok(estop_gpio_init(), "gpio");
 	zassert_ok(pstop_lockstep_init(), "lockstep");
 	return NULL;
 }
 
-/* Every case starts from an empty peer table and a stop-only role. */
+/* Every case starts from an empty peer table, a stop-only role and an
+ * unrotated ring with locate off: the flash file outlives a run.
+ */
 static void api_before(void *fixture)
 {
 	ARG_UNUSED(fixture);
@@ -199,6 +205,8 @@ static void api_before(void *fixture)
 		(void)pstop_lockstep_request_reconfigure(slot);
 	}
 	(void)app_settings_set_operator(false);
+	(void)app_settings_set_ring_offset(0U);
+	leds_locate(false);
 	tick();
 	(void)memset(body, 0, sizeof(body));
 }
@@ -233,6 +241,13 @@ ZTEST(api, test_state_has_what_upstream_tools_read)
 		"\"pstop_mm_last\":[",
 		"\"pstop_core_lat_max_ms\":[",
 		"\"pstop_gated_ticks\":",
+		"\"health\":0",
+		"\"ring_offset\":",
+		"\"ring_led1\":0",
+		"\"active_iface\":\"",
+		"\"local_ip\":\"",
+		"\"wifi_idx\":-1",
+		"\"crash_present\":0",
 		"\"pstop_machines\":[",
 	};
 
@@ -495,11 +510,313 @@ ZTEST(api, test_state_reports_a_late_sampler)
 	zassert_true(body_has(expected), "want %s", expected);
 }
 
+ZTEST(api, test_ring_offset)
+{
+	static const char *const bad[] = {
+		"/api/ring_offset?n=16",
+		"/api/ring_offset?n=-1",
+		"/api/ring_offset?n=x",
+		"/api/ring_offset",
+	};
+
+	pstop_api_ring_offset("/api/ring_offset?n=7", body, sizeof(body), &rsp);
+	zassert_equal(rsp.status, 200);
+	assert_body("{\"ok\":true,\"ring_offset\":7}");
+	zassert_equal(app_settings_ring_offset(), 7U);
+
+	pstop_api_state(body, sizeof(body), &rsp);
+	zassert_true(body_has("\"ring_offset\":7,"));
+
+	for (size_t i = 0; i < ARRAY_SIZE(bad); i++) {
+		pstop_api_ring_offset(bad[i], body, sizeof(body), &rsp);
+		zassert_equal(rsp.status, 400, "accepted %s", bad[i]);
+	}
+	zassert_equal(app_settings_ring_offset(), 7U, "unchanged by bad requests");
+
+	pstop_api_ring_offset("/api/ring_offset?n=0", body, sizeof(body), &rsp);
+	zassert_equal(rsp.status, 200);
+}
+
+ZTEST(api, test_ring_led1_locate)
+{
+	pstop_api_ring_led1("/api/ring_led1?on=1", body, sizeof(body), &rsp);
+	zassert_equal(rsp.status, 200);
+	zassert_true(leds_locate_active());
+	pstop_api_state(body, sizeof(body), &rsp);
+	zassert_true(body_has("\"ring_led1\":1,"));
+
+	pstop_api_ring_led1("/api/ring_led1?on=2", body, sizeof(body), &rsp);
+	zassert_equal(rsp.status, 400);
+	zassert_true(leds_locate_active(), "a bad request changes nothing");
+
+	pstop_api_ring_led1("/api/ring_led1?on=0", body, sizeof(body), &rsp);
+	zassert_equal(rsp.status, 200);
+	zassert_false(leds_locate_active());
+}
+
+static void ticks_with_poles(bool a, bool b, int n)
+{
+	estop_sim_set_pole(0, a);
+	estop_sim_set_pole(1, b);
+	for (int i = 0; i < n; i++) {
+		tick();
+	}
+}
+
+ZTEST(api, test_health_counts_presses_and_mismatches)
+{
+	struct health_snapshot snap;
+	uint32_t presses;
+	uint32_t mismatches;
+	char expected[48];
+
+	ticks_with_poles(true, true, 10);
+	health_snapshot_get(&snap);
+	presses = snap.counters.presses;
+	mismatches = snap.counters.mismatch_events;
+
+	/* Both poles open: one press, however long it is held. */
+	ticks_with_poles(false, false, 10);
+	ticks_with_poles(true, true, 10);
+	health_snapshot_get(&snap);
+	zassert_equal(snap.counters.presses, presses + 1U, "one press");
+	zassert_equal(snap.counters.mismatch_events, mismatches);
+
+	/* One pole open: a loop disagreement, not a press. */
+	ticks_with_poles(false, true, 10);
+	ticks_with_poles(true, true, 10);
+	health_snapshot_get(&snap);
+	zassert_equal(snap.counters.presses, presses + 1U, "not a press");
+	zassert_equal(snap.counters.mismatch_events, mismatches + 1U, "one mismatch event");
+
+	pstop_api_health(body, sizeof(body), &rsp);
+	zassert_equal(rsp.status, 200);
+	zassert_equal(body[rsp.len - 1U], '}');
+	(void)snprintf(expected, sizeof(expected), "\"presses\":%u,", presses + 1U);
+	zassert_true(body_has(expected), "want %s in %s", expected, body);
+	zassert_true(body_has("\"button_rated_ops\":100000,"));
+	zassert_true(body_has("\"warnings\":[]"));
+	zassert_true(body_has("\"boots\":"));
+}
+
+ZTEST(api, test_health_warning_board_is_reported)
+{
+	zassert_ok(health_publish("test_src", HEALTH_WARN, "something odd"));
+	pstop_api_health(body, sizeof(body), &rsp);
+	zassert_true(body_has("\"level\":1,"));
+	zassert_true(body_has("{\"src\":\"test_src\",\"level\":1,\"msg\":\"something odd\","
+			      "\"count\":1,\"age_s\":"));
+	pstop_api_state(body, sizeof(body), &rsp);
+	zassert_true(body_has("\"health\":1,"));
+
+	zassert_ok(health_publish("test_src", HEALTH_OK, ""));
+	pstop_api_health(body, sizeof(body), &rsp);
+	zassert_true(body_has("\"level\":0,"));
+}
+
+ZTEST(api, test_health_reset)
+{
+	struct health_snapshot snap;
+	uint8_t swaps;
+
+	REQUIRE_ADMIN();
+
+	ticks_with_poles(true, true, 10);
+	ticks_with_poles(false, false, 10);
+	ticks_with_poles(true, true, 10);
+	health_snapshot_get(&snap);
+	zassert_true(snap.counters.presses > 0U);
+	swaps = snap.counters.button_swaps;
+
+	pstop_api_health_reset("/api/health/reset?what=button&confirm=1", NULL, body, sizeof(body),
+			       &rsp);
+	zassert_equal(rsp.status, 401);
+	pstop_api_health_reset("/api/health/reset?what=button", AUTH_OK, body, sizeof(body), &rsp);
+	zassert_equal(rsp.status, 400, "confirm=1 is required");
+	pstop_api_health_reset("/api/health/reset?what=disk&confirm=1", AUTH_OK, body, sizeof(body),
+			       &rsp);
+	zassert_equal(rsp.status, 400);
+	health_snapshot_get(&snap);
+	zassert_true(snap.counters.presses > 0U, "nothing reset yet");
+
+	pstop_api_health_reset("/api/health/reset?what=button&confirm=1", AUTH_OK, body,
+			       sizeof(body), &rsp);
+	zassert_equal(rsp.status, 200);
+	health_snapshot_get(&snap);
+	zassert_equal(snap.counters.presses, 0U);
+	zassert_equal(snap.counters.mismatch_events, 0U);
+	zassert_equal(snap.counters.button_swaps, swaps + 1U, "a switch swap is counted");
+	zassert_true(snap.counters.boots > 0U, "the rest is kept");
+
+	pstop_api_health_reset("/api/health/reset?what=all&confirm=1", AUTH_OK, body, sizeof(body),
+			       &rsp);
+	zassert_equal(rsp.status, 200);
+	health_snapshot_get(&snap);
+	zassert_equal(snap.counters.boots, 0U);
+	zassert_equal(snap.counters.button_swaps, 0U);
+}
+
+ZTEST(api, test_coredump_none_on_native_sim)
+{
+	size_t size = 1U;
+
+	REQUIRE_ADMIN();
+
+	pstop_api_coredump(NULL, body, sizeof(body), &rsp, &size);
+	zassert_equal(rsp.status, 401, "a coredump is a RAM snapshot: admin only");
+	zassert_equal(size, 0U);
+
+	pstop_api_coredump(AUTH_OK, body, sizeof(body), &rsp, &size);
+	zassert_equal(rsp.status, 404);
+	zassert_equal(size, 0U);
+}
+
+ZTEST(api, test_admin_page_gate)
+{
+	REQUIRE_ADMIN();
+
+	pstop_api_admin_page(NULL, body, sizeof(body), &rsp);
+	zassert_equal(rsp.status, 401);
+	zassert_true(rsp.auth_challenge, "lets the browser ask for credentials");
+
+	pstop_api_admin_page(AUTH_OK, body, sizeof(body), &rsp);
+	zassert_equal(rsp.status, 200);
+}
+
+static void post_settings(const char *json)
+{
+	static char req[128];
+
+	(void)strncpy(req, json, sizeof(req) - 1U);
+	pstop_api_admin_settings(true, req, strlen(req), AUTH_OK, body, sizeof(body), &rsp);
+}
+
+ZTEST(api, test_admin_settings)
+{
+	REQUIRE_ADMIN();
+
+	pstop_api_admin_settings(false, NULL, 0U, NULL, body, sizeof(body), &rsp);
+	zassert_equal(rsp.status, 401);
+
+	pstop_api_admin_settings(false, NULL, 0U, AUTH_OK, body, sizeof(body), &rsp);
+	zassert_equal(rsp.status, 200);
+	assert_body("{\"ok\":true,\"ring_offset\":0,\"device_id\":3232235781,"
+		    "\"device_id_pinned\":true}");
+
+	post_settings("{\"ring_offset\":12}");
+	zassert_equal(rsp.status, 200);
+	zassert_equal(app_settings_ring_offset(), 12U);
+
+	post_settings("{\"ring_offset\":16}");
+	zassert_equal(rsp.status, 400);
+	post_settings("not json");
+	zassert_equal(rsp.status, 400);
+	post_settings("{\"colour\":\"red\"}");
+	zassert_equal(rsp.status, 400, "no known field");
+	zassert_equal(app_settings_ring_offset(), 12U);
+
+	/* 0 unpins: the id comes from the hardware again. */
+	post_settings("{\"device_id\":0}");
+	zassert_equal(rsp.status, 200);
+	zassert_true(body_has("\"device_id_pinned\":false"));
+	zassert_equal(app_settings_device_id(), 0U);
+	zassert_not_equal(app_settings_effective_device_id(), 0U, "derived, never 0");
+
+	post_settings("{\"device_id\":4294967295,\"ring_offset\":0}");
+	zassert_equal(rsp.status, 200);
+	zassert_equal(app_settings_effective_device_id(), UINT32_MAX, "full 32-bit range");
+	zassert_equal(app_settings_ring_offset(), 0U);
+
+	zassert_ok(app_settings_set_device_id(0xC0A80105U), "restore for the other cases");
+}
+
+static void post_wifi(const char *json)
+{
+	static char req[512];
+
+	(void)strncpy(req, json, sizeof(req) - 1U);
+	pstop_api_admin_wifi(true, req, strlen(req), AUTH_OK, body, sizeof(body), &rsp);
+}
+
+ZTEST(api, test_admin_wifi)
+{
+	struct pstop_wifi_net net;
+
+	REQUIRE_ADMIN();
+
+	pstop_api_admin_wifi(false, NULL, 0U, NULL, body, sizeof(body), &rsp);
+	zassert_equal(rsp.status, 401);
+
+	post_wifi("{\"networks\":[{\"ssid\":\"home\",\"pass\":\"supersecret\"},"
+		  "{\"ssid\":\"guest\",\"pass\":\"\"}]}");
+	zassert_equal(rsp.status, 200);
+	assert_body("{\"ok\":true,\"networks\":[{\"ssid\":\"home\",\"pass\":\"********\"},"
+		    "{\"ssid\":\"guest\",\"pass\":\"\"}],\"active_idx\":-1}");
+	zassert_ok(app_settings_wifi_get(0, &net));
+	zassert_str_equal(net.pass, "supersecret", "stored, never echoed");
+
+	/* The mask keeps the password stored for that ssid, wherever it
+	 * moves in the list.
+	 */
+	post_wifi("{\"networks\":[{\"ssid\":\"office\",\"pass\":\"12345678\"},"
+		  "{\"ssid\":\"home\",\"pass\":\"********\"}]}");
+	zassert_equal(rsp.status, 200);
+	zassert_ok(app_settings_wifi_get(1, &net));
+	zassert_str_equal(net.ssid, "home");
+	zassert_str_equal(net.pass, "supersecret");
+	zassert_ok(app_settings_wifi_get(2, &net));
+	zassert_str_equal(net.ssid, "", "the old list is replaced, not merged");
+
+	static const char *const bad[] = {
+		"{\"networks\":[{\"ssid\":\"\",\"pass\":\"\"}]}",
+		"{\"networks\":[{\"pass\":\"12345678\"}]}",
+		"{\"networks\":[{\"ssid\":\"q\\\"uote\",\"pass\":\"\"}]}",
+		"{\"networks\":[{\"ssid\":\"short\",\"pass\":\"1234567\"}]}",
+		"{\"networks\":[{\"ssid\":\"123456789012345678901234567890123\",\"pass\":\"\"}]}",
+		"{\"networks\":[{\"ssid\":\"a\"},{\"ssid\":\"b\"},{\"ssid\":\"c\"},{\"ssid\":\"d\"}"
+		","
+		"{\"ssid\":\"e\"}]}",
+		"{\"ssid\":\"home\"}",
+		"[]",
+	};
+
+	for (size_t i = 0; i < ARRAY_SIZE(bad); i++) {
+		post_wifi(bad[i]);
+		zassert_equal(rsp.status, 400, "accepted %s", bad[i]);
+	}
+	zassert_ok(app_settings_wifi_get(0, &net));
+	zassert_str_equal(net.ssid, "office", "bad requests change nothing");
+
+	post_wifi("{\"networks\":[]}");
+	zassert_equal(rsp.status, 200, "an empty list forgets every network");
+	assert_body("{\"ok\":true,\"networks\":[],\"active_idx\":-1}");
+}
+
+ZTEST(api, test_admin_verbose)
+{
+	REQUIRE_ADMIN();
+
+	pstop_api_admin_verbose(false, NULL, body, sizeof(body), &rsp);
+	zassert_equal(rsp.status, 401);
+
+	pstop_api_admin_verbose(false, AUTH_OK, body, sizeof(body), &rsp);
+	assert_body("{\"verbose\":false}");
+
+	pstop_api_admin_verbose(true, AUTH_OK, body, sizeof(body), &rsp);
+	zassert_equal(rsp.status, 200);
+	assert_body("{\"ok\":true,\"verbose\":true}");
+	zassert_true(pstop_verbose_get());
+
+	pstop_api_admin_verbose(true, AUTH_OK, body, sizeof(body), &rsp);
+	assert_body("{\"ok\":true,\"verbose\":false}");
+}
+
 ZTEST(api, test_admin_disabled_without_a_password)
 {
 	static const char *const auths[] = {
 		NULL, "", AUTH_EMPTY_PW, AUTH_OK, AUTH_UPSTREAM,
 	};
+	size_t size;
 
 	if (admin_configured()) {
 		ztest_test_skip();
@@ -517,7 +834,28 @@ ZTEST(api, test_admin_disabled_without_a_password)
 		pstop_api_admin_restart(auths[i], body, sizeof(body), &rsp);
 		zassert_equal(rsp.status, 403, "restart, auth %zu", i);
 		zassert_false(rsp.restart, "restart, auth %zu", i);
+
+		pstop_api_health_reset("/api/health/reset?what=all&confirm=1", auths[i], body,
+				       sizeof(body), &rsp);
+		zassert_equal(rsp.status, 403, "health reset, auth %zu", i);
+
+		pstop_api_coredump(auths[i], body, sizeof(body), &rsp, &size);
+		zassert_equal(rsp.status, 403, "coredump, auth %zu", i);
+		zassert_equal(size, 0U, "coredump, auth %zu", i);
+
+		pstop_api_admin_page(auths[i], body, sizeof(body), &rsp);
+		zassert_equal(rsp.status, 403, "page, auth %zu", i);
+
+		pstop_api_admin_settings(false, NULL, 0U, auths[i], body, sizeof(body), &rsp);
+		zassert_equal(rsp.status, 403, "settings, auth %zu", i);
+
+		pstop_api_admin_wifi(false, NULL, 0U, auths[i], body, sizeof(body), &rsp);
+		zassert_equal(rsp.status, 403, "wifi, auth %zu", i);
+
+		pstop_api_admin_verbose(true, auths[i], body, sizeof(body), &rsp);
+		zassert_equal(rsp.status, 403, "verbose, auth %zu", i);
 	}
+	zassert_false(pstop_verbose_get(), "never toggled");
 	zassert_false(app_settings_is_operator(), "never promoted");
 }
 

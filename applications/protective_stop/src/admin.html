@@ -1,0 +1,217 @@
+<!doctype html>
+<!--
+  Copyright (c) 2026 Richard Osterloh <richard.osterloh@gmail.com>
+  SPDX-License-Identifier: Apache-2.0
+
+  The admin page served at /admin/, gzipped into the image at build time.
+  Everything on it is a thin client of the JSON routes; it holds no state.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>pstop remote</title>
+<style>
+:root{--fg:#1d1f21;--bg:#fafafa;--mut:#666;--line:#ddd;--ok:#1a7f37;--warn:#b26b00;--bad:#c62828}
+@media (prefers-color-scheme:dark){:root{--fg:#e6e6e6;--bg:#16181a;--mut:#999;--line:#333}}
+body{font:14px/1.4 system-ui,sans-serif;color:var(--fg);background:var(--bg);margin:0 auto;max-width:860px;padding:12px 16px}
+h1{font-size:20px;margin:4px 0 12px}
+h2{font-size:15px;margin:20px 0 6px;border-bottom:1px solid var(--line);padding-bottom:4px}
+table{border-collapse:collapse;width:100%}
+td,th{text-align:left;padding:3px 6px;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums}
+th{color:var(--mut);font-weight:500}
+input,select,button{font:inherit;padding:3px 6px}
+input[type=text],input[type=password]{width:11em}
+button{cursor:pointer}
+.row{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:6px 0}
+.mut{color:var(--mut)}
+.l0{color:var(--ok)}.l1{color:var(--warn)}.l2{color:var(--bad)}
+#msg{position:sticky;top:0;padding:4px 0;min-height:1.4em}
+</style>
+</head>
+<body>
+<h1>pstop remote <span class="mut" id="ident"></span></h1>
+<div id="msg" class="mut"></div>
+
+<h2>Status</h2>
+<table id="status"></table>
+
+<h2>Machines</h2>
+<table><thead><tr><th>Slot</th><th>Address</th><th>Id</th><th>State</th><th>Last</th><th>Sent / replies</th><th></th></tr></thead>
+<tbody id="machines"></tbody></table>
+<div class="row">
+ <label>Slot <select id="slot"><option>0</option><option>1</option><option>2</option><option>3</option></select></label>
+ <input type="text" id="mip" placeholder="192.168.1.20">
+ <input type="text" id="mport" placeholder="port" style="width:5em">
+ <input type="text" id="mid" placeholder="id (0x01020304)" style="width:9em">
+ <button onclick="setPeer()">Set</button>
+</div>
+
+<h2>Role</h2>
+<div class="row">
+ <select id="role"><option value="stop_only">stop_only</option><option value="operator">operator</option></select>
+ <button onclick="setRole()">Apply</button>
+ <span class="mut">operator may re-arm a machine; stop_only may only stop it</span>
+</div>
+
+<h2>LED ring</h2>
+<div class="row">
+ <label>LED 1 is physical pixel <input type="number" id="ringoff" min="0" max="15" style="width:4em"></label>
+ <button onclick="setRing()">Set</button>
+ <button onclick="locate(1)">Locate on</button>
+ <button onclick="locate(0)">Locate off</button>
+</div>
+
+<h2>WiFi</h2>
+<p class="mut">Tried in order whenever Ethernet has no lease. Leave a password as ******** to keep it.</p>
+<table id="wifi"></table>
+<div class="row"><button onclick="saveWifi()">Save networks</button></div>
+
+<h2>Device id</h2>
+<div class="row">
+ <input type="text" id="devid" placeholder="0 = from MAC">
+ <button onclick="setDevId()">Set</button>
+ <span class="mut" id="devidnote"></span>
+</div>
+
+<h2>Health</h2>
+<table id="health"></table>
+<div class="row">
+ <button onclick="resetHealth('button')">Stop switch replaced</button>
+ <button onclick="resetHealth('all')">Reset all counters</button>
+</div>
+
+<h2>Diagnostics</h2>
+<div class="row">
+ <button id="verbose" onclick="toggleVerbose()">Verbose logging</button>
+ <a href="/api/last_log" target="_blank">Previous boot's log</a>
+ <a href="/api/coredump">Coredump</a>
+ <button onclick="restart()">Restart</button>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const STATES = ['idle', 'bonding', 'bonded', 'rejected'];
+const MSGS = {0x55: 'ok', 0x92: 'stop', 0xAD: 'bond', 0x6A: 'unbond', 0x0F: '-'};
+const OK = 0x55;
+let wifi = [];
+
+function say(t, bad) { $('msg').textContent = t; $('msg').className = bad ? 'l2' : 'mut'; }
+function ip(n) { return [n >>> 24, (n >>> 16) & 255, (n >>> 8) & 255, n & 255].join('.'); }
+function hex(n) { return '0x' + (n >>> 0).toString(16).padStart(8, '0'); }
+function esc(s) { return String(s).replace(/[&<>"]/g, c => '&#' + c.charCodeAt(0) + ';'); }
+function rows(el, pairs) { $(el).innerHTML = pairs.map(([k, v]) => `<tr><th>${k}</th><td>${v}</td></tr>`).join(''); }
+
+async function call(method, url, body) {
+  const r = await fetch(url, {method, body: body === undefined ? undefined : JSON.stringify(body),
+                              headers: body === undefined ? {} : {'Content-Type': 'application/json'}});
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) { throw new Error(j.error || r.status + ' ' + r.statusText); }
+  return j;
+}
+
+async function act(label, method, url, body) {
+  try { await call(method, url, body); say(label + ': done'); } catch (e) { say(label + ': ' + e.message, true); }
+  refresh();
+  loadForms();
+}
+
+async function refresh() {
+  try {
+    const s = await call('GET', '/state.json');
+    $('ident').textContent = hex(s.device_id) + ' · ' + s.fw_ver;
+    rows('status', [
+      ['Uplink', `${s.active_iface} ${s.local_ip}`],
+      ['Uptime', Math.floor(s.uptime_ms / 1000) + ' s'],
+      ['Role', s.role],
+      ['Switch channels', `${s.l0 === OK ? 'ok' : 'stop'} / ${s.l1 === OK ? 'ok' : 'stop'}`],
+      ['Loop health', `A ${s.e_hi0 && s.e_lo0 ? 'closed' : 'open'}, B ${s.e_hi1 && s.e_lo1 ? 'closed' : 'open'}`],
+      ['Sampler faults', `${s.pstop_mm_content} mismatches, ${s.pstop_mm_timeout} late`],
+      ['Health', `<span class="l${s.health}">${['ok', 'warning', 'critical'][s.health]}</span>`],
+      ['Crash dump', s.crash_present ? 'present' : 'none'],
+      ['Firmware', esc(s.fw_ver + ' ' + s.fw_sha)],
+    ]);
+    $('machines').innerHTML = s.pstop_machines.map((m, i) => !m.cfg ? `<tr class="mut"><td>${i}</td><td colspan="6">empty</td></tr>` :
+      `<tr><td>${i}</td><td>${ip(m.ip)}:${m.port}</td><td>${hex(m.id)}</td><td>${STATES[m.state] || m.state}</td>` +
+      `<td>${MSGS[m.last_msg] || m.last_msg}</td><td>${m.sent} / ${m.replies}</td>` +
+      `<td><button onclick="peer(${i},'rebond')">Rebond</button> <button onclick="peer(${i},'clear')">Clear</button></td></tr>`).join('');
+  } catch (e) { say('state: ' + e.message, true); }
+
+  try {
+    const h = await call('GET', '/api/health');
+    rows('health', [
+      ['Level', `<span class="l${h.level}">${['ok', 'warning', 'critical'][h.level]}</span>`],
+      ['Presses', `${h.presses} (${h.button_wear_pct}% of ${h.button_rated_ops})`],
+      ['Loop mismatch events', h.mismatch_events],
+      ['Boots / flashes', `${h.boots} / ${h.flashes}`],
+      ['Switch replacements', h.button_swaps],
+      ['Powered', (h.uptime_s / 3600).toFixed(1) + ' h'],
+      ...h.warnings.map(w => [esc(w.src), `<span class="l${w.level}">${esc(w.msg)}</span>`]),
+    ]);
+  } catch (e) { say('health: ' + e.message, true); }
+}
+
+/* The editable fields, loaded once and after each change: never on the
+ * timer, which would overwrite what is being typed.
+ */
+async function loadForms() {
+  try {
+    const s = await call('GET', '/state.json');
+    $('role').value = s.role;
+    $('ringoff').value = s.ring_offset;
+  } catch (e) { say('state: ' + e.message, true); }
+
+  try {
+    const w = await call('GET', '/admin/api/wifi');
+    wifi = w.networks;
+    let html = '<tr><th>#</th><th>SSID</th><th>Password</th><th></th></tr>';
+    for (let i = 0; i < 4; i++) {
+      const n = wifi[i] || {ssid: '', pass: ''};
+      html += `<tr><td>${i}</td><td><input type="text" id="ws${i}" value="${esc(n.ssid)}"></td>` +
+              `<td><input type="password" id="wp${i}" value="${esc(n.pass)}"></td>` +
+              `<td>${w.active_idx === i ? 'connected' : ''}</td></tr>`;
+    }
+    $('wifi').innerHTML = html;
+  } catch (e) { say('wifi: ' + e.message, true); }
+
+  try {
+    const st = await call('GET', '/admin/api/settings');
+    $('devid').value = st.device_id_pinned ? hex(st.device_id) : '0';
+    $('devidnote').textContent = st.device_id_pinned ? 'pinned' : 'derived from the MAC: ' + hex(st.device_id);
+    const v = await call('GET', '/admin/api/verbose');
+    $('verbose').textContent = 'Verbose logging: ' + (v.verbose ? 'on' : 'off');
+  } catch (e) { say('settings: ' + e.message, true); }
+}
+
+function setPeer() {
+  let q = `slot=${$('slot').value}&ip=${encodeURIComponent($('mip').value)}&port=${encodeURIComponent($('mport').value)}`;
+  if ($('mid').value) { q += '&id=' + encodeURIComponent($('mid').value); }
+  act('machine', 'POST', '/api/pstop_peers?' + q);
+}
+function peer(i, what) { act('slot ' + i, 'POST', `/api/pstop_peers?slot=${i}&${what}=1`); }
+function setRole() { act('role', 'POST', '/api/role?role=' + $('role').value); }
+function setRing() { act('ring offset', 'POST', '/api/ring_offset?n=' + $('ringoff').value); }
+function locate(on) { act('locate', 'POST', '/api/ring_led1?on=' + on); }
+function setDevId() { act('device id', 'POST', '/admin/api/settings', {device_id: Number($('devid').value) || 0}); }
+function toggleVerbose() { act('verbose', 'POST', '/admin/api/verbose/toggle'); }
+function saveWifi() {
+  const networks = [];
+  for (let i = 0; i < 4; i++) {
+    const ssid = $('ws' + i).value.trim();
+    if (ssid) { networks.push({ssid, pass: $('wp' + i).value}); }
+  }
+  act('wifi', 'POST', '/admin/api/wifi', {networks});
+}
+function resetHealth(what) {
+  if (confirm(what === 'all' ? 'Zero every health counter?' : 'Zero the press counters for a new stop switch?')) {
+    act('health reset', 'POST', `/api/health/reset?what=${what}&confirm=1`);
+  }
+}
+function restart() { if (confirm('Restart the remote?')) { act('restart', 'POST', '/admin/api/restart'); } }
+
+refresh();
+loadForms();
+setInterval(refresh, 5000);
+</script>
+</body>
+</html>

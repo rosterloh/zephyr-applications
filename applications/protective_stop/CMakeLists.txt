@@ -13,6 +13,16 @@ target_sources(app PRIVATE
   src/app_settings.c
   src/session.c
   src/lockstep.c
+  src/health_logic.c
+  src/health.c
+  src/ring.c
+  src/leds.c
+  src/uplink.c
+  src/wifi.c
+  src/crash.c
+  src/log_ring.c
+  src/last_log.c
+  src/verbose.c
 )
 
 if(CONFIG_PROTECTIVE_STOP_HTTP)
@@ -21,6 +31,9 @@ if(CONFIG_PROTECTIVE_STOP_HTTP)
     src/api.c
     src/http_server.c
   )
+  # The admin page ships gzipped; the browser inflates it.
+  set(gen_dir ${ZEPHYR_BINARY_DIR}/include/generated)
+  generate_inc_file_for_target(app src/admin.html ${gen_dir}/admin.html.gz.inc --gzip)
   zephyr_linker_sources(SECTIONS sections-rom.ld)
   zephyr_linker_section(NAME http_resource_desc_pstop_http
     KVMA RAM_REGION GROUP RODATA_REGION

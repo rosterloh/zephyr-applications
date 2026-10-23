@@ -15,9 +15,10 @@
 #include "estop_verdict.h"
 #include "lockstep.h"
 #include "pstop/pstop_msg.h"
+#include "pstop_log.h"
 #include "session.h"
 
-LOG_MODULE_REGISTER(lockstep, LOG_LEVEL_INF);
+LOG_MODULE_REGISTER(lockstep, PSTOP_LOG_LEVEL);
 
 #define SAMPLER_STACK_SIZE    2048
 #define COMPARATOR_STACK_SIZE 4096
@@ -89,6 +90,8 @@ static uint32_t missed_deadlines;
  * this indefinitely, which otherwise looks identical to "nothing to report".
  */
 static uint32_t gated_ticks;
+
+static pstop_lockstep_tick_observer_t tick_observer;
 
 static K_SEM_DEFINE(go_sem_0, 0, 1);
 static K_SEM_DEFINE(go_sem_1, 0, 1);
@@ -349,6 +352,12 @@ static void run_tick_body(uint64_t now_ms, uint32_t gen, uint8_t late_mask, uint
 
 	if ((late_mask == 0U) && samplers_published(gen)) {
 		comparator_pass();
+		/* Observers see only primed ticks, so the boot-priming STOP is
+		 * never mistaken for a press.
+		 */
+		if ((tick_observer != NULL) && estop_channels_primed(estop)) {
+			tick_observer(gen, sampler_verdict[0], sampler_verdict[1]);
+		}
 	} else {
 		LOG_WRN("sampler(s) %#x missed tick %u", late_mask, gen);
 		missed_deadlines++;
@@ -382,6 +391,11 @@ static void tick_sync(uint64_t now_ms, uint8_t late_mask)
 void pstop_lockstep_tick(uint64_t now_ms)
 {
 	tick_sync(now_ms, 0U);
+}
+
+void pstop_lockstep_set_tick_observer(pstop_lockstep_tick_observer_t fn)
+{
+	tick_observer = fn;
 }
 
 uint32_t pstop_lockstep_mismatches(void)
