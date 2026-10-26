@@ -7,7 +7,7 @@
 lockfile = true
 
 [tools]
-python = "3.14"
+python = "3.15"
 uv = "latest"
 cmake = "latest"
 ninja = "latest"
