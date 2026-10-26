@@ -62,8 +62,20 @@ jobs:
           bootstrap: true
           cache: true
 
+      # Python 3.15 lacks wheels for pydantic-core/pyyaml/markupsafe, so uv
+      # builds them from source (~80s). `prune --ci` keeps only those builds.
+      - name: Cache uv
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/uv
+          key: uv-${{ hashFiles('uv.lock', 'mise.toml') }}
+          restore-keys: |
+            uv-
+
       - name: Install Python dependencies
-        run: mise run sync
+        run: |
+          mise run sync
+          mise x -- uv cache prune --ci
 
       - name: Check clang-format
         run: |
@@ -97,8 +109,20 @@ jobs:
         with:
           cache: true
 
+      # Python 3.15 lacks wheels for pydantic-core/pyyaml/markupsafe, so uv
+      # builds them from source (~80s). `prune --ci` keeps only those builds.
+      - name: Cache uv
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/uv
+          key: uv-${{ hashFiles('uv.lock', 'mise.toml') }}
+          restore-keys: |
+            uv-
+
       - name: Install Python dependencies
-        run: mise run sync
+        run: |
+          mise run sync
+          mise x -- uv cache prune --ci
 
       - name: Cache west deps
         uses: actions/cache@v6
