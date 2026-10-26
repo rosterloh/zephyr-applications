@@ -1,7 +1,7 @@
 [project]
 name = "zephyr-applications"
 version = "1.0.0"
-requires-python = ">=3.14,<4.0"
+requires-python = ">=3.15,<4.0"
 
 [dependency-groups]
 dev = [
@@ -51,7 +51,8 @@ dev = [
   "tqdm>=4.70.1",
   "unidiff>=1.0.1",
   "west>=1.5.0",
-  "windows-curses>=2.4.2 ; sys_platform == 'win32'",
+  # shortcut: no cp315 wheel yet, so menuconfig's curses UI is unavailable on Windows; drop the python_version bound once one ships.
+  "windows-curses>=2.4.2 ; sys_platform == 'win32' and python_version < '3.15'",
   "yamllint>=1.37.1",
   "zcbor==0.9.1",
   "zephyr-kconfig>=0.2.1",
@@ -79,7 +80,7 @@ ignore = ["F401", "E501", "T201"]
 
 [tool.mypy]
 strict = true
-python_version = "3.14"
+python_version = "3.15"
 ignore_missing_imports = true
 
 # from https://blog.wolt.com/engineering/2021/09/30/professional-grade-mypy-configuration/
