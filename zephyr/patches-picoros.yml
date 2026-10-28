@@ -17,6 +17,7 @@ patches:
     email: richard.osterloh@gmail.com
     date: 2026-09-24
     upstreamable: true
+    issue: https://github.com/Pico-ROS/Pico-ROS-software/pull/25
     comments: |
       ucdr_deserialize_rstring() trusted the wire length and never checked for
       the terminating NUL, so any peer on the LAN could make later reads run
@@ -31,6 +32,7 @@ patches:
     email: richard.osterloh@gmail.com
     date: 2026-09-24
     upstreamable: true
+    issue: https://github.com/Pico-ROS/Pico-ROS-software/pull/25
     comments: |
       Service replies always carried sequence number 1 and the server's GID,
       so a long-lived rmw_zenoh client got its first call answered and every
@@ -44,7 +46,22 @@ patches:
     email: richard.osterloh@gmail.com
     date: 2026-10-09
     upstreamable: true
+    issue: https://github.com/Pico-ROS/Pico-ROS-software/pull/26
     comments: |
       picoparams decoded only the first Parameter of a SetParameters request
       and looped on a wire-supplied count (up to 2^32 on the zenoh read task).
       Only compiled with CONFIG_PICOROS_PARAMS, which no app here sets yet.
+
+  - path: picoros/0004-picoros-check-z-malloc-in-the-receive-paths-and-client-init.patch
+    sha256sum: 8edcb2b9a9d0fa8b864eb747a7723268e5c4a56369c93f8d573b93841b313e1f
+    module: deps/modules/lib/picoros
+    author: Richard Osterloh
+    email: richard.osterloh@gmail.com
+    date: 2026-09-25
+    upstreamable: true
+    issue: https://github.com/Pico-ROS/Pico-ROS-software/pull/25
+    comments: |
+      The receive handlers copied every payload into an unchecked z_malloc()
+      buffer, so heap exhaustion became a write through NULL in the zenoh
+      receive task. Drops the sample/reply (or leaves the request unanswered)
+      and logs it; service client init fails cleanly. Applies on top of 0002.
