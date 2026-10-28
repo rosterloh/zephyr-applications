@@ -1,0 +1,50 @@
+# Pico-ROS patches, applied after `west update` via
+# `west patch -l zephyr/patches-picoros.yml apply` (`mise run patch-picoros`).
+# Its own manifest for the checkout-command reason in zephyr/patches.yml.
+checkout-command: >-
+  git checkout --
+  src/picoserdes.c
+  src/picoros.c
+  src/picoros.h
+  src/picoparams.c
+clean-command: ""
+
+patches:
+  - path: picoros/0001-picoserdes-bound-string-and-sequence-decoding.patch
+    sha256sum: 55858da08d7c3a668cb8e7059c7f707572bf893b2be24095a02e2e2f8066422d
+    module: deps/modules/lib/picoros
+    author: Richard Osterloh
+    email: richard.osterloh@gmail.com
+    date: 2026-09-24
+    upstreamable: true
+    comments: |
+      ucdr_deserialize_rstring() trusted the wire length and never checked for
+      the terminating NUL, so any peer on the LAN could make later reads run
+      outside the received buffer (a length near UINT32_MAX wraps the iterator
+      on 32-bit boards). Also bounds sequence_rstring's count. This patch is
+      the input validation for every string-carrying message.
+
+  - path: picoros/0002-picoros-echo-request-attachment-in-service-replies.patch
+    sha256sum: ea24d2dca400cff3e6fd6aa3916bb17cf8a03f93500a68238c5683552170dac3
+    module: deps/modules/lib/picoros
+    author: Richard Osterloh
+    email: richard.osterloh@gmail.com
+    date: 2026-09-24
+    upstreamable: true
+    comments: |
+      Service replies always carried sequence number 1 and the server's GID,
+      so a long-lived rmw_zenoh client got its first call answered and every
+      later one dropped (`ros2 service call` makes a fresh client each time
+      and hides this). Echoes the request's sequence number and GID.
+
+  - path: picoros/0003-picoparams-parse-every-set-entry-refuse-bad-input.patch
+    sha256sum: 8696745620f6bf94befbef2ea2377d532a4b854445c17f27c6c3f73484ca23c0
+    module: deps/modules/lib/picoros
+    author: Richard Osterloh
+    email: richard.osterloh@gmail.com
+    date: 2026-10-09
+    upstreamable: true
+    comments: |
+      picoparams decoded only the first Parameter of a SetParameters request
+      and looped on a wire-supplied count (up to 2^32 on the zenoh read task).
+      Only compiled with CONFIG_PICOROS_PARAMS, which no app here sets yet.

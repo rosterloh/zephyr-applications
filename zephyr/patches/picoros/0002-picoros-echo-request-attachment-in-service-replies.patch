@@ -1,0 +1,113 @@
+From: Richard Osterloh <richard.osterloh@gmail.com>
+Subject: [PATCH] picoros: echo the request's rmw identity in service replies
+
+queriable_data_handler() always replied with srv->attachment.sequence_number
+set to 1 and the server's own GID, never reading the request's rmw
+attachment. rmw_zenoh clients match a reply to its pending request by the
+reply attachment's sequence number (and writer GID); a persistent client
+(e.g. a long-lived rclpy client, unlike a fresh `ros2 service call`
+client every time) gets its first call answered and every later one dropped
+on the floor, because the sequence number the reply carries never matches
+what the client is waiting for.
+
+Add picoros_reply_attachment_from_request(), a small static-inline helper in
+picoros.h, and call it from queriable_data_handler() before sending the
+reply: it copies the request attachment's sequence number and GID into a
+stack-local copy of the reply attachment when the request carried a
+well-formed one (exactly sizeof(rmw_attachment_t) bytes), and otherwise
+leaves the copy's bookkeeping values (sequence 1, this server's own GID)
+untouched. `srv->attachment` itself is never written here: it carries this
+server's own GID, set once by rmw_zenoh_gen_attachment_gid() rather than
+per-reply, and mutating it in place would leak one client's GID into every
+later reply for a request with no (or a malformed) attachment of its own.
+`time` is still set from the server's own clock either way.
+---
+--- a/src/picoros.c
++++ b/src/picoros.c
+@@ -179,13 +179,34 @@ static void queriable_data_handler(z_loaned_query_t *query, void *arg) {
+         z_owned_bytes_t reply_payload;
+         z_bytes_copy_from_buf(&reply_payload, reply.data, reply.length);
+ 
+-        // rmw attachment
+-        srv->attachment.sequence_number = 1;
+-        srv->attachment.time = 1000000000 * z_clock_now().tv_sec + z_clock_now().tv_nsec;
++        // rmw attachment: echo the request's sequence number and GID so a
++        // long-lived rmw_zenoh client can match this reply to its pending
++        // request. A request with no attachment, or one that is not exactly
++        // sizeof(rmw_attachment_t) bytes, keeps the old bookkeeping values
++        // (sequence 1, this server's own GID). Built in a stack-local copy:
++        // srv->attachment carries this server's own GID
++        // (rmw_zenoh_gen_attachment_gid() sets it once, not per-reply), so
++        // must NOT be mutated here -- doing so would leak one client's GID
++        // into every later reply that lacks its own attachment.
++        // z_query_reply() below sends synchronously and the attachment is
++        // dropped before it returns, so a stack-local tx is safe to point
++        // z_bytes_from_static_buf() at.
++        rmw_attachment_t tx = srv->attachment;
++        tx.sequence_number = 1;
++        const z_loaned_bytes_t *req_attachment = z_query_attachment(query);
++        if (req_attachment != NULL) {
++            size_t req_attachment_len = _z_bytes_len(req_attachment);
++            if (req_attachment_len == sizeof(rmw_attachment_t)) {
++                uint8_t req_attachment_buf[sizeof(rmw_attachment_t)];
++                _z_bytes_to_buf(req_attachment, req_attachment_buf, req_attachment_len);
++                picoros_reply_attachment_from_request(&tx, req_attachment_buf, req_attachment_len);
++            }
++        }
++        tx.time = 1000000000 * z_clock_now().tv_sec + z_clock_now().tv_nsec;
+         z_query_reply_options_t options;
+         z_query_reply_options_default(&options);
+         z_owned_bytes_t tx_attachment;
+-        z_bytes_from_static_buf(&tx_attachment, (uint8_t*)&srv->attachment, sizeof(rmw_attachment_t));
++        z_bytes_from_static_buf(&tx_attachment, (uint8_t*)&tx, sizeof(tx));
+         options.attachment = z_bytes_move(&tx_attachment);
+ 
+         // send reply
+--- a/src/picoros.h
++++ b/src/picoros.h
+@@ -31,6 +31,8 @@
+ 
+ #include <stdint.h>
+ #include <stdbool.h>
++#include <stddef.h>
++#include <string.h>
+ 
+ /* Exported constants --------------------------------------------------------*/
+ /** @brief Maximum size for key expressions used in rmw topic names @ingroup picoros */
+@@ -61,6 +63,36 @@ typedef struct __attribute__((__packed__)) {
+     uint8_t  rmw_gid[RMW_GID_SIZE]; /**< RMW Global Identifier */
+ } rmw_attachment_t;
+ 
++/**
++ * @brief Copy a request's rmw identity (sequence number and GID) into a
++ *        service reply's attachment.
++ *
++ * rmw_zenoh clients match a reply to its pending request by the reply
++ * attachment's sequence number (and writer GID); a server that always
++ * replies with its own bookkeeping values instead of the request's makes a
++ * long-lived client drop every reply after its first. Leaves `reply`
++ * untouched (including `time`, which the caller sets separately) and
++ * returns false unless `req` is non-NULL and `req_len` is exactly
++ * `sizeof(rmw_attachment_t)`.
++ *
++ * @param reply    Attachment to update in place.
++ * @param req      Raw bytes of the request's attachment, or NULL.
++ * @param req_len  Length of `req` in bytes.
++ * @return true if `reply` was updated from `req`, false otherwise.
++ */
++static inline bool picoros_reply_attachment_from_request(rmw_attachment_t *reply,
++                                                          const uint8_t *req, size_t req_len) {
++    if (reply == NULL || req == NULL || req_len != sizeof(rmw_attachment_t)) {
++        return false;
++    }
++    rmw_attachment_t incoming;
++    memcpy(&incoming, req, sizeof(incoming));
++    reply->sequence_number = incoming.sequence_number;
++    reply->rmw_gid_size = incoming.rmw_gid_size;
++    memcpy(reply->rmw_gid, incoming.rmw_gid, RMW_GID_SIZE);
++    return true;
++}
++
+ /**
+  * @brief RMW topic structure required by rmw_zenoh
+  */

@@ -45,8 +45,7 @@
  * bore-sight: the mechanical stop is at -51.0 deg (compliant from -50.0), so
  * this leaves ~6 deg of margin. The board's old -524 gave away 15 deg of the
  * travel that faces the ground once the head hangs inverted, and rad_to_ticks()
- * clamped to it without a word. Same value as eit_firmware's
- * dts/pt_control_head.dtsi, which drives the same head from three other boards.
+ * clamped to it without a word.
  */
 &gimbal_pan_servo {
 	/* +/-180 deg; pan has no mechanical stop, the limit is the cable loom. */

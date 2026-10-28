@@ -1,0 +1,45 @@
+From: Richard Osterloh <richard.osterloh@gmail.com>
+Subject: [PATCH] zephyr: name the pthreads zenoh creates after their stack slot
+
+pthread_create leaves the underlying k_thread anonymous, so every zenoh task
+appears as a bare pointer in `kernel thread list`, in `kernel thread stacks`,
+and in any kernel diagnostic that prints a tid.
+
+That is not only cosmetic. Zephyr's pthread_attr_destroy() unconditionally
+calls k_thread_stack_free() on the attr's stack, and _z_task_init sets a
+*static* K_THREAD_STACK_ARRAY_DEFINE slot via pthread_attr_setstack. The free
+therefore finds the freshly created, still-running thread and logs
+
+    <err> os: tid 0x3ffc5c20 is in use!
+
+on every session open. It is harmless -- the stack is static, nothing is
+leaked, and pthread_attr_destroy returns 0 regardless -- but the message names
+only a pointer, and tracking that pointer back to zenoh-pico took a full
+investigation on an ESP32 target. A name makes it self-evident.
+
+Named by stack slot rather than by purpose because _z_task_init does not know
+what the task is for; the callers in the transport layer do. zenoh0..zenohN
+still distinguishes the read task from the lease task in practice, since the
+slots are allocated in creation order.
+---
+--- a/src/system/zephyr/system.c
++++ b/src/system/zephyr/system.c
+@@ -158,6 +158,18 @@ z_result_t _z_task_init(_z_task_t *task, z_task_attr_t *attr, void *(*fun)(void
+         _z_report_system_error(attr_rc);
+     }
+ 
++#ifdef CONFIG_THREAD_NAME
++    // Name the thread after the stack slot it was given. pthread_create leaves
++    // the underlying k_thread anonymous, so every zenoh task shows up as a bare
++    // pointer in `kernel thread list`, in `kernel thread stacks`, and in any
++    // kernel diagnostic that prints a tid -- including the "tid %p is in use!"
++    // that pthread_attr_destroy provokes a few lines above, which cost a real
++    // investigation to attribute back to this function.
++    char thread_name[CONFIG_THREAD_MAX_NAME_LEN];
++    (void)snprintk(thread_name, sizeof(thread_name), "zenoh%d", stack_slot);
++    (void)pthread_setname_np(*task, thread_name);
++#endif
++
+     (void)pthread_mutex_lock(&thread_stack_mutex);
+     thread_stack_tasks[stack_slot] = *task;
+     thread_stack_task_tracked[stack_slot] = true;

@@ -92,6 +92,7 @@ The west.yml uses `name-allowlist` to clone only the modules these apps need; do
 - `deps/zephyr/` — Zephyr tree (managed by west, gitignored).
 - `deps/modules/lib/rosterloh-drivers/` — out-of-tree drivers repo. Tracks `main` via west.yml. Local edits during PR development are fine; commit them in that repo, not this one.
 - `deps/modules/lib/zenoh/` — zenoh-pico, patched by `mise run patch-zenoh`.
+- `zephyr/patches.yml` (zenoh-pico) + `zephyr/patches-picoros.yml` (Pico-ROS) + `zephyr/patches/` — patches applied to west modules by `west patch apply` (driven by `patch-zenoh` / `patch-picoros`, both run by `west-update`). One manifest per module, since `checkout-command` runs in every module a manifest names. Editing a patch file means updating its `sha256sum`.
 - `builds/<app>/` — build outputs (gitignored).
 - `logs/` — `agent-build` log destination.
 
