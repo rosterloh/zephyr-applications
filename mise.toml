@@ -86,14 +86,18 @@ description = "Fetch/update all west dependencies into deps/, re-applying the ze
 run = '''
 set -e
 
-# patch-zenoh applies a patch that edits tracked files in place, so a zenoh
-# revision bump aborts with "local changes would be overwritten by checkout".
-# `west patch clean` reverts exactly the patched files (its checkout-command in
-# zephyr/patches.yml is scoped to them). Anything else modified in that checkout
-# (PR work) is left alone and will still stop the update.
+# Checkouts (and CI caches) from before zenoh-pico 1.10.2 still carry the
+# retired <version.h> west patch, which would abort `west update` with "local
+# changes would be overwritten by checkout". Revert exactly those files; any
+# other edit in that checkout (PR work) is left alone and still stops the update.
 # Skipped on a fresh clone, where west has not created the checkouts yet.
+# shortcut: hard-coded file list, delete once no pre-1.10.2 checkout or cache remains.
 if [ -d "${MISE_PROJECT_ROOT}/deps/modules/lib/zenoh/.git" ]; then
-    west patch clean
+    git -C "${MISE_PROJECT_ROOT}/deps/modules/lib/zenoh" checkout -- \
+        include/zenoh-pico/system/platform/zephyr.h \
+        src/link/transport/serial/uart_zephyr.c \
+        src/system/zephyr/system.c \
+        zephyr/CMakeLists.txt
 fi
 
 west update --narrow
@@ -184,22 +188,11 @@ echo "Installed to ${DEST}; ESPRESSIF_QEMU_PATH already points there via mise.to
 """
 
 [tasks."patch-zenoh"]
-description = "Patch zenoh-pico Zephyr integration: apply zephyr/patches.yml, generate include/zenoh-pico/config.h from CONFIG_PICOROS_*. Idempotent."
+description = "Patch zenoh-pico Zephyr integration: generate include/zenoh-pico/config.h from CONFIG_PICOROS_*. Idempotent."
 run = '''
 set -e
 ZENOH_DIR="${MISE_PROJECT_ROOT}/deps/modules/lib/zenoh"
 CONFIG_H="${ZENOH_DIR}/include/zenoh-pico/config.h"
-
-# 0. Apply the tracked-file patches declared in zephyr/patches.yml (currently
-# just the <version.h> -> <zephyr/version.h> include fix). `git apply` is not
-# idempotent, so revert first -- clean is scoped to the patched files only, so
-# this stays safe to run standalone. Then assert the tree actually changed,
-# because `west patch apply` reports "0 patches applied successfully" when a
-# patch's module path resolves to nothing.
-west patch clean
-west patch apply
-git -C "$ZENOH_DIR" diff --quiet && \
-    { echo "patch-zenoh: west patch apply changed nothing - check zephyr/patches.yml"; exit 1; }
 
 # 1. Generate include/zenoh-pico/config.h. Upstream's zephyr/CMakeLists.txt
 # does not run configure_file(config.h.in config.h), so the header that
