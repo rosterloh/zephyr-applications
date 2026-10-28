@@ -1,5 +1,8 @@
+From f4b3964744851c645527b4390e756cc676bb1c26 Mon Sep 17 00:00:00 2001
 From: Richard Osterloh <richard.osterloh@gmail.com>
-Subject: [PATCH] zephyr: name the pthreads zenoh creates after their stack slot
+Date: Wed, 28 Oct 2026 15:07:48 +0000
+Subject: [PATCH] zephyr: name the pthreads zenoh creates after their stack
+ slot
 
 pthread_create leaves the underlying k_thread anonymous, so every zenoh task
 appears as a bare pointer in `kernel thread list`, in `kernel thread stacks`,
@@ -21,20 +24,21 @@ Named by stack slot rather than by purpose because _z_task_init does not know
 what the task is for; the callers in the transport layer do. zenoh0..zenohN
 still distinguishes the read task from the lease task in practice, since the
 slots are allocated in creation order.
+
+Signed-off-by: Richard Osterloh <richard.osterloh@gmail.com>
 ---
+ src/system/zephyr/system.c | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/src/system/zephyr/system.c b/src/system/zephyr/system.c
+index b7d94cf2..28a6ddbf 100644
 --- a/src/system/zephyr/system.c
 +++ b/src/system/zephyr/system.c
-@@ -158,6 +158,18 @@ z_result_t _z_task_init(_z_task_t *task, z_task_attr_t *attr, void *(*fun)(void
+@@ -151,6 +151,12 @@ z_result_t _z_task_init(_z_task_t *task, z_task_attr_t *attr, void *(*fun)(void
          _z_report_system_error(attr_rc);
      }
  
 +#ifdef CONFIG_THREAD_NAME
-+    // Name the thread after the stack slot it was given. pthread_create leaves
-+    // the underlying k_thread anonymous, so every zenoh task shows up as a bare
-+    // pointer in `kernel thread list`, in `kernel thread stacks`, and in any
-+    // kernel diagnostic that prints a tid -- including the "tid %p is in use!"
-+    // that pthread_attr_destroy provokes a few lines above, which cost a real
-+    // investigation to attribute back to this function.
 +    char thread_name[CONFIG_THREAD_MAX_NAME_LEN];
 +    (void)snprintk(thread_name, sizeof(thread_name), "zenoh%d", stack_slot);
 +    (void)pthread_setname_np(*task, thread_name);

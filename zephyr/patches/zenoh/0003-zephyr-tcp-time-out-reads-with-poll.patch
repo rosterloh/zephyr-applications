@@ -1,33 +1,43 @@
+From a09e9079fdbff7c0da684776abe25ed126ee541b Mon Sep 17 00:00:00 2001
 From: Richard Osterloh <richard.osterloh@gmail.com>
-Subject: [PATCH] zephyr: tcp: time out reads with poll(), not SO_RCVTIMEO
+Date: Wed, 28 Oct 2026 15:07:48 +0000
+Subject: [PATCH] zephyr: tcp: time out reads with poll() when SO_RCVTIMEO is
+ unavailable
 
-zenoh-pico 1.10 runs the read and lease jobs on one executor thread
+zenoh-pico runs the read and lease jobs on one executor thread
 (zp_start_lease_task is a no-op). _z_tcp_zephyr_open sets SO_RCVTIMEO, but
 Zephyr rejects it unless CONFIG_NET_CONTEXT_RCVTIMEO is set, and the failure
 is only logged. recv() then blocks until data arrives, the lease job never
 runs, no keep-alive is sent while the peer is quiet, and the router expires
 the session after one lease.
 
-Poll for Z_CONFIG_SOCKET_TIMEOUT before recv() and return SIZE_MAX on
-timeout, which the client read job already treats as "nothing to read".
+Without CONFIG_NET_CONTEXT_RCVTIMEO, poll for Z_CONFIG_SOCKET_TIMEOUT before
+recv() and return SIZE_MAX on timeout, which the client read job already
+treats as "nothing to read". With it, SO_RCVTIMEO works and nothing changes.
 
-CONFIG_NET_CONTEXT_RCVTIMEO would do the same, but on an ESP32
-(general_driver) enabling it stops the board in early boot before WiFi init.
+Enabling CONFIG_NET_CONTEXT_RCVTIMEO is not always an option: on an ESP32
+board it stopped the system in early boot, before WiFi init.
+
+Signed-off-by: Richard Osterloh <richard.osterloh@gmail.com>
 ---
+ src/link/transport/tcp/tcp_zephyr.c | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/src/link/transport/tcp/tcp_zephyr.c b/src/link/transport/tcp/tcp_zephyr.c
+index 957471a6..d7973550 100644
 --- a/src/link/transport/tcp/tcp_zephyr.c
 +++ b/src/link/transport/tcp/tcp_zephyr.c
-@@ -193,6 +193,14 @@
+@@ -192,6 +192,13 @@ static void _z_tcp_zephyr_close(_z_sys_net_socket_t *sock) {
  }
  
  static size_t _z_tcp_zephyr_read(_z_sys_net_socket_t sock, uint8_t *ptr, size_t len) {
-+    // SO_RCVTIMEO needs CONFIG_NET_CONTEXT_RCVTIMEO, and without it recv() blocks
-+    // the single executor thread, so the lease job never sends a keep-alive.
-+    // Time out here instead; the read job treats SIZE_MAX as "nothing to read".
-+    // ponytail: uses Z_CONFIG_SOCKET_TIMEOUT, so a locator `tout=` is ignored.
++#if !defined(CONFIG_NET_CONTEXT_RCVTIMEO)
++    // Without CONFIG_NET_CONTEXT_RCVTIMEO, SO_RCVTIMEO is rejected and recv() would block the lease job.
 +    struct zsock_pollfd pfd = {.fd = sock._fd, .events = ZSOCK_POLLIN};
 +    if (zsock_poll(&pfd, 1, Z_CONFIG_SOCKET_TIMEOUT) <= 0) {
 +        return SIZE_MAX;
 +    }
++#endif
      ssize_t rb = recv(sock._fd, ptr, len, 0);
      if (rb < (ssize_t)0) {
          return SIZE_MAX;

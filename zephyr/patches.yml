@@ -24,7 +24,7 @@ clean-command: ""
 
 patches:
   - path: zenoh/0001-zephyr-name-zenoh-pthreads.patch
-    sha256sum: 566dc342654aa3b2279662c7c4c246c72668a1dcd2058916c634bcc3ed93183c
+    sha256sum: 1fb079dbedcad148d841b332ad8423de5b1165973aeb4cbf56ced4a7c25f0a65
     # Workspace-relative path, not the module name: zenoh-pico's zephyr/module.yml
     # calls itself "zenoh-pico", and a name that resolves to nothing makes
     # `west patch apply` silently report "0 patches applied successfully".
@@ -33,18 +33,20 @@ patches:
     email: richard.osterloh@gmail.com
     date: 2026-09-21
     upstreamable: true
+    issue: https://github.com/eclipse-zenoh/zenoh-pico/pull/1353
     comments: |
       Names the pthreads _z_task_init creates (zenoh0..N) so they stop showing
       up as bare pointers in `kernel thread list` and in the harmless
       "tid %p is in use!" log pthread_attr_destroy() prints on session open.
 
   - path: zenoh/0002-zephyr-tcp-write-the-whole-buffer.patch
-    sha256sum: fddebf966c06414a12856f8ac6931310f9482a7819a8456806d903480d090e6a
+    sha256sum: 6a99e5e8c178de39ba7e9a454377199a3a179ec862f2dff179b0ee1f4766264a
     module: deps/modules/lib/zenoh
     author: Richard Osterloh
     email: richard.osterloh@gmail.com
     date: 2026-09-28
     upstreamable: true
+    issue: https://github.com/eclipse-zenoh/zenoh-pico/pull/1351
     comments: |
       _z_tcp_zephyr_write returned Zephyr's short send() count, and a short
       write aborts a stream link after the prefix is already on the wire: the
@@ -53,16 +55,16 @@ patches:
       Pico-ROS declaration burst fills the send window. Still in 1.10.2.
 
   - path: zenoh/0003-zephyr-tcp-time-out-reads-with-poll.patch
-    sha256sum: 01f33fff9ded48c1035813a5a4e07b35d19ba55ce4f9bf432b480948f704ff7a
+    sha256sum: 2ff6f943ce76972095b38efda61728f1429e84124a1400b7945461c8c6c35ceb
     module: deps/modules/lib/zenoh
     author: Richard Osterloh
     email: richard.osterloh@gmail.com
     date: 2026-09-28
     upstreamable: true
+    issue: https://github.com/eclipse-zenoh/zenoh-pico/pull/1352
     comments: |
       Read and lease share one executor thread, and Zephyr ignores SO_RCVTIMEO
       without CONFIG_NET_CONTEXT_RCVTIMEO, so recv() blocked, no keep-alive went
       out and rmw_zenohd expired the session every 60 s. Polls for
       Z_CONFIG_SOCKET_TIMEOUT before recv() instead. Not RCVTIMEO: on an ESP32
       it stopped the board in early boot (cause unexplained).
-      Applies on top of 0002.

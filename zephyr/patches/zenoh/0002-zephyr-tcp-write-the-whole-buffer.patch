@@ -1,5 +1,8 @@
+From 31d01f8b4d4f6c71c4fa4a1e0bfe25dc895abc33 Mon Sep 17 00:00:00 2001
 From: Richard Osterloh <richard.osterloh@gmail.com>
-Subject: [PATCH] zephyr: tcp: write the whole buffer, not what fits in the window
+Date: Wed, 28 Oct 2026 15:07:48 +0000
+Subject: [PATCH] zephyr: tcp: write the whole buffer, not what fits in the
+ window
 
 Zephyr's TCP send() queues only what fits in the send window and returns
 that count. _z_tcp_zephyr_write returned it unchanged, and
@@ -15,19 +18,22 @@ decoding error", and auto-reconnect replays the burst into the same wall.
 
 Loop until the whole buffer is written, as _z_tcp_zephyr_read_exact already
 does for reads. send() returning <= 0 is still reported as a failure.
+
+Signed-off-by: Richard Osterloh <richard.osterloh@gmail.com>
 ---
+ src/link/transport/tcp/tcp_zephyr.c | 11 ++++++++++-
+ 1 file changed, 10 insertions(+), 1 deletion(-)
+
 diff --git a/src/link/transport/tcp/tcp_zephyr.c b/src/link/transport/tcp/tcp_zephyr.c
-index bca917a5..859729b9 100644
+index 957471a6..5ce48afb 100644
 --- a/src/link/transport/tcp/tcp_zephyr.c
 +++ b/src/link/transport/tcp/tcp_zephyr.c
-@@ -220,7 +220,18 @@ static size_t _z_tcp_zephyr_read_exact(_z_sys_net_socket_t sock, uint8_t *ptr, s
+@@ -219,7 +219,16 @@ static size_t _z_tcp_zephyr_read_exact(_z_sys_net_socket_t sock, uint8_t *ptr, s
  }
  
  static size_t _z_tcp_zephyr_write(_z_sys_net_socket_t sock, const uint8_t *ptr, size_t len) {
 -    return (size_t)send(sock._fd, ptr, len, 0);
-+    // Zephyr's TCP send() queues only what fits in the send window and returns
-+    // that count, and _z_link_send_wbuf treats a short write on a stream link as
-+    // fatal after the prefix is already on the wire. Write it all, like the read.
++    // send() may queue only part of the buffer; a short write on a stream link is fatal.
 +    size_t n = 0;
 +    while (n < len) {
 +        ssize_t wb = send(sock._fd, &ptr[n], len - n, 0);
