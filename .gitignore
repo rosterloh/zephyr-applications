@@ -48,3 +48,7 @@ __pycache__/
 
 .embedder
 tools/
+
+# SSH keys from `west provision-ssh-key` (private keys, also baked into the header)
+/keys/
+ssh_keys_blob.h

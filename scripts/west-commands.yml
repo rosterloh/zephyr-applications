@@ -4,3 +4,8 @@ west-commands:
       - name: flash-small-blocks
         class: FlashSmallBlocks
         help: flash an Espressif image in small blocks (CH343 bridge workaround)
+  - file: scripts/west_commands/ssh_provision.py
+    commands:
+      - name: provision-ssh-key
+        class: SshProvision
+        help: generate an SSH host key + user keypair and install them
