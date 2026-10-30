@@ -282,7 +282,7 @@ What the WiFi + Pico-ROS build needs, each value measured on the board:
 |---------|-------|-----|
 | `HEAP_MEM_POOL_SIZE` | 72 KB | zenoh-pico's `z_malloc()` is `k_malloc()`, so it shares the system heap with the WiFi driver. Zephyr sizes that heap as the larger of this and the `HEAP_MEM_POOL_ADD_SIZE_*` sum (~56 KB), so anything smaller is ignored. Peak use is 56.5 KB. |
 | `SYSTEM_WORKQUEUE_STACK_SIZE` | 3072 | The WiFi reconnect path peaks at 1888 B. The stack sits directly above `main`'s, so overflowing it corrupts `main` rather than faulting. |
-| `MAX_PTHREAD_MUTEX_COUNT` / `_COND_COUNT` | 32 / 16 | The default 5 of each runs out right after the zenoh handshake. |
+| `MAX_PTHREAD_MUTEX_COUNT` / `_COND_COUNT` | 32 / 16 | The default 5 of each runs out right after the zenoh handshake. Defaulted by `common/picoros/Kconfig`. |
 | `NET_BUF_TX_COUNT` / `NET_PKT_TX_COUNT` | 64 / 24 | The startup burst of declarations failed to send with the defaults. |
 
 About 10 KB of libc heap is left over.
