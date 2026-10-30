@@ -7,6 +7,7 @@ project(rasprover)
 # Shared application code (see applications/common/).
 include(${CMAKE_CURRENT_LIST_DIR}/../common/build_id/build_id.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/../common/watchdog/watchdog.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/../common/img_confirm/img_confirm.cmake)
 
 # Pico-ROS generates serdes code for every type in this list, so it is a
 # rasprover-specific trim of upstream's examples/example_types.h rather than
