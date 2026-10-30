@@ -51,7 +51,10 @@ Run the ztest suites with twister via `test`. With no `--platform` it uses each 
 ```bash
 mise run test                                       # every suite under applications/
 mise run test protective_stop                       # one app's suites
+mise run test --runnable joystick_controller rasprover  # several apps, skip build-only scenarios (as CI does)
 ```
+
+CI routes by change: `scripts/ci/affected-apps.sh` maps a PR's diff to apps, and only those are built and tested. Touching anything shared (`boards/`, `west.yml`, `mise.*`, `scripts/`, the workflow) runs everything. Add an app to the `MATRIX` in `.github/workflows/build.yml` to have CI build it.
 
 If you must call `west build` directly, always pass `--build-dir builds/<app>` so artifacts don't pollute the repo root, and use the bare app name (e.g. `builds/motor_controller`, not `builds/applications/motor_controller`).
 

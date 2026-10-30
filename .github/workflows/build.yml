@@ -82,22 +82,60 @@ jobs:
           files=$(find applications boards -type f \( -name "*.c" -o -name "*.h" -o -name "*.cpp" -o -name "*.hpp" \))
           mise x -- clang-format --dry-run --Werror $files
 
+  # Routes the build matrix and twister to the apps a PR can affect, via
+  # scripts/ci/affected-apps.sh. Pushes to main and manual runs cover everything.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.route.outputs.matrix }}
+      tests: ${{ steps.route.outputs.tests }}
+      full: ${{ steps.route.outputs.full }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          # A PR checks out its merge commit; HEAD^1 is the base it merges into.
+          fetch-depth: 2
+
+      # bluetooth_proxy_device needs golioth/pouch, which are not in this
+      # workspace (disabled until pouch fixes board.yml full_name requirement).
+      # protective_stop defaults to native_sim, which the test job covers.
+      - name: Route
+        id: route
+        env:
+          MATRIX: |
+            [
+              {"app": "rasprover", "flags": "--sysbuild"},
+              {"app": "data_collection", "flags": "--sysbuild"},
+              {"app": "embedded_vision"},
+              {"app": "force_sensor"},
+              {"app": "joystick_controller"},
+              {"app": "motor_controller"},
+              {"app": "pico_fw"},
+              {"app": "protective_stop", "flags": "--board waveshare_esp32_s3_eth/esp32s3/procpu"}
+            ]
+        run: |
+          ALL=$(ls applications | grep -vx common | sort)
+          APPS=$ALL
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            APPS=$(git diff --name-only HEAD^1 HEAD | scripts/ci/affected-apps.sh)
+          fi
+          # Every app affected (e.g. mise.toml) is a full run, so --min-suites guards it.
+          [ "$APPS" = "$ALL" ] && echo "full=true" >> "$GITHUB_OUTPUT" || echo "full=false" >> "$GITHUB_OUTPUT"
+          echo "Affected apps:" $APPS
+          APPS_JSON=$(printf '%s\n' $APPS | jq -R . | jq -sc 'map(select(. != ""))')
+          echo "matrix=$(jq -c --argjson apps "$APPS_JSON" 'map(select(.app as $a | $apps | index($a)))' <<<"$MATRIX")" >> "$GITHUB_OUTPUT"
+          # shortcut: an app counts as tested only if it has tests/*/testcase.yaml; widen if one gets runnable scenarios elsewhere.
+          TESTS=$(for app in $APPS; do ls applications/"$app"/tests/*/testcase.yaml >/dev/null 2>&1 && echo "$app"; done | xargs)
+          echo "tests=$TESTS" >> "$GITHUB_OUTPUT"
+
   build:
+    needs: changes
+    if: needs.changes.outputs.matrix != '[]'
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - app: rasprover
-            flags: --sysbuild
-          - app: data_collection
-            flags: --sysbuild
-          - app: embedded_vision
-          - app: force_sensor
-          - app: joystick_controller
-          - app: motor_controller
-          - app: pico_fw
-          # bluetooth_proxy_device needs golioth/pouch, which are not in this
-          # workspace (disabled until pouch fixes board.yml full_name requirement)
+        include: ${{ fromJSON(needs.changes.outputs.matrix) }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -179,6 +217,8 @@ jobs:
   # Parallel to the build matrix: twister on native_sim/qemu needs none of the
   # per-app board plumbing. twister-out/ is never cached, so every run is fresh.
   test:
+    needs: changes
+    if: needs.changes.outputs.full == 'true' || needs.changes.outputs.tests != ''
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -231,9 +271,17 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # Bump --min-suites when adding a suite. A drop means suites are being
-      # filtered out (the native_sim vs native_sim/native/64 trap from #85).
+      # --runnable: hardware builds are the build matrix's job.
+      # On a full run, bump --min-suites when adding a suite. A drop means suites
+      # are being filtered out (the native_sim vs native_sim/native/64 trap from #85).
       - name: Run twister
         env:
           CCACHE_MAXSIZE: 500M
-        run: mise run test --min-suites 12
+          FULL: ${{ needs.changes.outputs.full }}
+          TESTS: ${{ needs.changes.outputs.tests }}
+        run: |
+          if [ "$FULL" = true ]; then
+            mise run test --runnable --min-suites 12
+          else
+            mise run test --runnable $TESTS
+          fi
