@@ -1,0 +1,21 @@
+# Zephyr patches, applied after `west update` via
+# `west patch -l zephyr/patches-zephyr.yml apply` (`mise run patch-zephyr`).
+# Its own manifest for the checkout-command reason in zephyr/patches.yml.
+checkout-command: >-
+  git checkout --
+  subsys/task_wdt/task_wdt.c
+clean-command: ""
+
+patches:
+  - path: zephyr/0001-task_wdt-forget-a-hardware-watchdog-that-rejected-it.patch
+    sha256sum: d3714899c894df7aa05be62dbd108009ebe12189936d407dc6f87c1e1c4bee96
+    module: deps/zephyr
+    author: Richard Osterloh
+    email: richard.osterloh@gmail.com
+    date: 2026-10-30
+    upstreamable: true
+    issue: https://github.com/rosterloh/zephyr-applications/issues/123
+    comments: |
+      A failed wdt_install_timeout() left hw_wdt_dev set, so retrying
+      task_wdt_init(NULL) still armed and fed a hardware watchdog with no
+      timeout installed. app_watchdog_init() relies on that retry.

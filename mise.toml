@@ -83,7 +83,7 @@ run = "mise run west-update && mise run sdk-install && mise run blobs-fetch"
 description = "First-time workspace setup: fetch west deps, install Zephyr SDK, fetch binary blobs, apply patches. Safe to re-run."
 
 [tasks."west-update"]
-description = "Fetch/update all west dependencies into deps/, re-applying the zenoh patches afterwards"
+description = "Fetch/update all west dependencies into deps/, re-applying the zenoh, Pico-ROS and Zephyr patches afterwards"
 run = '''
 set -e
 
@@ -99,10 +99,14 @@ fi
 if [ -d "${MISE_PROJECT_ROOT}/deps/modules/lib/picoros/.git" ]; then
     west patch -l zephyr/patches-picoros.yml clean
 fi
+if [ -d "${MISE_PROJECT_ROOT}/deps/zephyr/.git" ]; then
+    west patch -l zephyr/patches-zephyr.yml clean
+fi
 
 west update --narrow
 mise run patch-zenoh
 mise run patch-picoros
+mise run patch-zephyr
 '''
 
 [tasks."blobs-fetch"]
@@ -416,6 +420,18 @@ west patch -l zephyr/patches-picoros.yml clean
 west patch -l zephyr/patches-picoros.yml apply
 if git -C "${MISE_PROJECT_ROOT}/deps/modules/lib/picoros" diff --quiet; then
     echo "patch-picoros: west patch apply changed nothing - check zephyr/patches-picoros.yml"
+    exit 1
+fi
+'''
+
+[tasks."patch-zephyr"]
+description = "Apply zephyr/patches-zephyr.yml to Zephyr: task_wdt software-only retry after a rejected hardware watchdog. Idempotent."
+run = '''
+set -e
+west patch -l zephyr/patches-zephyr.yml clean
+west patch -l zephyr/patches-zephyr.yml apply
+if git -C "${MISE_PROJECT_ROOT}/deps/zephyr" diff --quiet; then
+    echo "patch-zephyr: west patch apply changed nothing - check zephyr/patches-zephyr.yml"
     exit 1
 fi
 '''

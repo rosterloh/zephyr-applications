@@ -1,0 +1,27 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Richard Osterloh <richard.osterloh@gmail.com>
+Date: Fri, 30 Oct 2026 17:29:39 +0000
+Subject: [PATCH] task_wdt: forget a hardware watchdog that rejected its config
+
+task_wdt_init() kept hw_wdt_dev when wdt_install_timeout() failed, so a
+later task_wdt_init(NULL) still ran wdt_setup() and wdt_feed() on a
+watchdog with no timeout installed. Clear it on the error path so the
+documented software-only fallback can be retried.
+
+Signed-off-by: Richard Osterloh <richard.osterloh@gmail.com>
+---
+ subsys/task_wdt/task_wdt.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/subsys/task_wdt/task_wdt.c b/subsys/task_wdt/task_wdt.c
+index a7741f966..87b3449d1 100644
+--- a/subsys/task_wdt/task_wdt.c
++++ b/subsys/task_wdt/task_wdt.c
+@@ -142,6 +142,7 @@ int task_wdt_init(const struct device *hw_wdt)
+ 		hw_wdt_channel = wdt_install_timeout(hw_wdt_dev, &wdt_config);
+ 		if (hw_wdt_channel < 0) {
+ 			LOG_ERR("hw_wdt install timeout failed: %d", hw_wdt_channel);
++			hw_wdt_dev = NULL;
+ 			return hw_wdt_channel;
+ 		}
+ #else

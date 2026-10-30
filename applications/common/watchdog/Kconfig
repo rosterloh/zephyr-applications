@@ -22,4 +22,22 @@ config APP_WATCHDOG
 	  before rebooting; the flash-partition backend cannot be written from
 	  the timeout handler and is skipped.
 
+config APP_REBOOT_ON_FATAL
+	bool "Reboot on a fatal error"
+	default y
+	depends on APP_WATCHDOG
+	# Rebooting hides test failures on native_sim.
+	depends on !ARCH_POSIX
+	select RESET_ON_FATAL_ERROR
+	help
+	  Reboot as soon as a fatal error has been logged (and any coredump
+	  written), instead of halting until the hardware watchdog, if there is
+	  one, resets the board CONFIG_TASK_WDT_MIN_TIMEOUT +
+	  CONFIG_TASK_WDT_HW_FALLBACK_DELAY later.
+
+	  A fault during boot becomes a reboot loop. An unconfirmed MCUboot
+	  image reverts on the next reset, which ends it; a confirmed image
+	  keeps looping. Acceptable for a headless device, which would
+	  otherwise sit halted until power-cycled.
+
 rsource "../reset_reason/Kconfig"
