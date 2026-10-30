@@ -18,6 +18,7 @@ checkout-command: >-
   include/zenoh-pico/system/platform/zephyr.h
   src/link/transport/serial/uart_zephyr.c
   src/link/transport/tcp/tcp_zephyr.c
+  src/net/session.c
   src/system/zephyr/system.c
   zephyr/CMakeLists.txt
 clean-command: ""
@@ -68,3 +69,15 @@ patches:
       out and rmw_zenohd expired the session every 60 s. Polls for
       Z_CONFIG_SOCKET_TIMEOUT before recv() instead. Not RCVTIMEO: on an ESP32
       it stopped the board in early boot (cause unexplained).
+
+  - path: zenoh/0004-net-drop-tc-when-auto-reconnect-is-disabled.patch
+    sha256sum: 8a2fab85707d00b44ef9b60140405219194956b963d066be6cd7108776b7cda3
+    module: deps/modules/lib/zenoh
+    author: Richard Osterloh
+    email: richard.osterloh@gmail.com
+    date: 2026-10-30
+    upstreamable: true
+    comments: |
+      With Z_FEATURE_AUTO_RECONNECT=0 (joystick_controller) the `tc` pointer in
+      _zp_start_transport_tasks is unused, which fails twister's -Werror build.
+      Still on zenoh-pico main as of 2026-10-30.

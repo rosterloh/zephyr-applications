@@ -55,6 +55,7 @@ mise tasks ls
 | `app <name> [--board <b>] [--sysbuild]`         | Build an app for its default (or an explicitly allowed) board |
 | `flash <name>`                                  | Flash a previously built app                                  |
 | `agent-build <name> [--board <b>] [--sysbuild]` | `app` with tail-truncated logs written to `logs/`             |
+| `test [<app>] [--platform <p>]`                 | Run ztest suites with twister (integration platforms by default) |
 | `run-rasprover-sim`                             | Run an already-built native_sim rasprover image               |
 | `fmt`                                           | Format Python scripts with ruff                               |
 

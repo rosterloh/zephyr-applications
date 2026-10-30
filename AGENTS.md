@@ -46,6 +46,13 @@ mise run agent-build motor_controller
 # Override tail counts with TAIL_S / TAIL_F.
 ```
 
+Run the ztest suites with twister via `test`. With no `--platform` it uses each suite's `integration_platforms`; on macOS pass `--platform qemu_cortex_m3` (`native_sim` is Linux-only). Output goes to `twister-out/`.
+
+```bash
+mise run test                                       # every suite under applications/
+mise run test protective_stop                       # one app's suites
+```
+
 If you must call `west build` directly, always pass `--build-dir builds/<app>` so artifacts don't pollute the repo root, and use the bare app name (e.g. `builds/motor_controller`, not `builds/applications/motor_controller`).
 
 

@@ -175,3 +175,65 @@ jobs:
           mise x -- ccache --zero-stats
           mise run app ${{ matrix.app }} ${{ matrix.flags }}
           mise x -- ccache --show-stats
+
+  # Parallel to the build matrix: twister on native_sim/qemu needs none of the
+  # per-app board plumbing. twister-out/ is never cached, so every run is fresh.
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install mise
+        uses: jdx/mise-action@v5
+        with:
+          cache: true
+
+      - name: Cache uv
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/uv
+          key: uv-${{ hashFiles('uv.lock', 'mise.toml') }}
+          restore-keys: |
+            uv-
+
+      - name: Install Python dependencies
+        run: |
+          mise run sync
+          mise x -- uv cache prune --ci
+
+      - name: Cache west deps
+        uses: actions/cache@v6
+        with:
+          path: deps/
+          key: west-deps-${{ hashFiles('west.yml') }}
+          restore-keys: |
+            west-deps-
+
+      - name: Cache Zephyr SDK
+        uses: actions/cache@v6
+        with:
+          path: ~/zephyr-sdk-*
+          key: zephyr-sdk-${{ hashFiles('west.yml') }}
+          restore-keys: |
+            zephyr-sdk-
+
+      - name: Cache ccache
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ccache
+          key: ccache-twister-${{ github.run_id }}
+          restore-keys: |
+            ccache-twister-
+
+      - name: Setup workspace
+        run: mise run setup
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Bump --min-suites when adding a suite. A drop means suites are being
+      # filtered out (the native_sim vs native_sim/native/64 trap from #85).
+      - name: Run twister
+        env:
+          CCACHE_MAXSIZE: 500M
+        run: mise run test --min-suites 12
