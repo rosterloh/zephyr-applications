@@ -25,6 +25,10 @@ on:
       - '**/*.md'
       - 'LICENSE'
   workflow_dispatch:
+  # Nightly full run on main: saves the day's west-deps cache, so PRs fetch at
+  # most a day of zephyr main, and catches upstream breakage with no PR open.
+  schedule:
+    - cron: '23 3 * * *'
 
 # Install tools strictly from mise.lock: fail if a tool has no pre-resolved
 # entry for linux-x64 rather than silently reaching out to GitHub/aqua and
@@ -90,6 +94,7 @@ jobs:
       matrix: ${{ steps.route.outputs.matrix }}
       tests: ${{ steps.route.outputs.tests }}
       full: ${{ steps.route.outputs.full }}
+      day: ${{ steps.route.outputs.day }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -128,6 +133,8 @@ jobs:
           # shortcut: an app counts as tested only if it has tests/*/testcase.yaml; widen if one gets runnable scenarios elsewhere.
           TESTS=$(for app in $APPS; do ls applications/"$app"/tests/*/testcase.yaml >/dev/null 2>&1 && echo "$app"; done | xargs)
           echo "tests=$TESTS" >> "$GITHUB_OUTPUT"
+          # One day for the whole run, so jobs either side of midnight share a cache key.
+          echo "day=$(date -u +%F)" >> "$GITHUB_OUTPUT"
 
   build:
     needs: changes
@@ -162,12 +169,18 @@ jobs:
           mise run sync
           mise x -- uv cache prune --ci
 
-      - name: Cache west deps
-        uses: actions/cache@v6
+      # zephyr and rosterloh-drivers track main, so a cache keyed on west.yml
+      # alone froze and every job re-fetched everything since. Restore-only here:
+      # main saves the day's entry below; a PR-scoped 2.7 GB save would only
+      # slow the PR down and be invisible to other PRs.
+      - name: Restore west deps
+        id: deps
+        uses: actions/cache/restore@v6
         with:
           path: deps/
-          key: west-deps-${{ hashFiles('west.yml') }}
+          key: west-deps-${{ hashFiles('west.yml') }}-${{ needs.changes.outputs.day }}
           restore-keys: |
+            west-deps-${{ hashFiles('west.yml') }}-
             west-deps-
 
       - name: Cache Zephyr SDK
@@ -203,6 +216,15 @@ jobs:
         run: mise run setup
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # After setup, so the entry holds today's updated checkout. Parallel jobs
+      # race to save; the losers only log a warning.
+      - name: Save west deps
+        if: github.event_name != 'pull_request' && steps.deps.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: deps/
+          key: ${{ steps.deps.outputs.cache-primary-key }}
 
       - name: Build firmware
         env:
@@ -242,12 +264,18 @@ jobs:
           mise run sync
           mise x -- uv cache prune --ci
 
-      - name: Cache west deps
-        uses: actions/cache@v6
+      # zephyr and rosterloh-drivers track main, so a cache keyed on west.yml
+      # alone froze and every job re-fetched everything since. Restore-only here:
+      # main saves the day's entry below; a PR-scoped 2.7 GB save would only
+      # slow the PR down and be invisible to other PRs.
+      - name: Restore west deps
+        id: deps
+        uses: actions/cache/restore@v6
         with:
           path: deps/
-          key: west-deps-${{ hashFiles('west.yml') }}
+          key: west-deps-${{ hashFiles('west.yml') }}-${{ needs.changes.outputs.day }}
           restore-keys: |
+            west-deps-${{ hashFiles('west.yml') }}-
             west-deps-
 
       - name: Cache Zephyr SDK
@@ -270,6 +298,15 @@ jobs:
         run: mise run setup
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # After setup, so the entry holds today's updated checkout. Parallel jobs
+      # race to save; the losers only log a warning.
+      - name: Save west deps
+        if: github.event_name != 'pull_request' && steps.deps.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: deps/
+          key: ${{ steps.deps.outputs.cache-primary-key }}
 
       # --runnable: hardware builds are the build matrix's job.
       # On a full run, bump --min-suites when adding a suite. A drop means suites
