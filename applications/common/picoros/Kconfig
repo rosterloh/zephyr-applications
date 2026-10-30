@@ -104,4 +104,12 @@ config PICOROS_TRANSPORT_CONNECT_TIMEOUT_MS
 	int "Zenoh: P2P link connect timeout (ms)"
 	default 10000
 
+# The default pools of 5 are exhausted by a multi-threaded zenoh session: it
+# fails with ENOMEM right after the OPEN handshake with the router succeeds.
+configdefault MAX_PTHREAD_MUTEX_COUNT
+	default 32
+
+configdefault MAX_PTHREAD_COND_COUNT
+	default 16
+
 endif # PICOROS
