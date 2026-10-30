@@ -6,6 +6,11 @@ own machine implementation, unmodified, over host loopback.
 `native_sim` uses `CONFIG_NET_NATIVE_OFFLOADED_SOCKETS`, so `zsock_*` calls
 go straight to host syscalls. No TAP interface, no `net-tools`, no root.
 
+`test_interop.py` automates the steps below as the twister scenario
+`app.protective_stop.interop` (Linux only, like native_sim):
+
+    mise run test protective_stop
+
 ## Build the machine
 
     cmake -S deps/modules/lib/protective-stop/pstop_c -B /tmp/pstop_machine_build
