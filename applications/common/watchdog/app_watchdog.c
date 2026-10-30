@@ -90,6 +90,14 @@ int app_watchdog_init(void)
 	}
 
 	ret = task_wdt_init(hw_wdt);
+	if (ret != 0 && hw_wdt != NULL) {
+		/* Losing the hardware backstop must not cost stall detection
+		 * too. Relies on zephyr/patches-zephyr.yml 0001: unpatched,
+		 * task_wdt keeps the rejected device and still arms it. */
+		LOG_WRN("Hardware watchdog rejected (%d); falling back to software only", ret);
+		hw_wdt = NULL;
+		ret = task_wdt_init(NULL);
+	}
 	if (ret != 0) {
 		/* Deliberately loud: everything below degrades to a no-op from
 		 * here, so the board boots and runs with no stall detection at
