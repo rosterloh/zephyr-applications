@@ -22,3 +22,6 @@ zephyr_include_directories(${CMAKE_CURRENT_LIST_DIR})
 
 target_sources_ifdef(CONFIG_APP_WATCHDOG app PRIVATE
   ${CMAKE_CURRENT_LIST_DIR}/app_watchdog.c)
+
+# The timeout handler marks the reset; see ../reset_reason/.
+include(${CMAKE_CURRENT_LIST_DIR}/../reset_reason/reset_reason.cmake)
