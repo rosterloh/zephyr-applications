@@ -11,21 +11,24 @@
 sample:
   description: Protective-stop remote for the Polymath pstop protocol
   name: protective-stop
-common:
-  build_only: true
-  platform_allow:
-    - native_sim/native/64
-    - waveshare_esp32_s3_eth/esp32s3/procpu
-  integration_platforms:
-    - native_sim/native/64
-    - waveshare_esp32_s3_eth/esp32s3/procpu
+#
+# Platforms are per scenario, not in common: twister merges list keys into each
+# scenario, and excluding an inherited integration platform is an error.
 tests:
-  app.protective_stop.default: {}
+  app.protective_stop.default:
+    build_only: true
+    platform_allow:
+      - native_sim/native/64
+      - waveshare_esp32_s3_eth/esp32s3/procpu
+    integration_platforms:
+      - native_sim/native/64
+      - waveshare_esp32_s3_eth/esp32s3/procpu
   # Runs the remote against upstream's machine_app; see tests/interop/README.md.
   app.protective_stop.interop:
-    build_only: false
-    platform_exclude:
-      - waveshare_esp32_s3_eth/esp32s3/procpu
+    platform_allow:
+      - native_sim/native/64
+    integration_platforms:
+      - native_sim/native/64
     timeout: 180
     harness: pytest
     harness_config:
