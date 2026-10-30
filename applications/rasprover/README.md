@@ -245,7 +245,7 @@ Application-level symbols (`applications/rasprover/Kconfig`):
 | `APP_TIME_SNTP_SERVER` | `pool.ntp.org` | SNTP server used for realtime clock sync |
 | `APP_TIME_SNTP_RETRY_SEC` | `15` | Retry interval after a failed SNTP sync |
 | `APP_TIME_SNTP_RESYNC_SEC` | `3600` | Resync interval after a successful SNTP sync |
-| `APP_HTTP` | y | Read-only HTTP status page (`/`, `/status.json`) |
+| `APP_HTTP` | n | Read-only HTTP status page (`/`, `/status.json`) |
 | `APP_HTTP_PORT` | `80` | Status page port |
 
 #### Advanced tunables
@@ -287,13 +287,16 @@ What the WiFi + Pico-ROS build needs, each value measured on the board:
 | `MAX_PTHREAD_MUTEX_COUNT` / `_COND_COUNT` | 32 / 16 | The default 5 of each runs out right after the zenoh handshake. Defaulted by `common/picoros/Kconfig`. |
 | `NET_BUF_TX_COUNT` / `NET_PKT_TX_COUNT` | 64 / 24 | The startup burst of declarations failed to send with the defaults. |
 
-About 2.5 KB of libc heap is left over, by the link map. The status page
-(`CONFIG_APP_HTTP`) costs 7 KB of it, mostly its 3 KB thread stack and two
-client contexts; `CONFIG_APP_HTTP=n` gives it back.
+About 10 KB of libc heap is left over. The status page (`CONFIG_APP_HTTP`,
+off by default) would take 7 KB of it, mostly its 3 KB thread stack and two
+client contexts, which is why it is off.
 
 ## Status page
 
-With the network up, the board serves a read-only status page on port 80
+Off by default: ROS clients get the same data over Pico-ROS, and it costs 7 KB
+of DRAM (see [Memory budget](#memory-budget)). It is for looking at the board
+without a router or ROS host. Build with `-DCONFIG_APP_HTTP=y` and, with the
+network up, the board serves a read-only status page on port 80
 (`CONFIG_APP_HTTP_PORT`), using Zephyr's HTTP server:
 
 ```shell

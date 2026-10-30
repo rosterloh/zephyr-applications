@@ -212,7 +212,6 @@ endif # APP_GIMBAL
 
 menuconfig APP_HTTP
 	bool "Read-only HTTP status page"
-	default y
 	depends on NETWORKING
 	select HTTP_SERVER
 	help
