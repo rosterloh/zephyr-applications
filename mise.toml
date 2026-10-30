@@ -469,20 +469,16 @@ run = "west flash --build-dir builds/${usage_app}"
 [tasks.test]
 description = "Run the ztest suites under applications/ with twister, on each suite's integration_platforms unless --platform is given."
 usage = '''
-arg "[app]" help="Only run the suites under applications/<app>/tests"
+arg "[app]" help="Only run the suites and build scenarios under applications/<app>"
 flag "-p --platform <platform>" help="Run on this platform instead of integration_platforms (e.g. qemu_cortex_m3 on macOS)"
 flag "--min-suites <n>" help="Fail if fewer than n suites passed, so a filtering regression can't report green"
 '''
-# Roots are applications/*/tests only: each app's own tests.yaml is a build-only
-# scenario the build matrix already covers, and under twister's -Werror it fails
-# on third-party warnings (zenoh-pico). Top-level tests/ holds pytest, not ztest.
+# Each app's tests.yaml (build-only, under twister's -Werror) is picked up too.
+# Top-level tests/ is not a root: it holds pytest scripts, not ztest suites.
 run = """
 set -e
-ROOTS=""
-for d in applications/${usage_app:-*}/tests; do
-    [ -d "$d" ] && ROOTS="$ROOTS -T $d"
-done
-[ -n "$ROOTS" ] || { echo "no ztest suites under applications/${usage_app:-*}/tests" >&2; exit 2; }
+ROOT="applications${usage_app:+/${usage_app}}"
+[ -d "$ROOT" ] || { echo "no such app: ${usage_app}" >&2; exit 2; }
 
 if [ -n "${usage_platform}" ]; then
     PLATFORM="-p ${usage_platform}"
@@ -491,7 +487,7 @@ else
 fi
 
 STATUS=0
-west twister $ROOTS $PLATFORM --inline-logs -O twister-out || STATUS=$?
+west twister -T "$ROOT" $PLATFORM --inline-logs -O twister-out || STATUS=$?
 
 echo "Suites by status:"
 jq -r '.testsuites | group_by(.status)[] | "  \\(.[0].status): \\(length)"' twister-out/twister.json

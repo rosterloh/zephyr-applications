@@ -24,7 +24,7 @@ static bool read_joint(const struct device *motor, const char *name,
 	*joint = (struct app_motors_joint_state){
 		.name = name,
 		.position_rad = fb.position,
-		.velocity_rad_s = (fb.valid_mask & ACTUATOR_FB_VELOCITY) ? fb.velocity : 0.0,
+		.velocity_rad_s = (fb.valid_mask & ACTUATOR_FB_VELOCITY) ? fb.velocity : 0.0f,
 	};
 	return true;
 }

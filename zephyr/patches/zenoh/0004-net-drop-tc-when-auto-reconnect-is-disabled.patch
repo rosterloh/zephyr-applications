@@ -1,0 +1,71 @@
+From dc3f4f04c20aeb083ffc7f1d9be3c5bdd62f4a91 Mon Sep 17 00:00:00 2001
+From: Richard Osterloh <richard.osterloh@gmail.com>
+Date: Fri, 30 Oct 2026 14:44:45 +0000
+Subject: [PATCH] net: drop tc when auto-reconnect is disabled
+
+_zp_start_transport_tasks only uses its transport-common pointer to
+store task handles under Z_FEATURE_AUTO_RECONNECT, so with the feature
+off every case trips -Wunused-variable, which is fatal under -Werror
+(Zephyr's twister builds with it). Index the transport directly instead.
+---
+ src/net/session.c | 9 +++------
+ 1 file changed, 3 insertions(+), 6 deletions(-)
+
+diff --git a/src/net/session.c b/src/net/session.c
+index 5da12f8..949101e 100644
+--- a/src/net/session.c
++++ b/src/net/session.c
+@@ -747,7 +747,6 @@ z_result_t _zp_start_transport_tasks(_z_session_t *zn) {
+     switch (zn->_tp._type) {
+ #if Z_FEATURE_UNICAST_TRANSPORT == 1
+         case _Z_TRANSPORT_UNICAST_TYPE: {
+-            _z_transport_common_t *tc = &zn->_tp._transport._unicast._common;
+             // Order must match _Z_TRANSPORT_TASK_* index constants.
+             _z_fut_fn_t tasks[_Z_TRANSPORT_TASK_COUNT] = {0};
+             tasks[_Z_TRANSPORT_TASK_KEEP_ALIVE] = _zp_unicast_keep_alive_task_fn;
+@@ -767,7 +766,7 @@ z_result_t _zp_start_transport_tasks(_z_session_t *zn) {
+                     _Z_ERROR_RETURN(_Z_ERR_FAILED_TO_SPAWN_TASK);
+                 }
+ #if Z_FEATURE_AUTO_RECONNECT == 1
+-                tc->_tasks._task_handles[i] = h;
++                zn->_tp._transport._unicast._common._tasks._task_handles[i] = h;
+ #endif
+             }
+             break;
+@@ -775,7 +774,6 @@ z_result_t _zp_start_transport_tasks(_z_session_t *zn) {
+ #endif
+ #if Z_FEATURE_MULTICAST_TRANSPORT == 1
+         case _Z_TRANSPORT_MULTICAST_TYPE: {
+-            _z_transport_common_t *tc = &zn->_tp._transport._multicast._common;
+             // Order must match _Z_TRANSPORT_TASK_* index constants.
+             _z_fut_fn_t tasks[_Z_TRANSPORT_TASK_COUNT] = {0};
+             tasks[_Z_TRANSPORT_TASK_KEEP_ALIVE] = _zp_multicast_keep_alive_task_fn;
+@@ -793,7 +791,7 @@ z_result_t _zp_start_transport_tasks(_z_session_t *zn) {
+                     _Z_ERROR_RETURN(_Z_ERR_FAILED_TO_SPAWN_TASK);
+                 }
+ #if Z_FEATURE_AUTO_RECONNECT == 1
+-                tc->_tasks._task_handles[i] = h;
++                zn->_tp._transport._multicast._common._tasks._task_handles[i] = h;
+ #endif
+             }
+             break;
+@@ -801,7 +799,6 @@ z_result_t _zp_start_transport_tasks(_z_session_t *zn) {
+ #endif
+ #if Z_FEATURE_RAWETH_TRANSPORT == 1
+         case _Z_TRANSPORT_RAWETH_TYPE: {
+-            _z_transport_common_t *tc = &zn->_tp._transport._raweth._common;
+             // Order must match _Z_TRANSPORT_TASK_* index constants.
+             _z_fut_fn_t tasks[_Z_TRANSPORT_TASK_COUNT] = {0};
+             tasks[_Z_TRANSPORT_TASK_KEEP_ALIVE] = _zp_multicast_keep_alive_task_fn;
+@@ -819,7 +816,7 @@ z_result_t _zp_start_transport_tasks(_z_session_t *zn) {
+                     _Z_ERROR_RETURN(_Z_ERR_FAILED_TO_SPAWN_TASK);
+                 }
+ #if Z_FEATURE_AUTO_RECONNECT == 1
+-                tc->_tasks._task_handles[i] = h;
++                zn->_tp._transport._raweth._common._tasks._task_handles[i] = h;
+ #endif
+             }
+             break;
+-- 
+2.43.0
+
