@@ -1,0 +1,23 @@
+# Copyright (c) 2026 Richard Osterloh
+# SPDX-License-Identifier: Apache-2.0
+
+config APP_RESET_REASON
+	bool "Record why the board last reset"
+	default y
+	depends on $(dt_nodelabel_enabled,app_reset_reason)
+	select RETAINED_MEM
+	select RETENTION
+	# Written from the task-watchdog timeout (ISR) and the fatal-error path,
+	# where a mutex is not allowed.
+	select RETAINED_MEM_MUTEX_FORCE_DISABLE if MULTITHREADING
+	select RETENTION_MUTEX_FORCE_DISABLE if MULTITHREADING
+	select HWINFO
+	help
+	  Keeps a small record in the `app_reset_reason` retention area (a
+	  zephyr,retention node over memory a warm or cold reset does not clear)
+	  and reports it once at the next boot: which task-watchdog channel
+	  stalled, or that a fatal error happened and whether a coredump is
+	  stored. A reset nobody marked is classified from hwinfo's reset cause.
+
+	  Retained memory does not survive a power cycle; a power-on boot
+	  reports only that.

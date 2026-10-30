@@ -16,6 +16,7 @@ LOG_MODULE_REGISTER(app_watchdog, LOG_LEVEL_INF);
 #include <zephyr/sys/reboot.h>
 #include <zephyr/task_wdt/task_wdt.h>
 
+#include "app_reset_reason.h"
 #include "app_watchdog.h"
 
 /* A board that aliases a hardware watchdog as watchdog0 gets the full
@@ -38,6 +39,10 @@ static bool wdt_ready;
  * mid-way through. */
 static void wdt_timeout_cb(int channel_id, void *user_data)
 {
+	/* First, so the next boot learns the channel even if the hardware
+	 * watchdog cuts the rest short. */
+	app_reset_reason_watchdog(channel_id, user_data);
+
 	/* Synchronous logging so this reaches the console before the reset. */
 	LOG_PANIC();
 	LOG_ERR("Task watchdog timeout: '%s' (channel %d) stalled - rebooting",

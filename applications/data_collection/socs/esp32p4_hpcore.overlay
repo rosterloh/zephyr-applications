@@ -1,0 +1,13 @@
+/* Reset-reason record (applications/common/reset_reason) at the start of the
+ * SoC's retained LP SRAM, which software and watchdog resets leave intact. */
+&retainedmem0 {
+	#address-cells = <1>;
+	#size-cells = <1>;
+
+	app_reset_reason: retention@0 {
+		compatible = "zephyr,retention";
+		reg = <0x0 0x40>;
+		prefix = [52 53 54 52];
+		checksum = <2>;
+	};
+};

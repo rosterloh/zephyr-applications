@@ -21,3 +21,5 @@ config APP_WATCHDOG
 	  With the console coredump backend, a timeout also emits a coredump
 	  before rebooting; the flash-partition backend cannot be written from
 	  the timeout handler and is skipped.
+
+rsource "../reset_reason/Kconfig"
