@@ -11,3 +11,12 @@
 		checksum = <2>;
 	};
 };
+
+/* Coredump pseudo-device: applications/common/build_id registers the build-ID
+ * note with it at boot, so every dump names its ELF. */
+/ {
+	app_coredump: app-coredump {
+		compatible = "zephyr,coredump";
+		coredump-type = "COREDUMP_TYPE_MEMCPY";
+	};
+};

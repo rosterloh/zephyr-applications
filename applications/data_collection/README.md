@@ -159,6 +159,16 @@ mise x -- python deps/zephyr/scripts/coredump/coredump_gdbserver.py \
 
 The `.elf` must match the running image exactly. A dump opened against a
 different build resolves to plausible-looking nonsense rather than failing.
+Every dump carries the image's GNU build ID (`applications/common/build_id`),
+and `mise run app` keeps each ELF under `builds/by-id/<id>/`, so the match
+comes from the dump itself:
+
+```bash
+mise x -- python scripts/build_id.py coredump.bin   # -> builds/by-id/<id>/zephyr.elf
+```
+
+The board logs the first 12 hex digits at boot (`Build ID ...`), and
+`os info -f g` over MCUmgr returns the full ID.
 
 `coredump verify` checks the stored dump's integrity, and `coredump error get`
 reports a write that failed or was truncated — a truncated dump is never

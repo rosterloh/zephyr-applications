@@ -474,6 +474,18 @@ EXTRA=""
 [ -n "${usage_shield}" ] && EXTRA="$EXTRA --shield ${usage_shield}"
 
 west build -b "$BOARD" -p always $EXTRA --build-dir builds/${usage_app} applications/${usage_app}
+
+# Keep the ELF under its build ID (applications/common/build_id), so a
+# coredump or log pulled later can be matched to it. Sysbuild nests the app.
+ELF=builds/${usage_app}/zephyr/zephyr.elf
+[ -f "$ELF" ] || ELF=builds/${usage_app}/${usage_app}/zephyr/zephyr.elf
+if ID=$(python scripts/build_id.py "$ELF" 2>/dev/null); then
+    DEST=builds/by-id/$ID
+    mkdir -p "$DEST"
+    cp "$ELF" "$DEST/"
+    cp "$(dirname "$ELF")/log_dictionary.json" "$DEST/" 2>/dev/null || true
+    echo "Archived as $DEST"
+fi
 """
 
 [tasks.flash]

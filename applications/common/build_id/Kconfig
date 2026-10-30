@@ -1,0 +1,40 @@
+# Copyright (c) 2026 Richard Osterloh
+# SPDX-License-Identifier: Apache-2.0
+
+config APP_BUILD_ID
+	bool "Embed a GNU build ID and report it"
+	default y
+	# native_sim links with the host's default script, which has no rodata
+	# snippet hook.
+	depends on !ARCH_POSIX
+	help
+	  Links with --build-id=sha1 and keeps the .note.gnu.build-id note in
+	  rodata, so `readelf -n zephyr.elf` and the running image agree on one
+	  ID. The short form is logged at boot.
+
+if APP_BUILD_ID
+
+config APP_BUILD_ID_MCUMGR
+	bool "Report the build ID in MCUmgr os info"
+	default y
+	depends on MCUMGR_GRP_OS
+	select MCUMGR_GRP_OS_INFO
+	select MCUMGR_MGMT_NOTIFICATION_HOOKS
+	select MCUMGR_GRP_OS_INFO_CUSTOM_HOOKS
+	help
+	  Adds format character 'g' to the os info command; `a` includes it
+	  too. Over smpmgr/mcumgr: `os info -f g`.
+
+config APP_BUILD_ID_COREDUMP
+	bool "Write the build ID into every coredump"
+	default y
+	depends on DEBUG_COREDUMP
+	depends on $(dt_nodelabel_enabled,app_coredump)
+	select COREDUMP_DEVICE
+	help
+	  Registers a RAM copy of the build-ID note with the `app_coredump`
+	  zephyr,coredump node (COREDUMP_TYPE_MEMCPY), so it is dumped as one
+	  more memory block. scripts/build_id.py finds it in a dump by the
+	  note's header, with no ELF needed.
+
+endif # APP_BUILD_ID

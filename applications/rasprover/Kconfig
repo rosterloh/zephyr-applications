@@ -240,6 +240,7 @@ configdefault HTTP_SERVER_STACK_SIZE
 endif # APP_HTTP
 
 rsource "../common/picoros/Kconfig"
+rsource "../common/build_id/Kconfig"
 rsource "../common/watchdog/Kconfig"
 
 source "Kconfig.zephyr"
