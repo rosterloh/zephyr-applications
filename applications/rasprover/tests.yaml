@@ -10,6 +10,9 @@ common:
     - ros_driver/esp32/procpu
 tests:
   app.rasprover.default: {}
+  app.rasprover.http:
+    extra_configs:
+      - CONFIG_APP_HTTP=y
   app.rasprover.debug:
     extra_overlay_confs:
       - debug.conf

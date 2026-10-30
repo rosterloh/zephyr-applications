@@ -210,6 +210,35 @@ config APP_PICOROS_GIMBAL_CMD_TOPIC
 
 endif # APP_GIMBAL
 
+menuconfig APP_HTTP
+	bool "Read-only HTTP status page"
+	depends on NETWORKING
+	select HTTP_SERVER
+	help
+	  Serves GET / (a page that polls) and GET /status.json with power,
+	  wheel and gimbal state. Unauthenticated and plain HTTP: bring-up
+	  only, on a trusted network.
+
+if APP_HTTP
+
+config APP_HTTP_PORT
+	int "HTTP status page port"
+	default 80
+
+# DRAM is the constraint (see README "Memory budget"): HTTP/1.1 only, two
+# clients, and the 3072-byte stack the server picks without FILE_SYSTEM --
+# ZMS pulls that in, but no resource here serves from a filesystem.
+configdefault HTTP_SERVER_VERSION_2
+	default n
+
+configdefault HTTP_SERVER_MAX_CLIENTS
+	default 2
+
+configdefault HTTP_SERVER_STACK_SIZE
+	default 3072
+
+endif # APP_HTTP
+
 rsource "../common/picoros/Kconfig"
 rsource "../common/watchdog/Kconfig"
 
