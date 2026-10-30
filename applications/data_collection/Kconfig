@@ -10,6 +10,7 @@ config APP_CAM_MGMT
 	  frame and pull it back in chunks. Wire contract: see "SMP camera
 	  group" in the application README.
 
+rsource "../common/build_id/Kconfig"
 rsource "../common/watchdog/Kconfig"
 
 source "Kconfig.zephyr"

@@ -1,5 +1,6 @@
 mainmenu "Application options"
 
+rsource "../common/build_id/Kconfig"
 rsource "../common/watchdog/Kconfig"
 
 source "Kconfig.zephyr"

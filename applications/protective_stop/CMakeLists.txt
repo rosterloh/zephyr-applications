@@ -4,6 +4,9 @@ find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 
 project(protective_stop)
 
+# Shared application code (see applications/common/).
+include(${CMAKE_CURRENT_LIST_DIR}/../common/build_id/build_id.cmake)
+
 zephyr_compile_options(-fdiagnostics-color=always)
 
 target_sources(app PRIVATE
