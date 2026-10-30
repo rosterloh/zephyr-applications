@@ -12,8 +12,33 @@ LOG_MODULE_REGISTER(app_sensors, LOG_LEVEL_DBG);
 static const struct device *current_sensor = DEVICE_DT_GET_OR_NULL(DT_NODELABEL(ina219));
 #endif
 
+static struct k_spinlock power_lock;
+static struct app_power last_power;
+static bool have_power;
+
+bool app_sensors_last_power(struct app_power *out)
+{
+	bool ok = false;
+
+	K_SPINLOCK(&power_lock) {
+		*out = last_power;
+		ok = have_power;
+	}
+	return ok;
+}
+
 static void publish(double v, double i, double p)
 {
+	K_SPINLOCK(&power_lock) {
+		last_power = (struct app_power){
+			.voltage_mv = (int32_t)(v * 1000.0),
+			.current_ma = (int32_t)(i * 1000.0),
+			.power_mw = (int32_t)(p * 1000.0),
+			.uptime_ms = k_uptime_get(),
+		};
+		have_power = true;
+	}
+
 	LOG_INF("v=%.3f [V], i=%.3f [A], p=%.3f [W]", v, i, p);
 
 #if IS_ENABLED(CONFIG_APP_DISPLAY)

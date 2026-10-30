@@ -47,6 +47,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Read-only HTTP status page on port 80 (`CONFIG_APP_HTTP`): `GET /` and
+  `GET /status.json` with power, wheel and gimbal state.
 - Differential-drive motor control for the two onboard h-bridges via the
   actuator subsystem, with quadrature PCNT encoder feedback.
 - Zenoh `cmd_vel` subscriber (CDR `geometry_msgs/Twist`) with a

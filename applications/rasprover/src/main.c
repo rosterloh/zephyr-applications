@@ -3,6 +3,7 @@ LOG_MODULE_REGISTER(main, LOG_LEVEL_DBG);
 
 #include "app_display.h"
 #include "app_gimbal.h"
+#include "app_http.h"
 #include "app_motors.h"
 #include "app_network.h"
 #include "app_picoros.h"
@@ -71,6 +72,8 @@ int main(void)
 
 	app_watchdog_feed(wdt_channel);
 	app_net_connect();
+	/* Bound to INADDR_ANY, so a link that comes up later is still served. */
+	(void)app_http_start();
 	if (app_net_ipv4_ready()) {
 		app_watchdog_feed(wdt_channel);
 		app_time_start();

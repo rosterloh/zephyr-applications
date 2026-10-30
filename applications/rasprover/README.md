@@ -245,6 +245,8 @@ Application-level symbols (`applications/rasprover/Kconfig`):
 | `APP_TIME_SNTP_SERVER` | `pool.ntp.org` | SNTP server used for realtime clock sync |
 | `APP_TIME_SNTP_RETRY_SEC` | `15` | Retry interval after a failed SNTP sync |
 | `APP_TIME_SNTP_RESYNC_SEC` | `3600` | Resync interval after a successful SNTP sync |
+| `APP_HTTP` | y | Read-only HTTP status page (`/`, `/status.json`) |
+| `APP_HTTP_PORT` | `80` | Status page port |
 
 #### Advanced tunables
 
@@ -285,7 +287,31 @@ What the WiFi + Pico-ROS build needs, each value measured on the board:
 | `MAX_PTHREAD_MUTEX_COUNT` / `_COND_COUNT` | 32 / 16 | The default 5 of each runs out right after the zenoh handshake. Defaulted by `common/picoros/Kconfig`. |
 | `NET_BUF_TX_COUNT` / `NET_PKT_TX_COUNT` | 64 / 24 | The startup burst of declarations failed to send with the defaults. |
 
-About 10 KB of libc heap is left over.
+About 2.5 KB of libc heap is left over, by the link map. The status page
+(`CONFIG_APP_HTTP`) costs 7 KB of it, mostly its 3 KB thread stack and two
+client contexts; `CONFIG_APP_HTTP=n` gives it back.
+
+## Status page
+
+With the network up, the board serves a read-only status page on port 80
+(`CONFIG_APP_HTTP_PORT`), using Zephyr's HTTP server:
+
+```shell
+curl http://<board>/status.json
+```
+
+```json
+{"version":"1.0.0","uptime_ms":51234,"net":true,"time_synced":true,
+ "power":{"voltage_mv":12040,"current_ma":402,"power_mw":4840,"age_ms":8123},
+ "wheels":[{"name":"left_wheel_joint","position_mrad":0,"velocity_mrad_s":0},...],
+ "gimbal":[{"name":"pan_joint","position_mrad":0,"velocity_mrad_s":0},...]}
+```
+
+`/` is a page that polls it once a second. `power` is the last INA219 reading
+(`null` before the first); `wheels`/`gimbal` are read from the actuators per
+request and are `null` if a read fails. It is plain HTTP with no
+authentication, so keep it to a trusted network. The server thread runs at
+the lowest preemptible priority and can only read.
 
 ## What it does
 

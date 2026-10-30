@@ -30,6 +30,14 @@ target_sources_ifdef(CONFIG_APP_MOTORS app PRIVATE src/app_motors.c)
 target_sources_ifdef(CONFIG_APP_GIMBAL app PRIVATE src/app_gimbal.c)
 target_sources_ifdef(CONFIG_APP_TIME_SYNC app PRIVATE src/app_time.c)
 
+if(CONFIG_APP_HTTP)
+  target_sources(app PRIVATE src/app_http.c)
+  zephyr_linker_sources(SECTIONS sections-rom.ld)
+  zephyr_linker_section(NAME http_resource_desc_rasprover_http
+    KVMA RAM_REGION GROUP RODATA_REGION
+  )
+endif()
+
 # On Debian/Ubuntu, libsdl2-dev uses a multiarch include path that Zephyr's
 # build doesn't pick up automatically. Add it via pkg-config when present.
 # On Debian/Ubuntu, libsdl2-dev puts _real_SDL_config.h under a multiarch
