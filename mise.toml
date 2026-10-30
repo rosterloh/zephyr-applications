@@ -466,6 +466,39 @@ arg "<app>" help="App name (e.g. motor_controller)"
 '''
 run = "west flash --build-dir builds/${usage_app}"
 
+[tasks.test]
+description = "Run the ztest suites under applications/ with twister, on each suite's integration_platforms unless --platform is given."
+usage = '''
+arg "[app]" help="Only run the suites under applications/<app>"
+flag "-p --platform <platform>" help="Run on this platform instead of integration_platforms (e.g. qemu_cortex_m3 on macOS)"
+flag "--min-suites <n>" help="Fail if fewer than n suites passed, so a filtering regression can't report green"
+'''
+# tests/ is deliberately not a root: it holds pytest scripts, not ztest suites.
+run = """
+set -e
+ROOT="applications${usage_app:+/${usage_app}}"
+[ -d "$ROOT" ] || { echo "no such app: ${usage_app}" >&2; exit 2; }
+
+if [ -n "${usage_platform}" ]; then
+    PLATFORM="-p ${usage_platform}"
+else
+    PLATFORM="--integration"
+fi
+
+STATUS=0
+west twister -T "$ROOT" $PLATFORM --inline-logs -O twister-out || STATUS=$?
+
+echo "Suites by status:"
+jq -r '.testsuites | group_by(.status)[] | "  \\(.[0].status): \\(length)"' twister-out/twister.json
+PASSED=$(jq '[.testsuites[] | select(.status == "passed")] | length' twister-out/twister.json)
+echo "Suites passed: $PASSED"
+if [ -n "${usage_min_suites}" ] && [ "$PASSED" -lt "${usage_min_suites}" ]; then
+    echo "expected at least ${usage_min_suites} passing suites" >&2
+    exit 1
+fi
+exit $STATUS
+"""
+
 [tasks."check-skills"]
 # The checker ships with the shared zephyr skill (dotfiles), so every Zephyr workspace can run it.
 run = 'python "${HOME}/.agents/skills/zephyr/scripts/check_symbols.py" --workspace "${MISE_PROJECT_ROOT}" --extra-skills "${MISE_PROJECT_ROOT}/.agents/skills"'
