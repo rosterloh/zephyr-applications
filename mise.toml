@@ -78,7 +78,8 @@ description = "Remove all twister-out* directories anywhere in the tree"
 confirm = "Recursively delete every twister-out* directory in the workspace?"
 
 [tasks.setup]
-run = "mise run west-update && mise run sdk-install && mise run blobs-fetch"
+# CI runs these three as separate steps (.github/workflows/build.yml); keep both in step.
+run ="mise run west-update && mise run sdk-install && mise run blobs-fetch"
 description = "First-time workspace setup: fetch west deps, install Zephyr SDK, fetch binary blobs, apply patches. Safe to re-run."
 
 [tasks."west-update"]
