@@ -183,14 +183,6 @@ jobs:
             west-deps-${{ hashFiles('west.yml') }}-
             west-deps-
 
-      - name: Cache Zephyr SDK
-        uses: actions/cache@v6
-        with:
-          path: ~/zephyr-sdk-*
-          key: zephyr-sdk-${{ hashFiles('west.yml') }}
-          restore-keys: |
-            zephyr-sdk-
-
       # `app` builds with `-p always`, so the build dir is pristine every run and
       # ccache is the only thing that can make the compile phase cheaper: a
       # pristine rebuild hits ~100% once its objects are cached.
@@ -212,13 +204,30 @@ jobs:
             ccache-${{ matrix.app }}-
             ccache-
 
-      - name: Setup workspace
-        run: mise run setup
+      # `mise run setup`, split so the SDK cache can be keyed on the
+      # SDK_VERSION that west update has just checked out. Keep in step with it.
+      - name: Update west deps
+        run: mise run west-update
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # After setup, so the entry holds today's updated checkout. Parallel jobs
-      # race to save; the losers only log a warning.
+      # The SDK version follows zephyr main, not west.yml. No restore-keys: an
+      # older SDK would restore beside the new one and be saved into its entry.
+      - name: Cache Zephyr SDK
+        uses: actions/cache@v6
+        with:
+          path: ~/zephyr-sdk-*
+          key: zephyr-sdk-${{ hashFiles('deps/zephyr/SDK_VERSION') }}
+
+      - name: Install SDK and fetch blobs
+        run: |
+          mise run sdk-install
+          mise run blobs-fetch
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # After setup, so the entry holds today's updated checkout and blobs.
+      # Parallel jobs race to save; the losers only log a warning.
       - name: Save west deps
         if: github.event_name != 'pull_request' && steps.deps.outputs.cache-hit != 'true'
         uses: actions/cache/save@v6
@@ -278,14 +287,6 @@ jobs:
             west-deps-${{ hashFiles('west.yml') }}-
             west-deps-
 
-      - name: Cache Zephyr SDK
-        uses: actions/cache@v6
-        with:
-          path: ~/zephyr-sdk-*
-          key: zephyr-sdk-${{ hashFiles('west.yml') }}
-          restore-keys: |
-            zephyr-sdk-
-
       - name: Cache ccache
         uses: actions/cache@v6
         with:
@@ -294,13 +295,30 @@ jobs:
           restore-keys: |
             ccache-twister-
 
-      - name: Setup workspace
-        run: mise run setup
+      # `mise run setup`, split so the SDK cache can be keyed on the
+      # SDK_VERSION that west update has just checked out. Keep in step with it.
+      - name: Update west deps
+        run: mise run west-update
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # After setup, so the entry holds today's updated checkout. Parallel jobs
-      # race to save; the losers only log a warning.
+      # The SDK version follows zephyr main, not west.yml. No restore-keys: an
+      # older SDK would restore beside the new one and be saved into its entry.
+      - name: Cache Zephyr SDK
+        uses: actions/cache@v6
+        with:
+          path: ~/zephyr-sdk-*
+          key: zephyr-sdk-${{ hashFiles('deps/zephyr/SDK_VERSION') }}
+
+      - name: Install SDK and fetch blobs
+        run: |
+          mise run sdk-install
+          mise run blobs-fetch
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # After setup, so the entry holds today's updated checkout and blobs.
+      # Parallel jobs race to save; the losers only log a warning.
       - name: Save west deps
         if: github.event_name != 'pull_request' && steps.deps.outputs.cache-hit != 'true'
         uses: actions/cache/save@v6
