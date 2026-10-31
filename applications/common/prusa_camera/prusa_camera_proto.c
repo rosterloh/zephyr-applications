@@ -11,6 +11,7 @@
 #include <string.h>
 
 #include <zephyr/data/json.h>
+#include <zephyr/net/http/status.h>
 #include <zephyr/sys/util.h>
 
 #include "prusa_camera.h"
@@ -160,10 +161,10 @@ int prusa_camera_info_encode(const struct prusa_camera_info *info, char *buf, si
 
 enum prusa_camera_next prusa_camera_next(int result)
 {
-	if (result >= 200 && result < 300) {
+	if (result >= HTTP_200_OK && result < HTTP_300_MULTIPLE_CHOICES) {
 		return PRUSA_CAMERA_NEXT_OK;
 	}
-	if (result == 429 || result == 503) {
+	if (result == HTTP_429_TOO_MANY_REQUESTS || result == HTTP_503_SERVICE_UNAVAILABLE) {
 		return PRUSA_CAMERA_NEXT_WAIT;
 	}
 	/* Refused locally: what the service would have rejected. */
@@ -171,7 +172,7 @@ enum prusa_camera_next prusa_camera_next(int result)
 		return PRUSA_CAMERA_NEXT_STOP;
 	}
 	/* -errno, or a 5xx: the network or the service. 4xx: our request. */
-	if (result < 0 || result >= 500) {
+	if (result < 0 || result >= HTTP_500_INTERNAL_SERVER_ERROR) {
 		return PRUSA_CAMERA_NEXT_RETRY;
 	}
 	return PRUSA_CAMERA_NEXT_STOP;
@@ -183,31 +184,31 @@ const char *prusa_camera_describe(int result)
 	case -EINVAL:
 		return "token must be 20 letters/digits (or bad camera info)";
 	case -EMSGSIZE:
-	case 413:
+	case HTTP_413_PAYLOAD_TOO_LARGE:
 		return "image over 1 MB";
-	case 400:
+	case HTTP_400_BAD_REQUEST:
 		return "bad request";
-	case 401:
+	case HTTP_401_UNAUTHORIZED:
 		return "token or fingerprint missing";
-	case 403:
+	case HTTP_403_FORBIDDEN:
 		return "unknown token, fingerprint mismatch, or first call later than 15 min "
 		       "after creating the camera";
-	case 411:
+	case HTTP_411_LENGTH_REQUIRED:
 		return "Content-Length missing";
-	case 415:
+	case HTTP_415_UNSUPPORTED_MEDIA_TYPE:
 		return "not a JPEG";
-	case 422:
+	case HTTP_422_UNPROCESSABLE_ENTITY:
 		return "rejected (token must be 20 characters)";
-	case 429:
-	case 503:
+	case HTTP_429_TOO_MANY_REQUESTS:
+	case HTTP_503_SERVICE_UNAVAILABLE:
 		return "rate limited";
 	default:
 		break;
 	}
-	if (result >= 200 && result < 300) {
+	if (result >= HTTP_200_OK && result < HTTP_300_MULTIPLE_CHOICES) {
 		return "ok";
 	}
-	if (result >= 500) {
+	if (result >= HTTP_500_INTERNAL_SERVER_ERROR) {
 		return "server error";
 	}
 	return result < 0 ? "network or TLS error" : "unexpected status";
