@@ -19,11 +19,13 @@
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/net/http/server.h>
+#include <zephyr/net/dns_sd.h>
 #include <zephyr/net/http/service.h>
 
 #include "cam.h"
 #include "cfg.h"
 #include "connect.h"
+#include "exif.h"
 #include "http_util.h"
 
 LOG_MODULE_REGISTER(web, LOG_LEVEL_INF);
@@ -36,6 +38,8 @@ HTTP_SERVER_REGISTER_HEADER_CAPTURE(capture_authorization, "Authorization");
 static uint16_t http_port = 80;
 HTTP_SERVICE_DEFINE(prusa_http, NULL, &http_port, CONFIG_HTTP_SERVER_MAX_CLIENTS, 2, NULL, NULL,
 		    NULL);
+DNS_SD_REGISTER_TCP_SERVICE(prusa_http_sd, CONFIG_NET_HOSTNAME, "_http", "local", DNS_SD_EMPTY_TXT,
+			    80);
 
 static const uint8_t index_gz[] = {
 #include "index.html.gz.inc"
@@ -51,9 +55,13 @@ struct route {
 	size_t len;
 	bool overflow;
 	bool cam_held;
+	bool exif_sent;
+	uint8_t exif[EXIF_HDR_LEN];
+	const uint8_t *jpeg;
+	size_t jpeg_len;
 };
 
-static char out[384];
+static char out[512];
 
 static void capture(struct route *r, const struct http_request_ctx *req)
 {
@@ -102,6 +110,18 @@ static bool authorised(struct route *r, struct http_response_ctx *rsp)
 	return ok;
 }
 
+/* "a.b.c.d", or "" for 0 (unset). */
+static const char *ip_str(char buf[16], uint32_t ip)
+{
+	if (ip == 0) {
+		buf[0] = '\0';
+	} else {
+		snprintf(buf, 16, "%u.%u.%u.%u", ip >> 24, (ip >> 16) & 0xFF, (ip >> 8) & 0xFF,
+			 ip & 0xFF);
+	}
+	return buf;
+}
+
 struct config_out {
 	bool token_set;
 	const char *fingerprint;
@@ -111,6 +131,11 @@ struct config_out {
 	bool hflip;
 	bool vflip;
 	bool flash;
+	uint32_t rotation;
+	const char *ip;
+	const char *netmask;
+	const char *gateway;
+	const char *dns;
 };
 
 static const struct json_obj_descr config_out_descr[] = {
@@ -122,6 +147,11 @@ static const struct json_obj_descr config_out_descr[] = {
 	JSON_OBJ_DESCR_PRIM(struct config_out, hflip, JSON_TOK_TRUE),
 	JSON_OBJ_DESCR_PRIM(struct config_out, vflip, JSON_TOK_TRUE),
 	JSON_OBJ_DESCR_PRIM(struct config_out, flash, JSON_TOK_TRUE),
+	JSON_OBJ_DESCR_PRIM(struct config_out, rotation, JSON_TOK_UINT),
+	JSON_OBJ_DESCR_PRIM(struct config_out, ip, JSON_TOK_STRING),
+	JSON_OBJ_DESCR_PRIM(struct config_out, netmask, JSON_TOK_STRING),
+	JSON_OBJ_DESCR_PRIM(struct config_out, gateway, JSON_TOK_STRING),
+	JSON_OBJ_DESCR_PRIM(struct config_out, dns, JSON_TOK_STRING),
 };
 
 struct status_out {
@@ -151,6 +181,7 @@ static void reply_json(struct http_response_ctx *rsp, const struct json_obj_desc
 
 static void reply_config(struct http_response_ctx *rsp)
 {
+	char ip[16], mask[16], gw[16], dns[16];
 	struct cfg c;
 	struct config_out o;
 
@@ -164,6 +195,11 @@ static void reply_config(struct http_response_ctx *rsp)
 		.hflip = c.hflip,
 		.vflip = c.vflip,
 		.flash = c.flash,
+		.rotation = c.rotation * 90,
+		.ip = ip_str(ip, c.ip),
+		.netmask = ip_str(mask, c.netmask),
+		.gateway = ip_str(gw, c.gateway),
+		.dns = ip_str(dns, c.dns),
 	};
 	memset(&c, 0, sizeof(c));
 	reply_json(rsp, config_out_descr, ARRAY_SIZE(config_out_descr), &o);
@@ -178,6 +214,11 @@ struct cfg_post {
 	bool hflip;
 	bool vflip;
 	bool flash;
+	int32_t rotation;
+	const char *ip;
+	const char *netmask;
+	const char *gateway;
+	const char *dns;
 };
 
 static const struct json_obj_descr cfg_post_descr[] = {
@@ -189,7 +230,22 @@ static const struct json_obj_descr cfg_post_descr[] = {
 	JSON_OBJ_DESCR_PRIM(struct cfg_post, hflip, JSON_TOK_TRUE),
 	JSON_OBJ_DESCR_PRIM(struct cfg_post, vflip, JSON_TOK_TRUE),
 	JSON_OBJ_DESCR_PRIM(struct cfg_post, flash, JSON_TOK_TRUE),
+	JSON_OBJ_DESCR_PRIM(struct cfg_post, rotation, JSON_TOK_NUMBER),
+	JSON_OBJ_DESCR_PRIM(struct cfg_post, ip, JSON_TOK_STRING),
+	JSON_OBJ_DESCR_PRIM(struct cfg_post, netmask, JSON_TOK_STRING),
+	JSON_OBJ_DESCR_PRIM(struct cfg_post, gateway, JSON_TOK_STRING),
+	JSON_OBJ_DESCR_PRIM(struct cfg_post, dns, JSON_TOK_STRING),
 };
+
+/* "" clears the address (DHCP / gateway as DNS); anything else must parse. */
+static int parse_ip(const char *s, uint32_t *out)
+{
+	if (s[0] == '\0') {
+		*out = 0;
+		return 0;
+	}
+	return http_parse_ipv4(s, out);
+}
 
 /* Apply the fields present in a JSON body; 0, -EINVAL or a settings error. */
 static int apply_post(char *body, size_t len)
@@ -238,6 +294,19 @@ static int apply_post(char *body, size_t len)
 	}
 	if (got & BIT(7)) {
 		c.flash = p.flash;
+	}
+	if (got & BIT(8)) {
+		if (p.rotation % 90 != 0 || p.rotation < 0 || p.rotation > 270) {
+			return -EINVAL;
+		}
+		c.rotation = p.rotation / 90;
+	}
+	if (((got & BIT(9)) && parse_ip(p.ip, &c.ip) < 0) ||
+	    ((got & BIT(10)) && parse_ip(p.netmask, &c.netmask) < 0) ||
+	    ((got & BIT(11)) && parse_ip(p.gateway, &c.gateway) < 0) ||
+	    ((got & BIT(12)) && parse_ip(p.dns, &c.dns) < 0)) {
+		memset(&c, 0, sizeof(c));
+		return -EINVAL;
 	}
 	ret = cfg_set(&c);
 	memset(&c, 0, sizeof(c));
@@ -323,8 +392,7 @@ static int snapshot_cb(struct http_client_ctx *client, enum http_transaction_sta
 		       const struct http_request_ctx *req, struct http_response_ctx *rsp, void *ud)
 {
 	struct route *r = &snapshot_route;
-	const uint8_t *jpeg;
-	size_t len;
+	struct cfg c;
 
 	if (status == HTTP_SERVER_TRANSACTION_ABORTED ||
 	    status == HTTP_SERVER_TRANSACTION_COMPLETE) {
@@ -334,20 +402,36 @@ static int snapshot_cb(struct http_client_ctx *client, enum http_transaction_sta
 		memset(r, 0, sizeof(*r));
 		return 0;
 	}
+	if (r->exif_sent) {
+		/* Second chunk of a rotated frame: everything after its SOI. */
+		rsp->body = r->jpeg + 2;
+		rsp->body_len = r->jpeg_len - 2;
+		rsp->final_chunk = true;
+		return 0;
+	}
 	capture(r, req);
 	if (status != HTTP_SERVER_REQUEST_DATA_FINAL || !authorised(r, rsp)) {
 		return 0;
 	}
 
-	if (cam_snapshot(&jpeg, &len) < 0) {
+	if (cam_snapshot(&r->jpeg, &r->jpeg_len) < 0) {
 		reply(rsp, HTTP_503_SERVICE_UNAVAILABLE, "no frame");
 		return 0;
 	}
 	/* The frame is sent from the camera buffer; it is released on COMPLETE/ABORTED. */
 	r->cam_held = true;
-	rsp->body = jpeg;
-	rsp->body_len = len;
-	rsp->final_chunk = true;
+	cfg_get(&c);
+	if (exif_wanted(r->jpeg, r->jpeg_len, c.rotation)) {
+		exif_header(r->exif, exif_orientation(c.rotation));
+		r->exif_sent = true;
+		rsp->body = r->exif;
+		rsp->body_len = sizeof(r->exif);
+	} else {
+		rsp->body = r->jpeg;
+		rsp->body_len = r->jpeg_len;
+		rsp->final_chunk = true;
+	}
+	memset(&c, 0, sizeof(c));
 	return 0;
 }
 

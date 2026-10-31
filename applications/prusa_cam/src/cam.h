@@ -21,6 +21,8 @@ int cam_apply(const struct cfg *c);
  * locked, until cam_release().
  */
 int cam_snapshot(const uint8_t **jpeg, size_t *len);
+/* As cam_snapshot(), never with the flash LED: for the MJPEG stream. */
+int cam_frame(const uint8_t **jpeg, size_t *len);
 void cam_release(void);
 
 #endif /* PRUSA_CAM_CAM_H_ */

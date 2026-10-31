@@ -27,6 +27,12 @@ struct cfg {
 	bool hflip;
 	bool vflip;
 	bool flash;
+	uint8_t rotation; /* clockwise, 0..3 = 0/90/180/270 deg, for Connect and Exif */
+	/* Host-order IPv4; ip == 0 means DHCP. Applied on the next WiFi connect. */
+	uint32_t ip;
+	uint32_t netmask;
+	uint32_t gateway;
+	uint32_t dns; /* 0: use the gateway */
 };
 
 extern const struct cfg_resolution cfg_resolutions[];

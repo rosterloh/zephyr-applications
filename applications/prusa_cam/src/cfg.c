@@ -88,7 +88,8 @@ int cfg_set(const struct cfg *in)
 	int ret;
 
 	if (tmp.interval_s < CFG_INTERVAL_MIN || tmp.interval_s > CFG_INTERVAL_MAX ||
-	    tmp.resolution >= cfg_resolution_count || tmp.quality > 100 ||
+	    tmp.resolution >= cfg_resolution_count || tmp.quality > 100 || tmp.rotation > 3 ||
+	    (tmp.ip != 0 && (tmp.netmask == 0 || tmp.gateway == 0)) ||
 	    strnlen(tmp.token, sizeof(tmp.token)) > CFG_TOKEN_MAX ||
 	    strnlen(tmp.password, sizeof(tmp.password)) > CFG_PASSWORD_MAX) {
 		return -EINVAL;
