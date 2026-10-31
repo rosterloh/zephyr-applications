@@ -1,0 +1,53 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Richard Osterloh <richard.osterloh@gmail.com>
+Date: Fri, 30 Oct 2026 23:31:05 +0000
+Subject: [PATCH] mgmt: hawkbit: fix resuming from a full or ignored range
+
+Progress saved at 100% (a reboot between the last chunk and the hash
+check) made every later attempt send "Range: bytes=<size>-", which the
+server cannot satisfy, so the download failed on every poll and the
+saved progress was never cleared.
+
+When the server answers 200 instead of 206, bytes_written was reset but
+erased_up_to kept the value loaded with the progress, so the pages
+below it were written without being erased and the hash check failed.
+
+Signed-off-by: Richard Osterloh <richard.osterloh@gmail.com>
+---
+ subsys/mgmt/hawkbit/hawkbit.c | 12 +++++++++++-
+ 1 file changed, 11 insertions(+), 1 deletion(-)
+
+diff --git a/subsys/mgmt/hawkbit/hawkbit.c b/subsys/mgmt/hawkbit/hawkbit.c
+index 7b0aee795..6f7c65e4f 100644
+--- a/subsys/mgmt/hawkbit/hawkbit.c
++++ b/subsys/mgmt/hawkbit/hawkbit.c
+@@ -997,7 +997,13 @@ static void response_download_cb(struct http_response *rsp, enum http_final_call
+ 		hb_context->dl.http_content_size = rsp->content_length;
+ 		download_progress = 0;
+ 		if (IS_ENABLED(CONFIG_HAWKBIT_SAVE_PROGRESS) && rsp->http_status_code != 206) {
++			/* Restarting from 0: the erase state loaded with the
++			 * progress would skip erasing the pages below it.
++			 */
+ 			hb_context->flash_ctx.stream.bytes_written = 0;
++#ifdef CONFIG_STREAM_FLASH_ERASE
++			hb_context->flash_ctx.stream.erased_up_to = 0;
++#endif
+ 		}
+ 	}
+ 
+@@ -1160,7 +1166,11 @@ static bool send_request(struct hawkbit_context *hb_context, enum hawkbit_http_r
+ 
+ #ifdef CONFIG_HAWKBIT_SAVE_PROGRESS
+ 		hb_context->dl.downloaded_size = flash_img_bytes_written(&hb_context->flash_ctx);
+-		if (IN_RANGE(hb_context->dl.downloaded_size, 1, hb_context->dl.file_size)) {
++		/* Progress saved at 100% (reboot before the hash check) gets a full
++		 * download: "Range: bytes=<size>-" is unsatisfiable and would fail
++		 * every attempt.
++		 */
++		if (IN_RANGE(hb_context->dl.downloaded_size, 1, hb_context->dl.file_size - 1)) {
+ 			snprintf(header_range, sizeof(header_range), "Range: bytes=%u-" HTTP_CRLF,
+ 				 hb_context->dl.downloaded_size);
+ 
+-- 
+2.43.0
+

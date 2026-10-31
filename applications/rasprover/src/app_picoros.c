@@ -8,6 +8,7 @@ LOG_MODULE_REGISTER(app_picoros, LOG_LEVEL_INF);
 #include <picoros.h>
 #include <picoserdes.h>
 
+#include "app_img_confirm.h"
 #include "app_picoros.h"
 #include "app_time.h"
 
@@ -268,6 +269,8 @@ static void joint_state_work_handler(struct k_work *work)
 		LOG_WRN("joint_states encode failed");
 	} else if (picoros_publish(&_pub_joint_state, _joint_state_buf, len) != PICOROS_OK) {
 		LOG_WRN("joint_states publish failed");
+	} else {
+		app_img_confirm();
 	}
 
 reschedule:
@@ -382,5 +385,8 @@ void app_picoros_publish_power(double voltage, double current, double power)
 
 	if (picoros_publish(&_pub_battery, _battery_buf, len) != PICOROS_OK) {
 		LOG_WRN("battery_state publish failed");
+		return;
 	}
+
+	app_img_confirm();
 }

@@ -1,0 +1,24 @@
+# Copyright (c) 2026 Richard Osterloh
+# SPDX-License-Identifier: Apache-2.0
+
+config APP_IMG_CONFIRM
+	bool "Confirm the MCUboot image only after an app-level health check"
+	default y
+	depends on BOOTLOADER_MCUBOOT && MCUBOOT_IMG_MANAGER
+	# The deadline that reverts an image which never becomes healthy is a
+	# task-watchdog channel.
+	depends on APP_WATCHDOG
+	help
+	  A new image boots on trial. app_img_confirm_arm() gives it
+	  APP_IMG_CONFIRM_TIMEOUT_MS to reach app_img_confirm(), called where
+	  the application defines healthy; if it does not, the task watchdog
+	  reboots the board and MCUboot reverts to the previous image. Needs a
+	  revert-capable MCUboot mode (swap), not overwrite-only.
+
+	  A confirmed image is left alone, so a manual MCUmgr confirm still
+	  works and both calls are no-ops afterwards.
+
+config APP_IMG_CONFIRM_TIMEOUT_MS
+	int "Time a trial image has to become healthy (ms)"
+	default 120000
+	depends on APP_IMG_CONFIRM

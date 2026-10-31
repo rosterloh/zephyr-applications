@@ -26,6 +26,9 @@ on-chip RMII EMAC, PSRAM, and a Raspberry Pi 15-pin CSI connector wired to the
   advertises that fits the app's PSRAM ceiling, so nothing in the app is pinned
   to one sensor. Frames are
   drawn from PSRAM through the shared multi-heap.
+- **hawkBit OTA** — polls a hawkBit server (raptor), resumes interrupted
+  downloads, and confirms a new image only once it is healthy. See
+  [hawkBit (raptor)](#hawkbit-raptor).
 - **Shell** — interactive console on `uart0`.
 
 ## Build & flash
@@ -233,6 +236,7 @@ mcumgr --conntype udp --connstring <board-ip>:1337 image upload \
 mcumgr --conntype udp --connstring <board-ip>:1337 image test <new-hash>
 mcumgr --conntype udp --connstring <board-ip>:1337 reset
 # board now runs the new image with flags "active" (on trial, not confirmed)
+# and confirms itself once healthy (below); a manual confirm still works:
 mcumgr --conntype udp --connstring <board-ip>:1337 image confirm <new-hash>
 ```
 
@@ -258,6 +262,59 @@ event, and `main()` registers that callback several seconds after the lease
 normally arrives, so the address is usually never printed. Find the board with
 `arp -an | grep <board-mac>` after an ARP sweep of the subnet until that is
 fixed.
+
+### Health-checked confirm
+
+A trial image confirms itself (`applications/common/img_confirm/`) once it is
+healthy: an IPv4 lease and a first frame from the boot capture. If it is not
+healthy within `CONFIG_APP_IMG_CONFIRM_TIMEOUT_MS` (120 s), an `img_confirm`
+task-watchdog channel fires, the board reboots and MCUboot reverts. A confirmed
+image is never touched, so a broken camera on a confirmed image does not
+reboot-loop. Expect in the log:
+
+```
+<wrn> app_img_confirm: Image on trial: reverts unless healthy within 120000 ms
+<inf> app_img_confirm: Image healthy: confirmed
+```
+
+### hawkBit (raptor)
+
+The board polls a hawkBit DDI server and installs what it is assigned
+(`CONFIG_HAWKBIT`, Zephyr's `subsys/mgmt/hawkbit`). Polling starts after the
+health check and only on a confirmed image: hawkBit's autohandler reboots an
+unconfirmed one. On a trial boot that never gets healthy it never starts, and
+the revert above applies.
+
+Device side, once over the shell (persisted in settings):
+
+```
+hawkbit set addr <raptor-ip>      # IP literal: no DNS resolver
+hawkbit set port 8080
+hawkbit set ddi_token <target-token>
+hawkbit info                      # device id = controller id to register
+hawkbit run                       # probe now instead of waiting for the poll
+```
+
+Server side (raptor):
+
+- Register a target whose controller id is the `hawkbit info` device id, with
+  the same target security token (`CONFIG_HAWKBIT_DDI_TARGET_SECURITY`).
+- Create a software module with **one** artifact,
+  `builds/data_collection/data_collection/zephyr/zephyr.signed.bin`, in a
+  distribution set whose module part is `bApp` (the only part the client
+  accepts), and assign it.
+- The server must honour `Range` requests for resume. One that answers `200`
+  still works, but every interrupted download restarts from zero.
+
+An interrupted download resumes from the last saved offset
+(`CONFIG_HAWKBIT_SAVE_PROGRESS`, saved every 5 %), logged as
+`Resuming download from <n> bytes`. After the download the board reboots into
+the new image on trial. On the next probe it reports the action `success` if
+the running slot holds the artifact, or `failure` if MCUboot reverted it
+(zephyr/patches-zephyr.yml 0003).
+
+A download that fails its hash check is not reported to the server, so the
+action stays open and is retried on every poll. Cancel it on the server.
 
 One flashing caveat inherited from the swap-using-move layout: the image
 trailer lives at the **end** of slot0, and `west flash` only erases the region

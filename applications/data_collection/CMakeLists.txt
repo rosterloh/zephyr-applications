@@ -14,6 +14,7 @@ project(data_collection)
 # Shared application code (see applications/common/).
 include(${CMAKE_CURRENT_LIST_DIR}/../common/build_id/build_id.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/../common/watchdog/watchdog.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/../common/img_confirm/img_confirm.cmake)
 
 # We always want colored gcc output
 zephyr_compile_options(-fdiagnostics-color=always)

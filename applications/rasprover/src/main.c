@@ -4,6 +4,7 @@ LOG_MODULE_REGISTER(main, LOG_LEVEL_DBG);
 #include "app_display.h"
 #include "app_gimbal.h"
 #include "app_http.h"
+#include "app_img_confirm.h"
 #include "app_motors.h"
 #include "app_network.h"
 #include "app_picoros.h"
@@ -61,6 +62,9 @@ int main(void)
 	 * leaving room for a driver that overruns its own bound. */
 	app_watchdog_init();
 	int wdt_channel = app_watchdog_register("boot", 60000);
+
+	/* Healthy = first pico-ros publish; see app_picoros.c. */
+	app_img_confirm_arm();
 
 	app_sensors_init();
 #ifdef CONFIG_APP_MOTORS

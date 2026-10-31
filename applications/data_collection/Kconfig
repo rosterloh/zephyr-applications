@@ -12,5 +12,6 @@ config APP_CAM_MGMT
 
 rsource "../common/build_id/Kconfig"
 rsource "../common/watchdog/Kconfig"
+rsource "../common/img_confirm/Kconfig"
 
 source "Kconfig.zephyr"

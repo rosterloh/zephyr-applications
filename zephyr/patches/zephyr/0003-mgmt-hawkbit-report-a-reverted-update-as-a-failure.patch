@@ -1,0 +1,58 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Richard Osterloh <richard.osterloh@gmail.com>
+Date: Fri, 30 Oct 2026 23:31:06 +0000
+Subject: [PATCH] mgmt: hawkbit: report a reverted update as a failure
+
+The action ID is saved before rebooting into the new image. If the
+application does not confirm that image and MCUboot reverts it, the
+previous image still finds the ID set on its next probe and reports the
+action as finished successfully, so the server shows an update that is
+not running.
+
+Before reporting, check the running slot against the artifact's SHA-256
+and report failure on a mismatch.
+
+Signed-off-by: Richard Osterloh <richard.osterloh@gmail.com>
+---
+ subsys/mgmt/hawkbit/hawkbit.c | 18 ++++++++++++++++++
+ 1 file changed, 18 insertions(+)
+
+diff --git a/subsys/mgmt/hawkbit/hawkbit.c b/subsys/mgmt/hawkbit/hawkbit.c
+index 6f7c65e4f..e94b8724a 100644
+--- a/subsys/mgmt/hawkbit/hawkbit.c
++++ b/subsys/mgmt/hawkbit/hawkbit.c
+@@ -51,6 +51,7 @@ LOG_MODULE_REGISTER(hawkbit, CONFIG_HAWKBIT_LOG_LEVEL);
+ 
+ #define HTTP_HEADER_CONTENT_TYPE_JSON "application/json;charset=UTF-8"
+ 
++#define SLOT0_LABEL slot0_partition
+ #define SLOT1_LABEL slot1_partition
+ #define SLOT1_SIZE  PARTITION_SIZE(SLOT1_LABEL)
+ 
+@@ -1518,6 +1519,23 @@ static enum smf_state_result s_report(void *o)
+ 	};
+ 	uint8_t status_buffer[CONFIG_HAWKBIT_STATUS_BUFFER_SIZE] = {0};
+ 	char url_buffer[URL_BUFFER_SIZE] = {0};
++	struct flash_img_check fic = {.match = s->hb_context.dl.file_hash};
++
++	/* The action ID is saved before the reboot into the new image, so it is
++	 * also set when MCUboot reverted that image. Only report success if the
++	 * running slot holds the artifact.
++	 */
++	ret = hawkbit_parse_deployment(&s->hb_context, &s->hb_context.results.dep, NULL);
++	if (ret == 0) {
++		fic.clen = s->hb_context.dl.file_size;
++		ret = flash_img_check(&s->hb_context.flash_ctx, &fic, PARTITION_ID(SLOT0_LABEL));
++	}
++	if (ret != 0) {
++		LOG_ERR("Running image is not action %d's artifact (%d): update was reverted",
++			s->hb_context.json_action_id, ret);
++		feedback.status.result.finished =
++			hawkbit_status_finished(HAWKBIT_STATUS_FINISHED_FAILURE);
++	}
+ 
+ 	snprintk(url_buffer, sizeof(url_buffer), "%s/%s/%s/%d/%s", HAWKBIT_JSON_URL,
+ 		 s->device_id, "deploymentBase", s->hb_context.json_action_id, "feedback");
+-- 
+2.43.0
+

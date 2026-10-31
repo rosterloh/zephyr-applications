@@ -4,6 +4,7 @@
 checkout-command: >-
   git checkout --
   subsys/task_wdt/task_wdt.c
+  subsys/mgmt/hawkbit/hawkbit.c
 clean-command: ""
 
 patches:
@@ -19,3 +20,26 @@ patches:
       A failed wdt_install_timeout() left hw_wdt_dev set, so retrying
       task_wdt_init(NULL) still armed and fed a hardware watchdog with no
       timeout installed. app_watchdog_init() relies on that retry.
+  - path: zephyr/0002-mgmt-hawkbit-fix-resuming-from-a-full-or-ignored-ran.patch
+    sha256sum: d61bf59abbe92ef17afa118d4ce9090ce46eb4acc6cf177eb990f898bfe44c40
+    module: deps/zephyr
+    author: Richard Osterloh
+    email: richard.osterloh@gmail.com
+    date: 2026-10-30
+    upstreamable: true
+    issue: https://github.com/rosterloh/zephyr-applications/issues/124
+    comments: |
+      CONFIG_HAWKBIT_SAVE_PROGRESS: progress saved at 100% sent an
+      unsatisfiable Range on every later attempt, and a 200 reply to a
+      Range request rewrote the slot without erasing it.
+  - path: zephyr/0003-mgmt-hawkbit-report-a-reverted-update-as-a-failure.patch
+    sha256sum: ff185d57d5e88fded80641c0e050667b9b2c1c853bf87dd8acc124b3069a765b
+    module: deps/zephyr
+    author: Richard Osterloh
+    email: richard.osterloh@gmail.com
+    date: 2026-10-30
+    upstreamable: true
+    issue: https://github.com/rosterloh/zephyr-applications/issues/125
+    comments: |
+      With HAWKBIT_CONFIRM_IMG_ON_INIT=n and an image MCUboot reverted,
+      the old image reported the action as a success.
