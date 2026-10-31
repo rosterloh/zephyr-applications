@@ -2,7 +2,8 @@
 
 A [Prusa Connect](https://connect.prusa3d.com) camera for the AI-Thinker
 ESP32-CAM: it takes a JPEG from the OV2640 every N seconds and uploads it to
-Prusa Connect over HTTPS. Written from scratch for Zephyr; the feature set and
+Prusa Connect over HTTPS, using the
+[camera service API v1](https://camera-service.prusa3d.com/docs/). Written from scratch for Zephyr; the feature set and
 the Connect API usage follow
 [Prusa-Firmware-ESP32-Cam](https://github.com/prusa3d/Prusa-Firmware-ESP32-Cam).
 
@@ -16,6 +17,8 @@ Board and camera driver live in `rosterloh-drivers`
 ## Setup (serial console, 115200)
 
 1. In Prusa Connect: printer → Camera → *Add new other camera*, copy the token.
+   The camera must make its first call within 15 minutes of this; that call
+   binds the token to this device's fingerprint (`prusa show`).
 2. On the camera:
 
        wifi cred add -s <ssid> -k 1 -p <psk>

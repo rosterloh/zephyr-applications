@@ -29,7 +29,7 @@ static struct cfg cfg = {
 	.quality = 80,
 };
 static K_MUTEX_DEFINE(cfg_lock);
-/* Prusa Connect wants 16..40 alphanumerics; the MAC alone is 12 hex digits. */
+/* The service wants 16..64 characters; the MAC alone is 12 hex digits. */
 #define FP_PREFIX "zephyrcam"
 #define FP_ID_MAX ((40 - (sizeof(FP_PREFIX) - 1)) / 2)
 static char fingerprint[sizeof(FP_PREFIX) + 2 * FP_ID_MAX];

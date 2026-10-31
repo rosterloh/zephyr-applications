@@ -2,9 +2,10 @@
  * Copyright (c) 2026 Richard Osterloh <richard.osterloh@gmail.com>
  * SPDX-License-Identifier: Apache-2.0
  *
- * Prusa Connect camera API: PUT /c/snapshot (JPEG body) and PUT /c/info
- * (JSON), each authenticated with the camera's `token` and the device's
- * `fingerprint` headers, over HTTPS.
+ * Prusa camera service API v1 (https://camera-service.prusa3d.com/docs/):
+ * PUT /v1/camera-info (JSON) once and after each config change, then
+ * PUT /v1/snapshot (JPEG, at most 1 MB and 6 a minute), each with Token,
+ * Fingerprint and User-Agent headers, over HTTPS.
  */
 
 #include <errno.h>
@@ -82,17 +83,18 @@ out:
 /* PUT `body` to `path`; returns the HTTP status or -errno. */
 static int put(const char *path, const char *type, const uint8_t *body, size_t len)
 {
-	static char token_hdr[sizeof("token: \r\n") + CFG_TOKEN_MAX];
+	static char token_hdr[sizeof("Token: \r\n") + CFG_TOKEN_MAX];
 	static char fp_hdr[96];
-	const char *headers[] = {token_hdr, fp_hdr, NULL};
+	static const char ua_hdr[] = "User-Agent: prusa_cam/" APP_VERSION_STRING "\r\n";
+	const char *headers[] = {token_hdr, fp_hdr, ua_hdr, NULL};
 	struct cfg c;
 	int http_status = -EIO;
 	int sock;
 	int ret;
 
 	cfg_get(&c);
-	snprintf(token_hdr, sizeof(token_hdr), "token: %s\r\n", c.token);
-	snprintf(fp_hdr, sizeof(fp_hdr), "fingerprint: %s\r\n", cfg_fingerprint());
+	snprintf(token_hdr, sizeof(token_hdr), "Token: %s\r\n", c.token);
+	snprintf(fp_hdr, sizeof(fp_hdr), "Fingerprint: %s\r\n", cfg_fingerprint());
 
 	sock = tls_connect();
 	if (sock < 0) {
@@ -122,17 +124,20 @@ static int put(const char *path, const char *type, const uint8_t *body, size_t l
 
 static int send_info(void)
 {
-	static char json[256];
+	static char json[320];
 	struct cfg c;
 
+	/* The service rejects unknown keys, and replaces config as a whole. */
 	cfg_get(&c);
 	snprintf(json, sizeof(json),
-		 "{\"config\":{\"name\":\"%s\",\"firmware\":\"%s\",\"manufacturer\":\"AI-Thinker\","
-		 "\"model\":\"ESP32-CAM\",\"resolution\":{\"width\":%u,\"height\":%u}}}",
-		 CONFIG_NET_HOSTNAME, APP_VERSION_STRING, cfg_resolutions[c.resolution].width,
-		 cfg_resolutions[c.resolution].height);
+		 "{\"config\":{\"name\":\"%s\",\"resolution\":{\"width\":%u,\"height\":%u}},"
+		 "\"device\":{\"type\":\"ESP32\",\"firmware_version\":\"%s\","
+		 "\"hardware_version\":\"AI-Thinker ESP32-CAM\",\"manufacturer\":\"AI-Thinker\","
+		 "\"model\":\"ESP32-CAM\"}}",
+		 CONFIG_NET_HOSTNAME, cfg_resolutions[c.resolution].width,
+		 cfg_resolutions[c.resolution].height, APP_VERSION_STRING);
 
-	return put("/c/info", "application/json", json, strlen(json));
+	return put("/v1/camera-info", "application/json", json, strlen(json));
 }
 
 static int send_snapshot(void)
@@ -144,7 +149,7 @@ static int send_snapshot(void)
 	if (ret < 0) {
 		return ret;
 	}
-	ret = put("/c/snapshot", "image/jpg", jpeg, len);
+	ret = put("/v1/snapshot", "image/jpeg", jpeg, len);
 	cam_release();
 	LOG_INF("Snapshot %u B -> %d", len, ret);
 	return ret;
