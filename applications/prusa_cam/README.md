@@ -25,13 +25,17 @@ Board and camera driver live in `rosterloh-drivers`
        wifi cred auto_connect
        prusa set token <token>
        prusa set password <admin password>
+       prusa test
        prusa show
 
-`-k 1` is WPA2-PSK; see `wifi cred add -h` for others.
+`-k 1` is WPA2-PSK; see `wifi cred add -h` for others. `prusa test` checks the
+token and fingerprint with the service; `prusa show` then gives the result.
 
 Then open `http://prusa-esp32cam.local/` (mDNS) or `http://<camera ip>/`, and
-log in as `admin` to change resolution, interval, JPEG quality, mirror/flip,
-rotation, flash and a static IPv4 address. The page needs a password set
+log in as `admin` to change the camera name, resolution, upload interval
+(10 s, 30 s, 60 s or 10 min, the cadences the service knows), JPEG quality,
+mirror/flip, rotation, flash, brightness/contrast/saturation, the auto
+exposure/white balance/gain loops, and a static IPv4 address. The page needs a password set
 first; until then the API answers 403.
 
 ## Interfaces
@@ -40,15 +44,31 @@ first; until then the API answers 403.
 |---|---|---|
 | `GET /` | no | Config page (no secrets in it) |
 | `GET /snapshot.jpg` | yes | A fresh frame |
-| `GET /api/status` | yes | Upload count and last result |
-| `GET`/`POST /api/config` | yes | JSON config; POST takes any subset of `token`, `password`, `interval`, `resolution`, `quality`, `hflip`, `vflip`, `flash`, `rotation` (0/90/180/270), `ip`, `netmask`, `gateway`, `dns` (`""` = DHCP / gateway) |
+| `GET /api/status` | yes | Upload count, last result and what it means, and whether uploads are stopped |
+| `POST /api/test` | yes | Check the token with `GET /v1/camera-info`; the result shows in `/api/status` |
+| `GET`/`POST /api/config` | yes | JSON config; POST takes any subset of `name`, `token`, `password`, `interval`, `resolution`, `quality`, `hflip`, `vflip`, `flash`, `rotation` (0/90/180/270), `ip`, `netmask`, `gateway`, `dns` (`""` = DHCP / gateway), `brightness`, `contrast`, `saturation` (-2..2), `auto_exposure`, `auto_wb`, `auto_gain` |
 | `GET :81/stream` | yes | MJPEG stream, one viewer at a time |
 
 Rotation is not applied to the pixels. Prusa Connect gets it as
 `config.rotation` in camera-info; `/snapshot.jpg` carries an Exif Orientation
 tag for browsers. The stream is sent as captured. A static address applies on the next WiFi connect.
 
-Shell: `prusa show`, `prusa set <key> <value>`, `prusa snap`. For a static
+## Talking to Prusa Connect
+
+The client lives in `applications/common/prusa_camera` and follows the
+[camera service API](https://camera-service.prusa3d.com/docs/). Camera-info
+(name, interval as `trigger_scheme`, rotation, resolution, and the WiFi MAC,
+address and SSID as `network_info`) is sent at boot, after a settings change,
+and when the address changes. Then a snapshot is sent every interval.
+
+- A refusal (400/401/403/413/415/422, or a token that is not 20 letters/digits)
+  stops uploads until the settings change or `prusa test` passes, instead of
+  repeating the same request. 403 usually means the camera missed the
+  15-minute window after it was created in Connect.
+- 429/503 (rate limit) waits for the next interval.
+- Network or 5xx errors back off, doubling up to 10 minutes.
+
+Shell: `prusa show`, `prusa set <key> <value>`, `prusa test`, `prusa snap`. For a static
 address set `netmask` and `gateway` before `ip`; `prusa set ip dhcp` reverts.
 
 ## Not done yet
