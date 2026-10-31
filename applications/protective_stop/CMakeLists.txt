@@ -29,8 +29,8 @@ target_sources(app PRIVATE
 )
 
 if(CONFIG_PROTECTIVE_STOP_HTTP)
+  include(${CMAKE_CURRENT_LIST_DIR}/../common/http_util/http_util.cmake)
   target_sources(app PRIVATE
-    src/http_util.c
     src/api.c
     src/http_server.c
   )

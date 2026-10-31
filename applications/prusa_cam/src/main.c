@@ -1,0 +1,135 @@
+/*
+ * Copyright (c) 2026 Richard Osterloh <richard.osterloh@gmail.com>
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * Prusa Connect camera: periodic JPEG snapshots from an OV2640 uploaded to
+ * Prusa Connect, configured from the shell or a small web page.
+ */
+
+#include <stdlib.h>
+#include <string.h>
+
+#include <zephyr/kernel.h>
+#include <zephyr/logging/log.h>
+#include <zephyr/shell/shell.h>
+
+#include "app_wifi.h"
+#include "cam.h"
+#include "cfg.h"
+#include "connect.h"
+
+LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
+
+int web_init(void);
+
+void cfg_changed(void)
+{
+	struct cfg c;
+
+	cfg_get(&c);
+	cam_apply(&c);
+	connect_kick();
+}
+
+static int cmd_show(const struct shell *sh, size_t argc, char **argv)
+{
+	struct cfg c;
+	struct connect_status st;
+
+	cfg_get(&c);
+	connect_get_status(&st);
+	shell_print(sh, "token:       %s", c.token[0] ? "set" : "not set");
+	shell_print(sh, "password:    %s", c.password[0] ? "set" : "not set");
+	shell_print(sh, "fingerprint: %s", cfg_fingerprint());
+	shell_print(sh, "interval:    %u s", c.interval_s);
+	shell_print(sh, "resolution:  %s", cfg_resolutions[c.resolution].name);
+	shell_print(sh, "quality:     %u", c.quality);
+	shell_print(sh, "hflip/vflip: %d/%d, flash: %d", c.hflip, c.vflip, c.flash);
+	shell_print(sh, "uploads:     %u, last result %d", st.uploads, st.last_result);
+	memset(&c, 0, sizeof(c));
+	return 0;
+}
+
+static int cmd_set(const struct shell *sh, size_t argc, char **argv)
+{
+	const char *key = argv[1];
+	const char *val = argv[2];
+	struct cfg c;
+	int ret;
+
+	cfg_get(&c);
+	if (strcmp(key, "token") == 0 && strlen(val) <= CFG_TOKEN_MAX) {
+		strcpy(c.token, val);
+	} else if (strcmp(key, "password") == 0 && strlen(val) <= CFG_PASSWORD_MAX) {
+		strcpy(c.password, val);
+	} else if (strcmp(key, "interval") == 0) {
+		c.interval_s = CLAMP(strtol(val, NULL, 10), 0, UINT16_MAX);
+	} else if (strcmp(key, "resolution") == 0 && cfg_resolution_find(val) >= 0) {
+		c.resolution = cfg_resolution_find(val);
+	} else if (strcmp(key, "quality") == 0) {
+		c.quality = CLAMP(strtol(val, NULL, 10), 0, UINT8_MAX);
+	} else if (strcmp(key, "hflip") == 0) {
+		c.hflip = strtol(val, NULL, 10) != 0;
+	} else if (strcmp(key, "vflip") == 0) {
+		c.vflip = strtol(val, NULL, 10) != 0;
+	} else if (strcmp(key, "flash") == 0) {
+		c.flash = strtol(val, NULL, 10) != 0;
+	} else {
+		shell_error(sh, "bad key or value");
+		return -EINVAL;
+	}
+
+	ret = cfg_set(&c);
+	memset(&c, 0, sizeof(c));
+	if (ret < 0) {
+		shell_error(sh, "rejected (%d)", ret);
+	}
+	return ret;
+}
+
+static int cmd_snap(const struct shell *sh, size_t argc, char **argv)
+{
+	connect_kick();
+	shell_print(sh, "upload queued");
+	return 0;
+}
+
+SHELL_STATIC_SUBCMD_SET_CREATE(
+	prusa_cmds,
+	SHELL_CMD_ARG(show, NULL, "Show configuration and upload status", cmd_show, 1, 0),
+	SHELL_CMD_ARG(set, NULL,
+		      "Set <token|password|interval|resolution|quality|hflip|vflip|flash> <value>\n"
+		      "resolution: QVGA VGA SVGA XGA SXGA UXGA",
+		      cmd_set, 3, 0),
+	SHELL_CMD_ARG(snap, NULL, "Upload a snapshot now", cmd_snap, 1, 0), SHELL_SUBCMD_SET_END);
+SHELL_CMD_REGISTER(prusa, &prusa_cmds, "Prusa Connect camera", NULL);
+
+int main(void)
+{
+	int ret;
+
+	ret = cfg_init();
+	if (ret < 0) {
+		LOG_ERR("Config init failed (%d)", ret);
+		return ret;
+	}
+	LOG_INF("Fingerprint %s", cfg_fingerprint());
+
+	ret = cam_init();
+	if (ret < 0) {
+		LOG_ERR("Camera init failed (%d)", ret); /* keep going: the shell still works */
+	}
+
+	ret = connect_init();
+	if (ret < 0) {
+		LOG_ERR("Connect init failed (%d)", ret);
+		return ret;
+	}
+
+	ret = web_init();
+	if (ret < 0) {
+		LOG_ERR("HTTP server failed (%d)", ret);
+	}
+
+	return app_wifi_init();
+}

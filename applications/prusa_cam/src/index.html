@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Prusa Connect camera</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:40rem;margin:1rem auto;padding:0 1rem}
+img{width:100%;background:#ddd;min-height:8rem}
+label{display:block;margin:.5rem 0}
+input:not([type=checkbox]),select{width:100%;box-sizing:border-box;padding:.3rem}
+#msg{min-height:1.2rem}
+</style>
+</head>
+<body>
+<h1>Prusa Connect camera</h1>
+<img id="snap" alt="Latest snapshot">
+<p><button id="refresh" type="button">Refresh snapshot</button></p>
+<p id="status"></p>
+<form id="cfg">
+<label>Prusa Connect token (leave empty to keep)
+<input name="token" autocomplete="off" maxlength="64"></label>
+<label>Upload interval (seconds, 10&ndash;3600)
+<input name="interval" type="number" min="10" max="3600"></label>
+<label>Resolution
+<select name="resolution">
+<option>QVGA</option><option>VGA</option><option>SVGA</option>
+<option>XGA</option><option>SXGA</option><option>UXGA</option>
+</select></label>
+<label>JPEG quality (0&ndash;100)
+<input name="quality" type="number" min="0" max="100"></label>
+<label><input name="hflip" type="checkbox"> Mirror</label>
+<label><input name="vflip" type="checkbox"> Flip</label>
+<label><input name="flash" type="checkbox"> Flash LED during capture</label>
+<label>New admin password (leave empty to keep)
+<input name="password" type="password" autocomplete="new-password" maxlength="32"></label>
+<button type="submit">Save</button>
+</form>
+<p id="msg" role="status"></p>
+<p><small>Fingerprint: <span id="fp"></span></small></p>
+<script>
+const f = document.getElementById('cfg');
+const msg = t => document.getElementById('msg').textContent = t;
+function snap() { document.getElementById('snap').src = '/snapshot.jpg?' + Date.now(); }
+function show(c) {
+	f.interval.value = c.interval; f.resolution.value = c.resolution;
+	f.quality.value = c.quality; f.hflip.checked = c.hflip;
+	f.vflip.checked = c.vflip; f.flash.checked = c.flash;
+	f.token.placeholder = c.token_set ? 'set' : 'not set';
+	document.getElementById('fp').textContent = c.fingerprint;
+}
+async function load() {
+	const r = await fetch('/api/config');
+	const c = await r.json();
+	if (!r.ok) { msg(c.error); return; }
+	show(c);
+	const s = await (await fetch('/api/status')).json();
+	document.getElementById('status').textContent =
+		`Uploads: ${s.uploads}, last result: ${s.last_result || 'none yet'}`;
+	snap();
+}
+f.onsubmit = async e => {
+	e.preventDefault();
+	const c = {interval: +f.interval.value, resolution: f.resolution.value,
+		quality: +f.quality.value, hflip: f.hflip.checked,
+		vflip: f.vflip.checked, flash: f.flash.checked};
+	if (f.token.value) c.token = f.token.value;
+	if (f.password.value) c.password = f.password.value;
+	const r = await fetch('/api/config', {method: 'POST', body: JSON.stringify(c)});
+	const j = await r.json();
+	if (r.ok) { show(j); f.token.value = ''; f.password.value = ''; msg('Saved'); }
+	else msg(j.error);
+};
+document.getElementById('refresh').onclick = snap;
+load();
+</script>
+</body>
+</html>

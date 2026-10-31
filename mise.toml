@@ -439,7 +439,7 @@ fi
 [tasks.app]
 description = "Build a Zephyr application for its default (or an explicitly allowed) board."
 usage = '''
-arg "<app>" help="App name (motor_controller, joystick_controller, embedded_vision, force_sensor, bt_keys, codex_keys, powerbread, pico_fw, pt_mcp, rasprover, data_collection, protective_stop)"
+arg "<app>" help="App name (motor_controller, joystick_controller, embedded_vision, force_sensor, bt_keys, codex_keys, powerbread, pico_fw, pt_mcp, rasprover, data_collection, protective_stop, prusa_cam)"
 flag "-b --board <board>" help="Override target board (must be in app's allowed list)"
 flag "--sysbuild" help="Build with sysbuild (e.g. for MCUboot integration)"
 flag "-s --shield <shield>" help="Board shield, e.g. arducam_tof_camera for data_collection"
@@ -459,6 +459,7 @@ case "${usage_app}" in
     rasprover)            ALLOWED="ros_driver/esp32/procpu native_sim/native/64"; DEFAULT="ros_driver/esp32/procpu" ;;
     data_collection)      ALLOWED="esp32p4_nano/esp32p4/hpcore esp32p4_wifi6_poe_eth/esp32p4/hpcore"; DEFAULT="esp32p4_nano/esp32p4/hpcore" ;;
     protective_stop)      ALLOWED="waveshare_esp32_s3_eth/esp32s3/procpu native_sim/native/64"; DEFAULT="native_sim/native/64" ;;
+    prusa_cam)            ALLOWED="ai_thinker_esp32_cam/esp32/procpu"; DEFAULT="ai_thinker_esp32_cam/esp32/procpu" ;;
     *) echo "unknown app: ${usage_app}" >&2; exit 2 ;;
 esac
 

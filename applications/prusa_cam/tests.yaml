@@ -1,0 +1,12 @@
+# Build-only: the app needs the camera, WiFi and Prusa Connect to do anything.
+sample:
+  description: Prusa Connect camera for the AI-Thinker ESP32-CAM
+  name: prusa-cam
+common:
+  build_only: true
+  platform_allow:
+    - ai_thinker_esp32_cam/esp32/procpu
+  integration_platforms:
+    - ai_thinker_esp32_cam/esp32/procpu
+tests:
+  app.prusa_cam.default: {}
