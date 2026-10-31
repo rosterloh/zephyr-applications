@@ -102,19 +102,71 @@ static bool authorised(struct route *r, struct http_response_ctx *rsp)
 	return ok;
 }
 
-static const char *config_json(void)
+struct config_out {
+	bool token_set;
+	const char *fingerprint;
+	uint32_t interval;
+	const char *resolution;
+	uint32_t quality;
+	bool hflip;
+	bool vflip;
+	bool flash;
+};
+
+static const struct json_obj_descr config_out_descr[] = {
+	JSON_OBJ_DESCR_PRIM(struct config_out, token_set, JSON_TOK_TRUE),
+	JSON_OBJ_DESCR_PRIM(struct config_out, fingerprint, JSON_TOK_STRING),
+	JSON_OBJ_DESCR_PRIM(struct config_out, interval, JSON_TOK_UINT),
+	JSON_OBJ_DESCR_PRIM(struct config_out, resolution, JSON_TOK_STRING),
+	JSON_OBJ_DESCR_PRIM(struct config_out, quality, JSON_TOK_UINT),
+	JSON_OBJ_DESCR_PRIM(struct config_out, hflip, JSON_TOK_TRUE),
+	JSON_OBJ_DESCR_PRIM(struct config_out, vflip, JSON_TOK_TRUE),
+	JSON_OBJ_DESCR_PRIM(struct config_out, flash, JSON_TOK_TRUE),
+};
+
+struct status_out {
+	int64_t uptime_s;
+	int64_t last_upload_s;
+	int32_t last_result;
+	uint32_t uploads;
+};
+
+static const struct json_obj_descr status_out_descr[] = {
+	JSON_OBJ_DESCR_PRIM(struct status_out, uptime_s, JSON_TOK_INT64),
+	JSON_OBJ_DESCR_PRIM(struct status_out, last_upload_s, JSON_TOK_INT64),
+	JSON_OBJ_DESCR_PRIM(struct status_out, last_result, JSON_TOK_NUMBER),
+	JSON_OBJ_DESCR_PRIM(struct status_out, uploads, JSON_TOK_UINT),
+};
+
+/* Encode into `out` and reply 200, or 500 if it does not fit. */
+static void reply_json(struct http_response_ctx *rsp, const struct json_obj_descr *descr, size_t n,
+		       const void *val)
+{
+	if (json_obj_encode_buf(descr, n, val, out, sizeof(out)) < 0) {
+		reply(rsp, HTTP_500_INTERNAL_SERVER_ERROR, "{\"error\":\"encode\"}");
+		return;
+	}
+	reply(rsp, HTTP_200_OK, out);
+}
+
+static void reply_config(struct http_response_ctx *rsp)
 {
 	struct cfg c;
+	struct config_out o;
 
 	cfg_get(&c);
-	snprintf(out, sizeof(out),
-		 "{\"token_set\":%s,\"fingerprint\":\"%s\",\"interval\":%u,\"resolution\":\"%s\","
-		 "\"quality\":%u,\"hflip\":%s,\"vflip\":%s,\"flash\":%s}",
-		 c.token[0] ? "true" : "false", cfg_fingerprint(), c.interval_s,
-		 cfg_resolutions[c.resolution].name, c.quality, c.hflip ? "true" : "false",
-		 c.vflip ? "true" : "false", c.flash ? "true" : "false");
+	o = (struct config_out){
+		.token_set = c.token[0] != '\0',
+		.fingerprint = cfg_fingerprint(),
+		.interval = c.interval_s,
+		.resolution = cfg_resolutions[c.resolution].name,
+		.quality = c.quality,
+		.hflip = c.hflip,
+		.vflip = c.vflip,
+		.flash = c.flash,
+	};
 	memset(&c, 0, sizeof(c));
-	return out;
+	reply_json(rsp, config_out_descr, ARRAY_SIZE(config_out_descr), &o);
 }
 
 struct cfg_post {
@@ -231,7 +283,7 @@ static int config_cb(struct http_client_ctx *client, enum http_transaction_statu
 			return 0;
 		}
 	}
-	reply(rsp, HTTP_200_OK, config_json());
+	reply_config(rsp);
 	return 0;
 }
 
@@ -242,6 +294,7 @@ static int status_cb(struct http_client_ctx *client, enum http_transaction_statu
 {
 	struct route *r = &status_route;
 	struct connect_status st;
+	struct status_out so;
 
 	if (status == HTTP_SERVER_TRANSACTION_ABORTED ||
 	    status == HTTP_SERVER_TRANSACTION_COMPLETE) {
@@ -254,10 +307,13 @@ static int status_cb(struct http_client_ctx *client, enum http_transaction_statu
 	}
 
 	connect_get_status(&st);
-	snprintf(out, sizeof(out),
-		 "{\"uptime_s\":%lld,\"last_upload_s\":%lld,\"last_result\":%d,\"uploads\":%u}",
-		 k_uptime_get() / 1000, st.last_ms / 1000, st.last_result, st.uploads);
-	reply(rsp, HTTP_200_OK, out);
+	so = (struct status_out){
+		.uptime_s = k_uptime_get() / 1000,
+		.last_upload_s = st.last_ms / 1000,
+		.last_result = st.last_result,
+		.uploads = st.uploads,
+	};
+	reply_json(rsp, status_out_descr, ARRAY_SIZE(status_out_descr), &so);
 	return 0;
 }
 

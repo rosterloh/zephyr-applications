@@ -12,6 +12,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include <zephyr/data/json.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/net/http/client.h>
@@ -122,21 +123,70 @@ static int put(const char *path, const char *type, const uint8_t *body, size_t l
 	return ret < 0 ? ret : http_status;
 }
 
+/* PUT /v1/camera-info body; the service rejects unknown keys. */
+struct info_resolution {
+	uint32_t width;
+	uint32_t height;
+};
+struct info_config {
+	const char *name;
+	struct info_resolution resolution;
+};
+struct info_device {
+	const char *type;
+	const char *firmware_version;
+	const char *hardware_version;
+	const char *manufacturer;
+	const char *model;
+};
+struct info {
+	struct info_config config;
+	struct info_device device;
+};
+
+static const struct json_obj_descr info_resolution_descr[] = {
+	JSON_OBJ_DESCR_PRIM(struct info_resolution, width, JSON_TOK_UINT),
+	JSON_OBJ_DESCR_PRIM(struct info_resolution, height, JSON_TOK_UINT),
+};
+static const struct json_obj_descr info_config_descr[] = {
+	JSON_OBJ_DESCR_PRIM(struct info_config, name, JSON_TOK_STRING),
+	JSON_OBJ_DESCR_OBJECT(struct info_config, resolution, info_resolution_descr),
+};
+static const struct json_obj_descr info_device_descr[] = {
+	JSON_OBJ_DESCR_PRIM(struct info_device, type, JSON_TOK_STRING),
+	JSON_OBJ_DESCR_PRIM(struct info_device, firmware_version, JSON_TOK_STRING),
+	JSON_OBJ_DESCR_PRIM(struct info_device, hardware_version, JSON_TOK_STRING),
+	JSON_OBJ_DESCR_PRIM(struct info_device, manufacturer, JSON_TOK_STRING),
+	JSON_OBJ_DESCR_PRIM(struct info_device, model, JSON_TOK_STRING),
+};
+static const struct json_obj_descr info_descr[] = {
+	JSON_OBJ_DESCR_OBJECT(struct info, config, info_config_descr),
+	JSON_OBJ_DESCR_OBJECT(struct info, device, info_device_descr),
+};
+
 static int send_info(void)
 {
 	static char json[320];
 	struct cfg c;
+	struct info info = {
+		.config = {.name = CONFIG_NET_HOSTNAME},
+		.device = {.type = "ESP32",
+			   .firmware_version = APP_VERSION_STRING,
+			   .hardware_version = "AI-Thinker ESP32-CAM",
+			   .manufacturer = "AI-Thinker",
+			   .model = "ESP32-CAM"},
+	};
+	int ret;
 
-	/* The service rejects unknown keys, and replaces config as a whole. */
 	cfg_get(&c);
-	snprintf(json, sizeof(json),
-		 "{\"config\":{\"name\":\"%s\",\"resolution\":{\"width\":%u,\"height\":%u}},"
-		 "\"device\":{\"type\":\"ESP32\",\"firmware_version\":\"%s\","
-		 "\"hardware_version\":\"AI-Thinker ESP32-CAM\",\"manufacturer\":\"AI-Thinker\","
-		 "\"model\":\"ESP32-CAM\"}}",
-		 CONFIG_NET_HOSTNAME, cfg_resolutions[c.resolution].width,
-		 cfg_resolutions[c.resolution].height, APP_VERSION_STRING);
+	info.config.resolution.width = cfg_resolutions[c.resolution].width;
+	info.config.resolution.height = cfg_resolutions[c.resolution].height;
+	memset(&c, 0, sizeof(c));
 
+	ret = json_obj_encode_buf(info_descr, ARRAY_SIZE(info_descr), &info, json, sizeof(json));
+	if (ret < 0) {
+		return ret;
+	}
 	return put("/v1/camera-info", "application/json", json, strlen(json));
 }
 
