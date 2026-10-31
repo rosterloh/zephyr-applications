@@ -16,7 +16,7 @@ config PRUSA_CAMERA_HOST
 	default "camera-service.prusa3d.com"
 
 config PRUSA_CAMERA_CA_TAG
-	int "TLS credential tag for the service's CA"
+	int "First of three TLS credential tags for the service's CAs"
 	default 1
 
 config PRUSA_CAMERA_TIMEOUT_MS

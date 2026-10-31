@@ -21,8 +21,25 @@ LOG_MODULE_REGISTER(prusa_camera, CONFIG_PRUSA_CAMERA_LOG_LEVEL);
 
 #define HOST CONFIG_PRUSA_CAMERA_HOST
 
-static const uint8_t ca_cert[] = {
-#include "prusa_camera_ca.der.inc"
+static const uint8_t gts_root_r4[] = {
+#include "prusa_camera_gts_root_r4.der.inc"
+};
+static const uint8_t gts_root_r1[] = {
+#include "prusa_camera_gts_root_r1.der.inc"
+};
+static const uint8_t isrg_root_x1[] = {
+#include "prusa_camera_isrg_root_x1.der.inc"
+};
+
+/* One CA per tag: a tag holds a single credential of each type. */
+#define CA_TAG(i) (CONFIG_PRUSA_CAMERA_CA_TAG + (i))
+static const struct {
+	const uint8_t *der;
+	size_t len;
+} cas[] = {
+	{gts_root_r4, sizeof(gts_root_r4)},
+	{gts_root_r1, sizeof(gts_root_r1)},
+	{isrg_root_x1, sizeof(isrg_root_x1)},
 };
 
 static uint8_t recv_buf[512];
@@ -39,7 +56,7 @@ static int on_response(struct http_response *rsp, enum http_final_call final, vo
 
 static int tls_connect(void)
 {
-	static const sec_tag_t tags[] = {CONFIG_PRUSA_CAMERA_CA_TAG};
+	static const sec_tag_t tags[] = {CA_TAG(0), CA_TAG(1), CA_TAG(2)};
 	struct zsock_addrinfo hints = {.ai_family = AF_INET, .ai_socktype = SOCK_STREAM};
 	struct zsock_addrinfo *res;
 	int sock;
@@ -148,6 +165,13 @@ int prusa_camera_init(const char *user_agent)
 	if (snprintf(ua_hdr, sizeof(ua_hdr), "User-Agent: %s\r\n", user_agent) >= sizeof(ua_hdr)) {
 		return -EINVAL;
 	}
-	return tls_credential_add(CONFIG_PRUSA_CAMERA_CA_TAG, TLS_CREDENTIAL_CA_CERTIFICATE,
-				  ca_cert, sizeof(ca_cert));
+	for (size_t i = 0; i < ARRAY_SIZE(cas); i++) {
+		int ret = tls_credential_add(CA_TAG(i), TLS_CREDENTIAL_CA_CERTIFICATE, cas[i].der,
+					     cas[i].len);
+
+		if (ret < 0) {
+			return ret;
+		}
+	}
+	return 0;
 }

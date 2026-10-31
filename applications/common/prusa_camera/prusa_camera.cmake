@@ -10,7 +10,11 @@ if(CONFIG_PRUSA_CAMERA)
     ${CMAKE_CURRENT_LIST_DIR}/prusa_camera.c
     ${CMAKE_CURRENT_LIST_DIR}/prusa_camera_proto.c
   )
-  # ISRG Root X1. shortcut: the camera-service chain is not verified yet; swap this file if it is not Let's Encrypt.
-  generate_inc_file_for_target(app ${CMAKE_CURRENT_LIST_DIR}/prusa_camera_ca.der
-    ${ZEPHYR_BINARY_DIR}/include/generated/prusa_camera_ca.der.inc)
+  # Roots the service's chain can end in. It is behind Cloudflare, which
+  # issues from Google Trust Services (2026-10-31: WE1 -> GTS Root R4) and
+  # also Let's Encrypt; R1 is the GTS RSA root.
+  foreach(ca gts_root_r4 gts_root_r1 isrg_root_x1)
+    generate_inc_file_for_target(app ${CMAKE_CURRENT_LIST_DIR}/${ca}.der
+      ${ZEPHYR_BINARY_DIR}/include/generated/prusa_camera_${ca}.der.inc)
+  endforeach()
 endif()
