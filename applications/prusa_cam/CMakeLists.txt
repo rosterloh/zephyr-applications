@@ -13,6 +13,7 @@ target_sources(app PRIVATE
   src/cfg.c
   src/cam.c
   src/connect.c
+  src/stream.c
   src/web.c
   src/wifi.c
 )

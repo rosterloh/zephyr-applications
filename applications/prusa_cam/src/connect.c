@@ -130,6 +130,7 @@ struct info_resolution {
 };
 struct info_config {
 	const char *name;
+	uint32_t rotation;
 	struct info_resolution resolution;
 };
 struct info_device {
@@ -150,6 +151,7 @@ static const struct json_obj_descr info_resolution_descr[] = {
 };
 static const struct json_obj_descr info_config_descr[] = {
 	JSON_OBJ_DESCR_PRIM(struct info_config, name, JSON_TOK_STRING),
+	JSON_OBJ_DESCR_PRIM(struct info_config, rotation, JSON_TOK_UINT),
 	JSON_OBJ_DESCR_OBJECT(struct info_config, resolution, info_resolution_descr),
 };
 static const struct json_obj_descr info_device_descr[] = {
@@ -181,6 +183,7 @@ static int send_info(void)
 	cfg_get(&c);
 	info.config.resolution.width = cfg_resolutions[c.resolution].width;
 	info.config.resolution.height = cfg_resolutions[c.resolution].height;
+	info.config.rotation = c.rotation * 90;
 	memset(&c, 0, sizeof(c));
 
 	ret = json_obj_encode_buf(info_descr, ARRAY_SIZE(info_descr), &info, json, sizeof(json));

@@ -126,7 +126,7 @@ int cam_init(void)
 	return cam_apply(&c);
 }
 
-int cam_snapshot(const uint8_t **jpeg, size_t *len)
+static int grab(const uint8_t **jpeg, size_t *len, bool flash)
 {
 	int ret;
 
@@ -136,7 +136,7 @@ int cam_snapshot(const uint8_t **jpeg, size_t *len)
 
 	k_mutex_lock(&cam_lock, K_FOREVER);
 
-	if (use_flash) {
+	if (flash) {
 		led_set_brightness_dt(&flash_led, FLASH_PERCENT);
 		k_sleep(FLASH_SETTLE);
 	}
@@ -145,7 +145,7 @@ int cam_snapshot(const uint8_t **jpeg, size_t *len)
 	requeue_all();
 	ret = video_dequeue(video, &held, FRAME_TIMEOUT);
 
-	if (use_flash) {
+	if (flash) {
 		led_off_dt(&flash_led);
 	}
 
@@ -158,6 +158,16 @@ int cam_snapshot(const uint8_t **jpeg, size_t *len)
 	*jpeg = held->buffer;
 	*len = held->bytesused;
 	return 0;
+}
+
+int cam_snapshot(const uint8_t **jpeg, size_t *len)
+{
+	return grab(jpeg, len, use_flash);
+}
+
+int cam_frame(const uint8_t **jpeg, size_t *len)
+{
+	return grab(jpeg, len, false);
 }
 
 void cam_release(void)

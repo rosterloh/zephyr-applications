@@ -15,7 +15,8 @@ input:not([type=checkbox]),select{width:100%;box-sizing:border-box;padding:.3rem
 <body>
 <h1>Prusa Connect camera</h1>
 <img id="snap" alt="Latest snapshot">
-<p><button id="refresh" type="button">Refresh snapshot</button></p>
+<p><button id="refresh" type="button">Refresh snapshot</button>
+<a id="stream" href="#">Live stream</a></p>
 <p id="status"></p>
 <form id="cfg">
 <label>Prusa Connect token (leave empty to keep)
@@ -32,6 +33,17 @@ input:not([type=checkbox]),select{width:100%;box-sizing:border-box;padding:.3rem
 <label><input name="hflip" type="checkbox"> Mirror</label>
 <label><input name="vflip" type="checkbox"> Flip</label>
 <label><input name="flash" type="checkbox"> Flash LED during capture</label>
+<label>Rotation (camera as mounted)
+<select name="rotation">
+<option value="0">0&deg;</option><option value="90">90&deg;</option>
+<option value="180">180&deg;</option><option value="270">270&deg;</option>
+</select></label>
+<fieldset><legend>Static IPv4 (leave address empty for DHCP; applies on reconnect)</legend>
+<label>Address <input name="ip" inputmode="decimal"></label>
+<label>Netmask <input name="netmask" inputmode="decimal"></label>
+<label>Gateway <input name="gateway" inputmode="decimal"></label>
+<label>DNS (empty: gateway) <input name="dns" inputmode="decimal"></label>
+</fieldset>
 <label>New admin password (leave empty to keep)
 <input name="password" type="password" autocomplete="new-password" maxlength="32"></label>
 <button type="submit">Save</button>
@@ -46,6 +58,8 @@ function show(c) {
 	f.interval.value = c.interval; f.resolution.value = c.resolution;
 	f.quality.value = c.quality; f.hflip.checked = c.hflip;
 	f.vflip.checked = c.vflip; f.flash.checked = c.flash;
+	f.rotation.value = c.rotation;
+	for (const k of ['ip', 'netmask', 'gateway', 'dns']) f[k].value = c[k];
 	f.token.placeholder = c.token_set ? 'set' : 'not set';
 	document.getElementById('fp').textContent = c.fingerprint;
 }
@@ -63,7 +77,8 @@ f.onsubmit = async e => {
 	e.preventDefault();
 	const c = {interval: +f.interval.value, resolution: f.resolution.value,
 		quality: +f.quality.value, hflip: f.hflip.checked,
-		vflip: f.vflip.checked, flash: f.flash.checked};
+		vflip: f.vflip.checked, flash: f.flash.checked, rotation: +f.rotation.value,
+		ip: f.ip.value, netmask: f.netmask.value, gateway: f.gateway.value, dns: f.dns.value};
 	if (f.token.value) c.token = f.token.value;
 	if (f.password.value) c.password = f.password.value;
 	const r = await fetch('/api/config', {method: 'POST', body: JSON.stringify(c)});
@@ -72,6 +87,7 @@ f.onsubmit = async e => {
 	else msg(j.error);
 };
 document.getElementById('refresh').onclick = snap;
+document.getElementById('stream').href = `http://${location.hostname}:81/stream`;
 load();
 </script>
 </body>

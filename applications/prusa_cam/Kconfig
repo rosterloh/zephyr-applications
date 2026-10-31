@@ -16,6 +16,10 @@ config PRUSA_CAM_CONNECT_STACK_SIZE
 	help
 	  The TLS handshake runs on this stack.
 
+config PRUSA_CAM_STREAM_STACK_SIZE
+	int "MJPEG stream thread stack size"
+	default 2048
+
 endmenu
 
 source "Kconfig.zephyr"

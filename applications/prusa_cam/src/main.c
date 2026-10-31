@@ -17,6 +17,7 @@
 #include "cam.h"
 #include "cfg.h"
 #include "connect.h"
+#include "http_util.h"
 
 LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 
@@ -29,6 +30,18 @@ void cfg_changed(void)
 	cfg_get(&c);
 	cam_apply(&c);
 	connect_kick();
+}
+
+#define IP4(a) (a) >> 24, ((a) >> 16) & 0xFF, ((a) >> 8) & 0xFF, (a) & 0xFF
+
+/* "dhcp" or "0" clears; otherwise A.B.C.D. */
+static bool parse_ip(const char *val, uint32_t *out)
+{
+	if (strcmp(val, "dhcp") == 0 || strcmp(val, "0") == 0) {
+		*out = 0;
+		return true;
+	}
+	return http_parse_ipv4(val, out) == 0;
 }
 
 static int cmd_show(const struct shell *sh, size_t argc, char **argv)
@@ -45,6 +58,14 @@ static int cmd_show(const struct shell *sh, size_t argc, char **argv)
 	shell_print(sh, "resolution:  %s", cfg_resolutions[c.resolution].name);
 	shell_print(sh, "quality:     %u", c.quality);
 	shell_print(sh, "hflip/vflip: %d/%d, flash: %d", c.hflip, c.vflip, c.flash);
+	shell_print(sh, "rotation:    %u", c.rotation * 90);
+	if (c.ip == 0) {
+		shell_print(sh, "address:     DHCP");
+	} else {
+		shell_print(sh,
+			    "address:     %u.%u.%u.%u/%u.%u.%u.%u gw %u.%u.%u.%u dns %u.%u.%u.%u",
+			    IP4(c.ip), IP4(c.netmask), IP4(c.gateway), IP4(c.dns));
+	}
 	shell_print(sh, "uploads:     %u, last result %d", st.uploads, st.last_result);
 	memset(&c, 0, sizeof(c));
 	return 0;
@@ -74,6 +95,13 @@ static int cmd_set(const struct shell *sh, size_t argc, char **argv)
 		c.vflip = strtol(val, NULL, 10) != 0;
 	} else if (strcmp(key, "flash") == 0) {
 		c.flash = strtol(val, NULL, 10) != 0;
+	} else if (strcmp(key, "rotation") == 0 && strtol(val, NULL, 10) % 90 == 0) {
+		c.rotation = CLAMP(strtol(val, NULL, 10) / 90, 0, UINT8_MAX);
+	} else if ((strcmp(key, "ip") == 0 && parse_ip(val, &c.ip)) ||
+		   (strcmp(key, "netmask") == 0 && parse_ip(val, &c.netmask)) ||
+		   (strcmp(key, "gateway") == 0 && parse_ip(val, &c.gateway)) ||
+		   (strcmp(key, "dns") == 0 && parse_ip(val, &c.dns))) {
+		/* parsed in place */
 	} else {
 		shell_error(sh, "bad key or value");
 		return -EINVAL;
@@ -97,10 +125,13 @@ static int cmd_snap(const struct shell *sh, size_t argc, char **argv)
 SHELL_STATIC_SUBCMD_SET_CREATE(
 	prusa_cmds,
 	SHELL_CMD_ARG(show, NULL, "Show configuration and upload status", cmd_show, 1, 0),
-	SHELL_CMD_ARG(set, NULL,
-		      "Set <token|password|interval|resolution|quality|hflip|vflip|flash> <value>\n"
-		      "resolution: QVGA VGA SVGA XGA SXGA UXGA",
-		      cmd_set, 3, 0),
+	SHELL_CMD_ARG(
+		set, NULL,
+		"Set <token|password|interval|resolution|quality|hflip|vflip|flash|rotation|\n"
+		"     ip|netmask|gateway|dns> <value>\n"
+		"resolution: QVGA VGA SVGA XGA SXGA UXGA; rotation: 0 90 180 270\n"
+		"ip: A.B.C.D or dhcp; set netmask and gateway first; applies on reconnect",
+		cmd_set, 3, 0),
 	SHELL_CMD_ARG(snap, NULL, "Upload a snapshot now", cmd_snap, 1, 0), SHELL_SUBCMD_SET_END);
 SHELL_CMD_REGISTER(prusa, &prusa_cmds, "Prusa Connect camera", NULL);
 
