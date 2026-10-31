@@ -6,7 +6,9 @@ menu "prusa_cam"
 
 config PRUSA_CAM_CONNECT_HOST
 	string "Prusa Connect host"
-	default "connect.prusa3d.com"
+	default "webcam.connect.prusa3d.com"
+	help
+	  Cameras upload to the webcam. host; the main host answers 401.
 
 config PRUSA_CAM_CONNECT_STACK_SIZE
 	int "Uploader thread stack size"

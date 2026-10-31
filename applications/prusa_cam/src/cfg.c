@@ -29,9 +29,10 @@ static struct cfg cfg = {
 	.quality = 80,
 };
 static K_MUTEX_DEFINE(cfg_lock);
-/* Prusa Connect wants at least 16 characters; the MAC alone is 12. */
-#define FP_PREFIX "zephyr-cam-"
-static char fingerprint[sizeof(FP_PREFIX) + 2 * 16];
+/* Prusa Connect wants 16..40 alphanumerics; the MAC alone is 12 hex digits. */
+#define FP_PREFIX "zephyrcam"
+#define FP_ID_MAX ((40 - (sizeof(FP_PREFIX) - 1)) / 2)
+static char fingerprint[sizeof(FP_PREFIX) + 2 * FP_ID_MAX];
 
 static int cfg_load(const char *key, size_t len, settings_read_cb read_cb, void *cb_arg)
 {
@@ -56,7 +57,7 @@ SETTINGS_STATIC_HANDLER_DEFINE(prusa, "prusa", NULL, cfg_load, NULL, NULL);
 
 int cfg_init(void)
 {
-	uint8_t id[16];
+	uint8_t id[FP_ID_MAX];
 	ssize_t n = hwinfo_get_device_id(id, sizeof(id));
 	int ret;
 
