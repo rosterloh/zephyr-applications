@@ -4,9 +4,10 @@ project(pstop_api)
 
 set(APP_SRC ${CMAKE_CURRENT_SOURCE_DIR}/../../src)
 
+include(${CMAKE_CURRENT_SOURCE_DIR}/../../../common/http_util/http_util.cmake)
+
 target_sources(app PRIVATE
   src/main.c
-  ${APP_SRC}/http_util.c
   ${APP_SRC}/api.c
   ${APP_SRC}/lockstep.c
   ${APP_SRC}/session.c

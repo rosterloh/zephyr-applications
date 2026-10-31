@@ -1,0 +1,19 @@
+# SPDX-License-Identifier: Apache-2.0
+
+mainmenu "prusa_cam"
+
+menu "prusa_cam"
+
+config PRUSA_CAM_CONNECT_HOST
+	string "Prusa Connect host"
+	default "connect.prusa3d.com"
+
+config PRUSA_CAM_CONNECT_STACK_SIZE
+	int "Uploader thread stack size"
+	default 6144
+	help
+	  The TLS handshake runs on this stack.
+
+endmenu
+
+source "Kconfig.zephyr"

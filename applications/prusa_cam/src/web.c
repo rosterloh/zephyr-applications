@@ -1,0 +1,319 @@
+/*
+ * Copyright (c) 2026 Richard Osterloh <richard.osterloh@gmail.com>
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * Config page and API. Everything but the (secret-free) page itself needs
+ * HTTP basic auth as "admin" with the password set from the shell; with no
+ * password set the API stays closed.
+ *
+ * Each resource is served to one client at a time (the server's `holder`),
+ * so per-resource static state is enough.
+ */
+
+#include <errno.h>
+#include <stdio.h>
+#include <string.h>
+#include <strings.h>
+
+#include <zephyr/data/json.h>
+#include <zephyr/kernel.h>
+#include <zephyr/logging/log.h>
+#include <zephyr/net/http/server.h>
+#include <zephyr/net/http/service.h>
+
+#include "cam.h"
+#include "cfg.h"
+#include "connect.h"
+#include "http_util.h"
+
+LOG_MODULE_REGISTER(web, LOG_LEVEL_INF);
+
+#define USER     "admin"
+#define BODY_MAX 512
+
+HTTP_SERVER_REGISTER_HEADER_CAPTURE(capture_authorization, "Authorization");
+
+static uint16_t http_port = 80;
+HTTP_SERVICE_DEFINE(prusa_http, NULL, &http_port, CONFIG_HTTP_SERVER_MAX_CLIENTS, 2, NULL, NULL,
+		    NULL);
+
+static const uint8_t index_gz[] = {
+#include "index.html.gz.inc"
+};
+
+static const struct http_header gzip_hdr[] = {{.name = "Content-Encoding", .value = "gzip"}};
+static const struct http_header auth_hdr[] = {
+	{.name = "WWW-Authenticate", .value = "Basic realm=\"prusa_cam\""}};
+
+struct route {
+	char auth[CONFIG_HTTP_SERVER_CAPTURE_HEADER_BUFFER_SIZE];
+	char body[BODY_MAX + 1];
+	size_t len;
+	bool overflow;
+	bool cam_held;
+};
+
+static char out[384];
+
+static void capture(struct route *r, const struct http_request_ctx *req)
+{
+	for (size_t i = 0; req->headers != NULL && i < req->header_count; i++) {
+		if (strcasecmp(req->headers[i].name, "Authorization") == 0) {
+			strncpy(r->auth, req->headers[i].value, sizeof(r->auth) - 1);
+		}
+	}
+	if (req->data_len > 0) {
+		if (r->len + req->data_len > BODY_MAX) {
+			r->overflow = true;
+		} else {
+			memcpy(&r->body[r->len], req->data, req->data_len);
+			r->len += req->data_len;
+		}
+	}
+}
+
+static void reply(struct http_response_ctx *rsp, enum http_status st, const char *body)
+{
+	rsp->status = st;
+	rsp->body = (const uint8_t *)body;
+	rsp->body_len = strlen(body);
+	rsp->final_chunk = true;
+}
+
+/* True if authorised; otherwise the response is filled in. */
+static bool authorised(struct route *r, struct http_response_ctx *rsp)
+{
+	struct cfg c;
+	bool ok;
+
+	cfg_get(&c);
+	if (c.password[0] == '\0') {
+		reply(rsp, HTTP_403_FORBIDDEN,
+		      "{\"error\":\"set a password: prusa set password\"}");
+		return false;
+	}
+	ok = http_basic_auth_ok(r->auth, USER, c.password);
+	memset(&c, 0, sizeof(c));
+	if (!ok) {
+		reply(rsp, HTTP_401_UNAUTHORIZED, "{\"error\":\"unauthorised\"}");
+		rsp->headers = auth_hdr;
+		rsp->header_count = ARRAY_SIZE(auth_hdr);
+	}
+	return ok;
+}
+
+static const char *config_json(void)
+{
+	struct cfg c;
+
+	cfg_get(&c);
+	snprintf(out, sizeof(out),
+		 "{\"token_set\":%s,\"fingerprint\":\"%s\",\"interval\":%u,\"resolution\":\"%s\","
+		 "\"quality\":%u,\"hflip\":%s,\"vflip\":%s,\"flash\":%s}",
+		 c.token[0] ? "true" : "false", cfg_fingerprint(), c.interval_s,
+		 cfg_resolutions[c.resolution].name, c.quality, c.hflip ? "true" : "false",
+		 c.vflip ? "true" : "false", c.flash ? "true" : "false");
+	memset(&c, 0, sizeof(c));
+	return out;
+}
+
+struct cfg_post {
+	const char *token;
+	const char *password;
+	int32_t interval;
+	const char *resolution;
+	int32_t quality;
+	bool hflip;
+	bool vflip;
+	bool flash;
+};
+
+static const struct json_obj_descr cfg_post_descr[] = {
+	JSON_OBJ_DESCR_PRIM(struct cfg_post, token, JSON_TOK_STRING),
+	JSON_OBJ_DESCR_PRIM(struct cfg_post, password, JSON_TOK_STRING),
+	JSON_OBJ_DESCR_PRIM(struct cfg_post, interval, JSON_TOK_NUMBER),
+	JSON_OBJ_DESCR_PRIM(struct cfg_post, resolution, JSON_TOK_STRING),
+	JSON_OBJ_DESCR_PRIM(struct cfg_post, quality, JSON_TOK_NUMBER),
+	JSON_OBJ_DESCR_PRIM(struct cfg_post, hflip, JSON_TOK_TRUE),
+	JSON_OBJ_DESCR_PRIM(struct cfg_post, vflip, JSON_TOK_TRUE),
+	JSON_OBJ_DESCR_PRIM(struct cfg_post, flash, JSON_TOK_TRUE),
+};
+
+/* Apply the fields present in a JSON body; 0, -EINVAL or a settings error. */
+static int apply_post(char *body, size_t len)
+{
+	struct cfg_post p = {0};
+	struct cfg c;
+	int64_t got = json_obj_parse(body, len, cfg_post_descr, ARRAY_SIZE(cfg_post_descr), &p);
+	int ret;
+
+	if (got < 0) {
+		return -EINVAL;
+	}
+
+	cfg_get(&c);
+	if (got & BIT(0)) {
+		if (strlen(p.token) > CFG_TOKEN_MAX) {
+			return -EINVAL;
+		}
+		strcpy(c.token, p.token);
+	}
+	if (got & BIT(1)) {
+		if (strlen(p.password) > CFG_PASSWORD_MAX) {
+			return -EINVAL;
+		}
+		strcpy(c.password, p.password);
+	}
+	if (got & BIT(2)) {
+		c.interval_s = CLAMP(p.interval, 0, UINT16_MAX);
+	}
+	if (got & BIT(3)) {
+		int i = cfg_resolution_find(p.resolution);
+
+		if (i < 0) {
+			return -EINVAL;
+		}
+		c.resolution = i;
+	}
+	if (got & BIT(4)) {
+		c.quality = CLAMP(p.quality, 0, UINT8_MAX);
+	}
+	if (got & BIT(5)) {
+		c.hflip = p.hflip;
+	}
+	if (got & BIT(6)) {
+		c.vflip = p.vflip;
+	}
+	if (got & BIT(7)) {
+		c.flash = p.flash;
+	}
+	ret = cfg_set(&c);
+	memset(&c, 0, sizeof(c));
+	return ret;
+}
+
+static int index_cb(struct http_client_ctx *client, enum http_transaction_status status,
+		    const struct http_request_ctx *req, struct http_response_ctx *rsp, void *ud)
+{
+	if (status != HTTP_SERVER_REQUEST_DATA_FINAL) {
+		return 0;
+	}
+	rsp->headers = gzip_hdr;
+	rsp->header_count = ARRAY_SIZE(gzip_hdr);
+	rsp->body = index_gz;
+	rsp->body_len = sizeof(index_gz);
+	rsp->final_chunk = true;
+	return 0;
+}
+
+static struct route config_route;
+
+static int config_cb(struct http_client_ctx *client, enum http_transaction_status status,
+		     const struct http_request_ctx *req, struct http_response_ctx *rsp, void *ud)
+{
+	struct route *r = &config_route;
+	int ret;
+
+	if (status == HTTP_SERVER_TRANSACTION_ABORTED ||
+	    status == HTTP_SERVER_TRANSACTION_COMPLETE) {
+		memset(r, 0, sizeof(*r)); /* the body may carry the token or password */
+		return 0;
+	}
+	capture(r, req);
+	if (status != HTTP_SERVER_REQUEST_DATA_FINAL || !authorised(r, rsp)) {
+		return 0;
+	}
+
+	if (client->method == HTTP_POST) {
+		ret = r->overflow ? -E2BIG : apply_post(r->body, r->len);
+		if (ret < 0) {
+			reply(rsp, HTTP_400_BAD_REQUEST, "{\"error\":\"invalid config\"}");
+			return 0;
+		}
+	}
+	reply(rsp, HTTP_200_OK, config_json());
+	return 0;
+}
+
+static struct route status_route;
+
+static int status_cb(struct http_client_ctx *client, enum http_transaction_status status,
+		     const struct http_request_ctx *req, struct http_response_ctx *rsp, void *ud)
+{
+	struct route *r = &status_route;
+	struct connect_status st;
+
+	if (status == HTTP_SERVER_TRANSACTION_ABORTED ||
+	    status == HTTP_SERVER_TRANSACTION_COMPLETE) {
+		memset(r, 0, sizeof(*r));
+		return 0;
+	}
+	capture(r, req);
+	if (status != HTTP_SERVER_REQUEST_DATA_FINAL || !authorised(r, rsp)) {
+		return 0;
+	}
+
+	connect_get_status(&st);
+	snprintf(out, sizeof(out),
+		 "{\"uptime_s\":%lld,\"last_upload_s\":%lld,\"last_result\":%d,\"uploads\":%u}",
+		 k_uptime_get() / 1000, st.last_ms / 1000, st.last_result, st.uploads);
+	reply(rsp, HTTP_200_OK, out);
+	return 0;
+}
+
+static struct route snapshot_route;
+
+static int snapshot_cb(struct http_client_ctx *client, enum http_transaction_status status,
+		       const struct http_request_ctx *req, struct http_response_ctx *rsp, void *ud)
+{
+	struct route *r = &snapshot_route;
+	const uint8_t *jpeg;
+	size_t len;
+
+	if (status == HTTP_SERVER_TRANSACTION_ABORTED ||
+	    status == HTTP_SERVER_TRANSACTION_COMPLETE) {
+		if (r->cam_held) {
+			cam_release();
+		}
+		memset(r, 0, sizeof(*r));
+		return 0;
+	}
+	capture(r, req);
+	if (status != HTTP_SERVER_REQUEST_DATA_FINAL || !authorised(r, rsp)) {
+		return 0;
+	}
+
+	if (cam_snapshot(&jpeg, &len) < 0) {
+		reply(rsp, HTTP_503_SERVICE_UNAVAILABLE, "no frame");
+		return 0;
+	}
+	/* The frame is sent from the camera buffer; it is released on COMPLETE/ABORTED. */
+	r->cam_held = true;
+	rsp->body = jpeg;
+	rsp->body_len = len;
+	rsp->final_chunk = true;
+	return 0;
+}
+
+#define DYN(_name, _methods, _type, _cb)                                                           \
+	static struct http_resource_detail_dynamic _name = {                                       \
+		.common = {.type = HTTP_RESOURCE_TYPE_DYNAMIC,                                     \
+			   .bitmask_of_supported_http_methods = (_methods),                        \
+			   .content_type = (_type)},                                               \
+		.cb = (_cb),                                                                       \
+	}
+
+DYN(index_detail, BIT(HTTP_GET), "text/html", index_cb);
+DYN(config_detail, BIT(HTTP_GET) | BIT(HTTP_POST), "application/json", config_cb);
+DYN(status_detail, BIT(HTTP_GET), "application/json", status_cb);
+DYN(snapshot_detail, BIT(HTTP_GET), "image/jpeg", snapshot_cb);
+
+HTTP_RESOURCE_DEFINE(index_res, prusa_http, "/", &index_detail);
+HTTP_RESOURCE_DEFINE(config_res, prusa_http, "/api/config", &config_detail);
+HTTP_RESOURCE_DEFINE(status_res, prusa_http, "/api/status", &status_detail);
+HTTP_RESOURCE_DEFINE(snapshot_res, prusa_http, "/snapshot.jpg", &snapshot_detail);
+
+int web_init(void)
+{
+	return http_server_start();
+}
