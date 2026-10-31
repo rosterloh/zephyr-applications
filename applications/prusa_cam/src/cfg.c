@@ -14,6 +14,7 @@
 #include <zephyr/sys/util.h>
 
 #include "cfg.h"
+#include "prusa_camera.h"
 
 LOG_MODULE_REGISTER(cfg, LOG_LEVEL_INF);
 
@@ -24,9 +25,13 @@ const struct cfg_resolution cfg_resolutions[] = {
 const uint8_t cfg_resolution_count = ARRAY_SIZE(cfg_resolutions);
 
 static struct cfg cfg = {
+	.name = CONFIG_NET_HOSTNAME,
 	.interval_s = 30,
-	.resolution = 2, /* SVGA */
+	.resolution = 5, /* UXGA: the service suggests 1280x720..1920x1080 */
 	.quality = 80,
+	.auto_exposure = true,
+	.auto_wb = true,
+	.auto_gain = true,
 };
 static K_MUTEX_DEFINE(cfg_lock);
 /* The service wants 16..64 characters; the MAC alone is 12 hex digits. */
@@ -49,6 +54,7 @@ static int cfg_load(const char *key, size_t len, settings_read_cb read_cb, void 
 	}
 	tmp.token[CFG_TOKEN_MAX] = '\0';
 	tmp.password[CFG_PASSWORD_MAX] = '\0';
+	tmp.name[CFG_NAME_MAX] = '\0';
 	cfg = tmp;
 	return 0;
 }
@@ -87,8 +93,12 @@ int cfg_set(const struct cfg *in)
 	struct cfg tmp = *in;
 	int ret;
 
-	if (tmp.interval_s < CFG_INTERVAL_MIN || tmp.interval_s > CFG_INTERVAL_MAX ||
-	    tmp.resolution >= cfg_resolution_count || tmp.quality > 100 || tmp.rotation > 3 ||
+	if (prusa_camera_trigger_from_seconds(tmp.interval_s) < 0 ||
+	    (tmp.token[0] != '\0' && !prusa_camera_token_valid(tmp.token)) || tmp.name[0] == '\0' ||
+	    strnlen(tmp.name, sizeof(tmp.name)) > CFG_NAME_MAX ||
+	    !IN_RANGE(tmp.brightness, -2, 2) || !IN_RANGE(tmp.contrast, -2, 2) ||
+	    !IN_RANGE(tmp.saturation, -2, 2) || tmp.resolution >= cfg_resolution_count ||
+	    tmp.quality > 100 || tmp.rotation > 3 ||
 	    (tmp.ip != 0 && (tmp.netmask == 0 || tmp.gateway == 0)) ||
 	    strnlen(tmp.token, sizeof(tmp.token)) > CFG_TOKEN_MAX ||
 	    strnlen(tmp.password, sizeof(tmp.password)) > CFG_PASSWORD_MAX) {

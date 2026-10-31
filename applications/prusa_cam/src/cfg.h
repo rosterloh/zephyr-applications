@@ -11,6 +11,7 @@
 
 #define CFG_TOKEN_MAX    64
 #define CFG_PASSWORD_MAX 32
+#define CFG_NAME_MAX     32 /* Prusa Connect's limit */
 
 struct cfg_resolution {
 	const char *name;
@@ -21,9 +22,10 @@ struct cfg_resolution {
 struct cfg {
 	char token[CFG_TOKEN_MAX + 1];
 	char password[CFG_PASSWORD_MAX + 1];
-	uint16_t interval_s;
-	uint8_t resolution; /* index into cfg_resolutions[] */
-	uint8_t quality;    /* VIDEO_CID_JPEG_COMPRESSION_QUALITY */
+	char name[CFG_NAME_MAX + 1]; /* shown in Prusa Connect */
+	uint16_t interval_s;         /* 10, 30, 60 or 600: the service's trigger schemes */
+	uint8_t resolution;          /* index into cfg_resolutions[] */
+	uint8_t quality;             /* VIDEO_CID_JPEG_COMPRESSION_QUALITY */
 	bool hflip;
 	bool vflip;
 	bool flash;
@@ -33,13 +35,17 @@ struct cfg {
 	uint32_t netmask;
 	uint32_t gateway;
 	uint32_t dns; /* 0: use the gateway */
+	/* OV2640 tuning: levels -2..2, the auto loops on or off */
+	int8_t brightness;
+	int8_t contrast;
+	int8_t saturation;
+	bool auto_exposure;
+	bool auto_wb;
+	bool auto_gain;
 };
 
 extern const struct cfg_resolution cfg_resolutions[];
 extern const uint8_t cfg_resolution_count;
-
-#define CFG_INTERVAL_MIN 10
-#define CFG_INTERVAL_MAX 3600
 
 /* Load from settings (defaults for anything unset). */
 int cfg_init(void);

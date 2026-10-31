@@ -100,6 +100,13 @@ int cam_apply(const struct cfg *c)
 	set_ctrl(VIDEO_CID_JPEG_COMPRESSION_QUALITY, c->quality);
 	set_ctrl(VIDEO_CID_HFLIP, c->hflip);
 	set_ctrl(VIDEO_CID_VFLIP, c->vflip);
+	set_ctrl(VIDEO_CID_BRIGHTNESS, c->brightness);
+	set_ctrl(VIDEO_CID_CONTRAST, c->contrast);
+	set_ctrl(VIDEO_CID_SATURATION, c->saturation);
+	/* The OV2640 driver uses these CIDs as on/off switches for its auto loops. */
+	set_ctrl(VIDEO_CID_EXPOSURE, c->auto_exposure);
+	set_ctrl(VIDEO_CID_WHITE_BALANCE_TEMPERATURE, c->auto_wb);
+	set_ctrl(VIDEO_CID_GAIN, c->auto_gain);
 	use_flash = c->flash;
 
 	ret = video_stream_start(video, VIDEO_BUF_TYPE_OUTPUT);

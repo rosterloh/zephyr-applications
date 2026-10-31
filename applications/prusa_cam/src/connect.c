@@ -8,192 +8,104 @@
  * Fingerprint and User-Agent headers, over HTTPS.
  */
 
-#include <errno.h>
-#include <stdio.h>
 #include <string.h>
 
-#include <zephyr/data/json.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
-#include <zephyr/net/http/client.h>
-#include <zephyr/net/socket.h>
-#include <zephyr/net/tls_credentials.h>
+#include <zephyr/net/net_if.h>
+#include <zephyr/net/net_mgmt.h>
+#include <zephyr/net/wifi_mgmt.h>
+#include <zephyr/sys/atomic.h>
 
 #include <zephyr/app_version.h>
 
 #include "cam.h"
 #include "cfg.h"
 #include "connect.h"
+#include "prusa_camera.h"
 
 LOG_MODULE_REGISTER(connect, LOG_LEVEL_INF);
 
-#define HOST       CONFIG_PRUSA_CAM_CONNECT_HOST
-#define CA_TAG     1
-#define TIMEOUT_MS 10000
+#define BACKOFF_MAX_S 600
 
-static const uint8_t ca_cert[] = {
-#include "isrg_root_x1.der.inc"
+enum {
+	INFO_STALE,
+	TEST_REQUESTED
 };
 
 static K_SEM_DEFINE(kick, 0, 1);
 static K_MUTEX_DEFINE(status_lock);
 static struct connect_status status;
-static uint8_t recv_buf[512];
-static bool info_sent;
+static atomic_t flags = ATOMIC_INIT(BIT(INFO_STALE));
+static struct net_mgmt_event_callback addr_cb;
 
-static int on_response(struct http_response *rsp, enum http_final_call final, void *user_data)
+/* network_info for camera-info, filled from the WiFi station interface. */
+static struct {
+	char mac[sizeof("00:00:00:00:00:00")];
+	char ipv4[NET_IPV4_ADDR_LEN];
+	char ssid[WIFI_SSID_MAX_LEN + 1];
+} net;
+
+static void net_info_update(void)
 {
-	if (final == HTTP_DATA_FINAL) {
-		*(int *)user_data = rsp->http_status_code;
+	struct net_if *iface = net_if_get_wifi_sta();
+	struct wifi_iface_status st = {0};
+	struct net_linkaddr *ll;
+	struct net_in_addr *a;
+
+	memset(&net, 0, sizeof(net));
+	if (iface == NULL) {
+		return;
 	}
-	return 0;
+	ll = net_if_get_link_addr(iface);
+	if (ll != NULL && ll->len == 6) {
+		snprintk(net.mac, sizeof(net.mac), "%02x:%02x:%02x:%02x:%02x:%02x", ll->addr[0],
+			 ll->addr[1], ll->addr[2], ll->addr[3], ll->addr[4], ll->addr[5]);
+	}
+	a = net_if_ipv4_get_global_addr(iface, NET_ADDR_PREFERRED);
+	if (a != NULL) {
+		net_addr_ntop(NET_AF_INET, a, net.ipv4, sizeof(net.ipv4));
+	}
+	if (net_mgmt(NET_REQUEST_WIFI_IFACE_STATUS, iface, &st, sizeof(st)) == 0 &&
+	    st.state >= WIFI_STATE_ASSOCIATED) {
+		memcpy(net.ssid, st.ssid, MIN(st.ssid_len, WIFI_SSID_MAX_LEN));
+	}
 }
 
-static int tls_connect(void)
+/*
+ * A new address goes into camera-info, so Connect shows where the camera is.
+ * Try now too: after an outage the backoff may have grown to 10 minutes.
+ */
+static void addr_event(struct net_mgmt_event_callback *cb, uint64_t event, struct net_if *iface)
 {
-	static const sec_tag_t tags[] = {CA_TAG};
-	struct zsock_addrinfo hints = {.ai_family = AF_INET, .ai_socktype = SOCK_STREAM};
-	struct zsock_addrinfo *res;
-	int sock;
-	int ret;
-
-	ret = zsock_getaddrinfo(HOST, "443", &hints, &res);
-	if (ret != 0) {
-		LOG_WRN("DNS %s failed (%d)", HOST, ret);
-		return -EHOSTUNREACH;
-	}
-
-	sock = zsock_socket(res->ai_family, SOCK_STREAM, IPPROTO_TLS_1_2);
-	if (sock < 0) {
-		ret = -errno;
-		goto out;
-	}
-	if (zsock_setsockopt(sock, SOL_TLS, TLS_SEC_TAG_LIST, tags, sizeof(tags)) < 0 ||
-	    zsock_setsockopt(sock, SOL_TLS, TLS_HOSTNAME, HOST, sizeof(HOST)) < 0 ||
-	    zsock_connect(sock, res->ai_addr, res->ai_addrlen) < 0) {
-		ret = -errno;
-		zsock_close(sock);
-		goto out;
-	}
-	ret = sock;
-out:
-	zsock_freeaddrinfo(res);
-	return ret;
+	atomic_set_bit(&flags, INFO_STALE);
+	k_sem_give(&kick);
 }
 
-/* PUT `body` to `path`; returns the HTTP status or -errno. */
-static int put(const char *path, const char *type, const uint8_t *body, size_t len)
+static int send_info(const struct prusa_camera_auth *auth, const struct cfg *c)
 {
-	static char token_hdr[sizeof("Token: \r\n") + CFG_TOKEN_MAX];
-	static char fp_hdr[96];
-	static const char ua_hdr[] = "User-Agent: prusa_cam/" APP_VERSION_STRING "\r\n";
-	const char *headers[] = {token_hdr, fp_hdr, ua_hdr, NULL};
-	struct cfg c;
-	int http_status = -EIO;
-	int sock;
-	int ret;
+	net_info_update();
 
-	cfg_get(&c);
-	snprintf(token_hdr, sizeof(token_hdr), "Token: %s\r\n", c.token);
-	snprintf(fp_hdr, sizeof(fp_hdr), "Fingerprint: %s\r\n", cfg_fingerprint());
-
-	sock = tls_connect();
-	if (sock < 0) {
-		return sock;
-	}
-
-	struct http_request req = {
-		.method = HTTP_PUT,
-		.url = path,
-		.host = HOST,
-		.protocol = "HTTP/1.1",
-		.content_type_value = type,
-		.header_fields = headers,
-		.payload = (const char *)body,
-		.payload_len = len,
-		.response = on_response,
-		.recv_buf = recv_buf,
-		.recv_buf_len = sizeof(recv_buf),
+	const struct prusa_camera_info info = {
+		.name = c->name,
+		.trigger = prusa_camera_trigger_from_seconds(c->interval_s),
+		.rotation = c->rotation * 90,
+		.width = cfg_resolutions[c->resolution].width,
+		.height = cfg_resolutions[c->resolution].height,
+		.wifi_mac = net.mac,
+		.wifi_ipv4 = net.ipv4,
+		.wifi_ssid = net.ssid,
+		.type = "ESP32",
+		.firmware_version = APP_VERSION_STRING,
+		.hardware_version = "AI-Thinker ESP32-CAM",
+		.manufacturer = "AI-Thinker",
+		.model = "ESP32-CAM",
 	};
 
-	ret = http_client_req(sock, &req, TIMEOUT_MS, &http_status);
-	zsock_close(sock);
-	memset(token_hdr, 0, sizeof(token_hdr));
-
-	return ret < 0 ? ret : http_status;
+	return prusa_camera_put_info(auth, &info);
 }
 
-/* PUT /v1/camera-info body; the service rejects unknown keys. */
-struct info_resolution {
-	uint32_t width;
-	uint32_t height;
-};
-struct info_config {
-	const char *name;
-	uint32_t rotation;
-	struct info_resolution resolution;
-};
-struct info_device {
-	const char *type;
-	const char *firmware_version;
-	const char *hardware_version;
-	const char *manufacturer;
-	const char *model;
-};
-struct info {
-	struct info_config config;
-	struct info_device device;
-};
-
-static const struct json_obj_descr info_resolution_descr[] = {
-	JSON_OBJ_DESCR_PRIM(struct info_resolution, width, JSON_TOK_UINT),
-	JSON_OBJ_DESCR_PRIM(struct info_resolution, height, JSON_TOK_UINT),
-};
-static const struct json_obj_descr info_config_descr[] = {
-	JSON_OBJ_DESCR_PRIM(struct info_config, name, JSON_TOK_STRING),
-	JSON_OBJ_DESCR_PRIM(struct info_config, rotation, JSON_TOK_UINT),
-	JSON_OBJ_DESCR_OBJECT(struct info_config, resolution, info_resolution_descr),
-};
-static const struct json_obj_descr info_device_descr[] = {
-	JSON_OBJ_DESCR_PRIM(struct info_device, type, JSON_TOK_STRING),
-	JSON_OBJ_DESCR_PRIM(struct info_device, firmware_version, JSON_TOK_STRING),
-	JSON_OBJ_DESCR_PRIM(struct info_device, hardware_version, JSON_TOK_STRING),
-	JSON_OBJ_DESCR_PRIM(struct info_device, manufacturer, JSON_TOK_STRING),
-	JSON_OBJ_DESCR_PRIM(struct info_device, model, JSON_TOK_STRING),
-};
-static const struct json_obj_descr info_descr[] = {
-	JSON_OBJ_DESCR_OBJECT(struct info, config, info_config_descr),
-	JSON_OBJ_DESCR_OBJECT(struct info, device, info_device_descr),
-};
-
-static int send_info(void)
-{
-	static char json[320];
-	struct cfg c;
-	struct info info = {
-		.config = {.name = CONFIG_NET_HOSTNAME},
-		.device = {.type = "ESP32",
-			   .firmware_version = APP_VERSION_STRING,
-			   .hardware_version = "AI-Thinker ESP32-CAM",
-			   .manufacturer = "AI-Thinker",
-			   .model = "ESP32-CAM"},
-	};
-	int ret;
-
-	cfg_get(&c);
-	info.config.resolution.width = cfg_resolutions[c.resolution].width;
-	info.config.resolution.height = cfg_resolutions[c.resolution].height;
-	info.config.rotation = c.rotation * 90;
-	memset(&c, 0, sizeof(c));
-
-	ret = json_obj_encode_buf(info_descr, ARRAY_SIZE(info_descr), &info, json, sizeof(json));
-	if (ret < 0) {
-		return ret;
-	}
-	return put("/v1/camera-info", "application/json", json, strlen(json));
-}
-
-static int send_snapshot(void)
+static int send_snapshot(const struct prusa_camera_auth *auth)
 {
 	const uint8_t *jpeg;
 	size_t len;
@@ -202,47 +114,99 @@ static int send_snapshot(void)
 	if (ret < 0) {
 		return ret;
 	}
-	ret = put("/v1/snapshot", "image/jpeg", jpeg, len);
+	ret = prusa_camera_put_snapshot(auth, jpeg, len);
 	cam_release();
 	LOG_INF("Snapshot %u B -> %d", len, ret);
 	return ret;
 }
 
-static void record(int result, bool uploaded)
+static void record(int result, bool uploaded, bool stopped)
 {
 	k_mutex_lock(&status_lock, K_FOREVER);
 	status.last_ms = k_uptime_get();
 	status.last_result = result;
 	status.uploads += uploaded;
+	status.stopped = stopped;
 	k_mutex_unlock(&status_lock);
+}
+
+/*
+ * One step of the upload loop: a requested connection test, camera-info when
+ * it is stale, else a snapshot. Returns what the service said to do next.
+ */
+static enum prusa_camera_next step(const struct prusa_camera_auth *auth, const struct cfg *c,
+				   bool *stopped)
+{
+	static const char *const what[] = {"test", "camera-info", "snapshot"};
+	enum {
+		TEST,
+		INFO,
+		SNAPSHOT
+	} kind;
+	enum prusa_camera_next next;
+	int ret;
+
+	if (atomic_test_and_clear_bit(&flags, TEST_REQUESTED)) {
+		kind = TEST;
+		ret = prusa_camera_get_info(auth);
+	} else if (*stopped) {
+		return PRUSA_CAMERA_NEXT_STOP;
+	} else if (atomic_test_bit(&flags, INFO_STALE)) {
+		kind = INFO;
+		ret = send_info(auth, c);
+	} else {
+		kind = SNAPSHOT;
+		ret = send_snapshot(auth);
+	}
+
+	next = prusa_camera_next(ret);
+	if (kind == INFO && next == PRUSA_CAMERA_NEXT_OK) {
+		atomic_clear_bit(&flags, INFO_STALE);
+	}
+	/* A passing test clears a stop: the token may have been fixed in Connect. */
+	*stopped = next == PRUSA_CAMERA_NEXT_STOP;
+	if (next != PRUSA_CAMERA_NEXT_OK) {
+		LOG_WRN("%s -> %d: %s", what[kind], ret, prusa_camera_describe(ret));
+	} else if (kind == TEST) {
+		LOG_INF("Connection test passed");
+	}
+	record(ret, kind == SNAPSHOT && next == PRUSA_CAMERA_NEXT_OK, *stopped);
+	return next;
 }
 
 static void connect_thread(void *p1, void *p2, void *p3)
 {
 	struct cfg c;
-	int ret;
+	struct prusa_camera_auth auth = {.token = c.token, .fingerprint = cfg_fingerprint()};
+	uint32_t fails = 0;
+	bool stopped = false;
 
 	while (true) {
+		uint32_t wait;
+
 		cfg_get(&c);
-		k_sem_take(&kick, K_SECONDS(c.interval_s));
+		/* Back off on network or server trouble, doubling up to 10 minutes. */
+		wait = MIN((uint32_t)c.interval_s << MIN(fails, 6), BACKOFF_MAX_S);
+		wait = MAX(wait, c.interval_s);
+		if (k_sem_take(&kick, K_SECONDS(wait)) == 0) {
+			stopped = atomic_test_bit(&flags, TEST_REQUESTED) ? stopped : false;
+		}
 
 		cfg_get(&c);
 		if (c.token[0] == '\0') {
 			continue;
 		}
 
-		if (!info_sent) {
-			ret = send_info();
-			info_sent = (ret >= 200 && ret < 300);
-			if (!info_sent) {
-				LOG_WRN("Info -> %d", ret);
-				record(ret, false);
-				continue;
-			}
+		switch (step(&auth, &c, &stopped)) {
+		case PRUSA_CAMERA_NEXT_RETRY:
+			fails++;
+			break;
+		case PRUSA_CAMERA_NEXT_OK:
+			fails = 0;
+			break;
+		default: /* WAIT: keep the cadence; STOP: wait for a config change */
+			break;
 		}
-
-		ret = send_snapshot();
-		record(ret, ret >= 200 && ret < 300);
 	}
 }
 
@@ -251,19 +215,26 @@ K_THREAD_DEFINE(connect_tid, CONFIG_PRUSA_CAM_CONNECT_STACK_SIZE, connect_thread
 
 int connect_init(void)
 {
-	int ret =
-		tls_credential_add(CA_TAG, TLS_CREDENTIAL_CA_CERTIFICATE, ca_cert, sizeof(ca_cert));
+	int ret = prusa_camera_init("prusa_cam/" APP_VERSION_STRING);
 
 	if (ret < 0) {
 		return ret;
 	}
+	net_mgmt_init_event_callback(&addr_cb, addr_event, NET_EVENT_IPV4_ADDR_ADD);
+	net_mgmt_add_event_callback(&addr_cb);
 	k_thread_start(connect_tid);
 	return 0;
 }
 
 void connect_kick(void)
 {
-	info_sent = false;
+	atomic_set_bit(&flags, INFO_STALE);
+	k_sem_give(&kick);
+}
+
+void connect_test(void)
+{
+	atomic_set_bit(&flags, TEST_REQUESTED);
 	k_sem_give(&kick);
 }
 

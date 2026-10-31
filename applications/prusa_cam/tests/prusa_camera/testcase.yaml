@@ -1,0 +1,10 @@
+tests:
+  app.prusa_cam.prusa_camera:
+    tags:
+      - prusa_cam
+    # qemu_cortex_m3 is listed for running the tests on macOS (native_sim is Linux-only).
+    platform_allow:
+      - native_sim/native/64
+      - qemu_cortex_m3
+    integration_platforms:
+      - native_sim/native/64

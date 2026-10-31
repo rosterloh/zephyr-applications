@@ -18,6 +18,7 @@
 #include "cfg.h"
 #include "connect.h"
 #include "http_util.h"
+#include "prusa_camera.h"
 
 LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 
@@ -51,6 +52,7 @@ static int cmd_show(const struct shell *sh, size_t argc, char **argv)
 
 	cfg_get(&c);
 	connect_get_status(&st);
+	shell_print(sh, "name:        %s", c.name);
 	shell_print(sh, "token:       %s", c.token[0] ? "set" : "not set");
 	shell_print(sh, "password:    %s", c.password[0] ? "set" : "not set");
 	shell_print(sh, "fingerprint: %s", cfg_fingerprint());
@@ -59,6 +61,9 @@ static int cmd_show(const struct shell *sh, size_t argc, char **argv)
 	shell_print(sh, "quality:     %u", c.quality);
 	shell_print(sh, "hflip/vflip: %d/%d, flash: %d", c.hflip, c.vflip, c.flash);
 	shell_print(sh, "rotation:    %u", c.rotation * 90);
+	shell_print(sh, "brightness/contrast/saturation: %d/%d/%d", c.brightness, c.contrast,
+		    c.saturation);
+	shell_print(sh, "auto exposure/wb/gain: %d/%d/%d", c.auto_exposure, c.auto_wb, c.auto_gain);
 	if (c.ip == 0) {
 		shell_print(sh, "address:     DHCP");
 	} else {
@@ -66,7 +71,9 @@ static int cmd_show(const struct shell *sh, size_t argc, char **argv)
 			    "address:     %u.%u.%u.%u/%u.%u.%u.%u gw %u.%u.%u.%u dns %u.%u.%u.%u",
 			    IP4(c.ip), IP4(c.netmask), IP4(c.gateway), IP4(c.dns));
 	}
-	shell_print(sh, "uploads:     %u, last result %d", st.uploads, st.last_result);
+	shell_print(sh, "uploads:     %u, last result %d (%s)%s", st.uploads, st.last_result,
+		    st.last_ms ? prusa_camera_describe(st.last_result) : "none yet",
+		    st.stopped ? ", stopped until the config changes" : "");
 	memset(&c, 0, sizeof(c));
 	return 0;
 }
@@ -79,7 +86,9 @@ static int cmd_set(const struct shell *sh, size_t argc, char **argv)
 	int ret;
 
 	cfg_get(&c);
-	if (strcmp(key, "token") == 0 && strlen(val) <= CFG_TOKEN_MAX) {
+	if (strcmp(key, "name") == 0 && strlen(val) <= CFG_NAME_MAX) {
+		strcpy(c.name, val);
+	} else if (strcmp(key, "token") == 0 && strlen(val) <= CFG_TOKEN_MAX) {
 		strcpy(c.token, val);
 	} else if (strcmp(key, "password") == 0 && strlen(val) <= CFG_PASSWORD_MAX) {
 		strcpy(c.password, val);
@@ -97,6 +106,18 @@ static int cmd_set(const struct shell *sh, size_t argc, char **argv)
 		c.flash = strtol(val, NULL, 10) != 0;
 	} else if (strcmp(key, "rotation") == 0 && strtol(val, NULL, 10) % 90 == 0) {
 		c.rotation = CLAMP(strtol(val, NULL, 10) / 90, 0, UINT8_MAX);
+	} else if (strcmp(key, "brightness") == 0) {
+		c.brightness = CLAMP(strtol(val, NULL, 10), INT8_MIN, INT8_MAX);
+	} else if (strcmp(key, "contrast") == 0) {
+		c.contrast = CLAMP(strtol(val, NULL, 10), INT8_MIN, INT8_MAX);
+	} else if (strcmp(key, "saturation") == 0) {
+		c.saturation = CLAMP(strtol(val, NULL, 10), INT8_MIN, INT8_MAX);
+	} else if (strcmp(key, "auto_exposure") == 0) {
+		c.auto_exposure = strtol(val, NULL, 10) != 0;
+	} else if (strcmp(key, "auto_wb") == 0) {
+		c.auto_wb = strtol(val, NULL, 10) != 0;
+	} else if (strcmp(key, "auto_gain") == 0) {
+		c.auto_gain = strtol(val, NULL, 10) != 0;
 	} else if ((strcmp(key, "ip") == 0 && parse_ip(val, &c.ip)) ||
 		   (strcmp(key, "netmask") == 0 && parse_ip(val, &c.netmask)) ||
 		   (strcmp(key, "gateway") == 0 && parse_ip(val, &c.gateway)) ||
@@ -115,6 +136,13 @@ static int cmd_set(const struct shell *sh, size_t argc, char **argv)
 	return ret;
 }
 
+static int cmd_test(const struct shell *sh, size_t argc, char **argv)
+{
+	connect_test();
+	shell_print(sh, "test queued; see `prusa show` in a few seconds");
+	return 0;
+}
+
 static int cmd_snap(const struct shell *sh, size_t argc, char **argv)
 {
 	connect_kick();
@@ -127,11 +155,15 @@ SHELL_STATIC_SUBCMD_SET_CREATE(
 	SHELL_CMD_ARG(show, NULL, "Show configuration and upload status", cmd_show, 1, 0),
 	SHELL_CMD_ARG(
 		set, NULL,
-		"Set <token|password|interval|resolution|quality|hflip|vflip|flash|rotation|\n"
+		"Set <name|token|password|interval|resolution|quality|hflip|vflip|flash|\n"
+		"     rotation|brightness|contrast|saturation|auto_exposure|auto_wb|auto_gain|\n"
 		"     ip|netmask|gateway|dns> <value>\n"
+		"token: 20 letters/digits; interval: 10 30 60 600\n"
 		"resolution: QVGA VGA SVGA XGA SXGA UXGA; rotation: 0 90 180 270\n"
+		"brightness/contrast/saturation: -2..2; auto_*: 0 or 1\n"
 		"ip: A.B.C.D or dhcp; set netmask and gateway first; applies on reconnect",
 		cmd_set, 3, 0),
+	SHELL_CMD_ARG(test, NULL, "Check token and fingerprint with the service", cmd_test, 1, 0),
 	SHELL_CMD_ARG(snap, NULL, "Upload a snapshot now", cmd_snap, 1, 0), SHELL_SUBCMD_SET_END);
 SHELL_CMD_REGISTER(prusa, &prusa_cmds, "Prusa Connect camera", NULL);
 

@@ -27,6 +27,7 @@
 #include "connect.h"
 #include "exif.h"
 #include "http_util.h"
+#include "prusa_camera.h"
 
 LOG_MODULE_REGISTER(web, LOG_LEVEL_INF);
 
@@ -61,7 +62,7 @@ struct route {
 	size_t jpeg_len;
 };
 
-static char out[512];
+static char out[640];
 
 static void capture(struct route *r, const struct http_request_ctx *req)
 {
@@ -123,6 +124,7 @@ static const char *ip_str(char buf[16], uint32_t ip)
 }
 
 struct config_out {
+	const char *name;
 	bool token_set;
 	const char *fingerprint;
 	uint32_t interval;
@@ -136,9 +138,16 @@ struct config_out {
 	const char *netmask;
 	const char *gateway;
 	const char *dns;
+	int32_t brightness;
+	int32_t contrast;
+	int32_t saturation;
+	bool auto_exposure;
+	bool auto_wb;
+	bool auto_gain;
 };
 
 static const struct json_obj_descr config_out_descr[] = {
+	JSON_OBJ_DESCR_PRIM(struct config_out, name, JSON_TOK_STRING),
 	JSON_OBJ_DESCR_PRIM(struct config_out, token_set, JSON_TOK_TRUE),
 	JSON_OBJ_DESCR_PRIM(struct config_out, fingerprint, JSON_TOK_STRING),
 	JSON_OBJ_DESCR_PRIM(struct config_out, interval, JSON_TOK_UINT),
@@ -152,20 +161,30 @@ static const struct json_obj_descr config_out_descr[] = {
 	JSON_OBJ_DESCR_PRIM(struct config_out, netmask, JSON_TOK_STRING),
 	JSON_OBJ_DESCR_PRIM(struct config_out, gateway, JSON_TOK_STRING),
 	JSON_OBJ_DESCR_PRIM(struct config_out, dns, JSON_TOK_STRING),
+	JSON_OBJ_DESCR_PRIM(struct config_out, brightness, JSON_TOK_NUMBER),
+	JSON_OBJ_DESCR_PRIM(struct config_out, contrast, JSON_TOK_NUMBER),
+	JSON_OBJ_DESCR_PRIM(struct config_out, saturation, JSON_TOK_NUMBER),
+	JSON_OBJ_DESCR_PRIM(struct config_out, auto_exposure, JSON_TOK_TRUE),
+	JSON_OBJ_DESCR_PRIM(struct config_out, auto_wb, JSON_TOK_TRUE),
+	JSON_OBJ_DESCR_PRIM(struct config_out, auto_gain, JSON_TOK_TRUE),
 };
 
 struct status_out {
 	int64_t uptime_s;
 	int64_t last_upload_s;
 	int32_t last_result;
+	const char *result;
 	uint32_t uploads;
+	bool stopped;
 };
 
 static const struct json_obj_descr status_out_descr[] = {
 	JSON_OBJ_DESCR_PRIM(struct status_out, uptime_s, JSON_TOK_INT64),
 	JSON_OBJ_DESCR_PRIM(struct status_out, last_upload_s, JSON_TOK_INT64),
 	JSON_OBJ_DESCR_PRIM(struct status_out, last_result, JSON_TOK_NUMBER),
+	JSON_OBJ_DESCR_PRIM(struct status_out, result, JSON_TOK_STRING),
 	JSON_OBJ_DESCR_PRIM(struct status_out, uploads, JSON_TOK_UINT),
+	JSON_OBJ_DESCR_PRIM(struct status_out, stopped, JSON_TOK_TRUE),
 };
 
 /* Encode into `out` and reply 200, or 500 if it does not fit. */
@@ -187,6 +206,7 @@ static void reply_config(struct http_response_ctx *rsp)
 
 	cfg_get(&c);
 	o = (struct config_out){
+		.name = c.name,
 		.token_set = c.token[0] != '\0',
 		.fingerprint = cfg_fingerprint(),
 		.interval = c.interval_s,
@@ -200,9 +220,15 @@ static void reply_config(struct http_response_ctx *rsp)
 		.netmask = ip_str(mask, c.netmask),
 		.gateway = ip_str(gw, c.gateway),
 		.dns = ip_str(dns, c.dns),
+		.brightness = c.brightness,
+		.contrast = c.contrast,
+		.saturation = c.saturation,
+		.auto_exposure = c.auto_exposure,
+		.auto_wb = c.auto_wb,
+		.auto_gain = c.auto_gain,
 	};
-	memset(&c, 0, sizeof(c));
 	reply_json(rsp, config_out_descr, ARRAY_SIZE(config_out_descr), &o);
+	memset(&c, 0, sizeof(c)); /* after encoding: o.name points into c */
 }
 
 struct cfg_post {
@@ -219,6 +245,13 @@ struct cfg_post {
 	const char *netmask;
 	const char *gateway;
 	const char *dns;
+	const char *name;
+	int32_t brightness;
+	int32_t contrast;
+	int32_t saturation;
+	bool auto_exposure;
+	bool auto_wb;
+	bool auto_gain;
 };
 
 static const struct json_obj_descr cfg_post_descr[] = {
@@ -235,6 +268,13 @@ static const struct json_obj_descr cfg_post_descr[] = {
 	JSON_OBJ_DESCR_PRIM(struct cfg_post, netmask, JSON_TOK_STRING),
 	JSON_OBJ_DESCR_PRIM(struct cfg_post, gateway, JSON_TOK_STRING),
 	JSON_OBJ_DESCR_PRIM(struct cfg_post, dns, JSON_TOK_STRING),
+	JSON_OBJ_DESCR_PRIM(struct cfg_post, name, JSON_TOK_STRING),
+	JSON_OBJ_DESCR_PRIM(struct cfg_post, brightness, JSON_TOK_NUMBER),
+	JSON_OBJ_DESCR_PRIM(struct cfg_post, contrast, JSON_TOK_NUMBER),
+	JSON_OBJ_DESCR_PRIM(struct cfg_post, saturation, JSON_TOK_NUMBER),
+	JSON_OBJ_DESCR_PRIM(struct cfg_post, auto_exposure, JSON_TOK_TRUE),
+	JSON_OBJ_DESCR_PRIM(struct cfg_post, auto_wb, JSON_TOK_TRUE),
+	JSON_OBJ_DESCR_PRIM(struct cfg_post, auto_gain, JSON_TOK_TRUE),
 };
 
 /* "" clears the address (DHCP / gateway as DNS); anything else must parse. */
@@ -308,6 +348,31 @@ static int apply_post(char *body, size_t len)
 		memset(&c, 0, sizeof(c));
 		return -EINVAL;
 	}
+	if (got & BIT(13)) {
+		if (strlen(p.name) > CFG_NAME_MAX) {
+			return -EINVAL;
+		}
+		strcpy(c.name, p.name);
+	}
+	/* Out-of-range levels are left for cfg_set() to reject. */
+	if (got & BIT(14)) {
+		c.brightness = CLAMP(p.brightness, INT8_MIN, INT8_MAX);
+	}
+	if (got & BIT(15)) {
+		c.contrast = CLAMP(p.contrast, INT8_MIN, INT8_MAX);
+	}
+	if (got & BIT(16)) {
+		c.saturation = CLAMP(p.saturation, INT8_MIN, INT8_MAX);
+	}
+	if (got & BIT(17)) {
+		c.auto_exposure = p.auto_exposure;
+	}
+	if (got & BIT(18)) {
+		c.auto_wb = p.auto_wb;
+	}
+	if (got & BIT(19)) {
+		c.auto_gain = p.auto_gain;
+	}
 	ret = cfg_set(&c);
 	memset(&c, 0, sizeof(c));
 	return ret;
@@ -380,9 +445,32 @@ static int status_cb(struct http_client_ctx *client, enum http_transaction_statu
 		.uptime_s = k_uptime_get() / 1000,
 		.last_upload_s = st.last_ms / 1000,
 		.last_result = st.last_result,
+		.result = st.last_ms ? prusa_camera_describe(st.last_result) : "",
 		.uploads = st.uploads,
+		.stopped = st.stopped,
 	};
 	reply_json(rsp, status_out_descr, ARRAY_SIZE(status_out_descr), &so);
+	return 0;
+}
+
+static struct route test_route;
+
+static int test_cb(struct http_client_ctx *client, enum http_transaction_status status,
+		   const struct http_request_ctx *req, struct http_response_ctx *rsp, void *ud)
+{
+	struct route *r = &test_route;
+
+	if (status == HTTP_SERVER_TRANSACTION_ABORTED ||
+	    status == HTTP_SERVER_TRANSACTION_COMPLETE) {
+		memset(r, 0, sizeof(*r));
+		return 0;
+	}
+	capture(r, req);
+	if (status != HTTP_SERVER_REQUEST_DATA_FINAL || !authorised(r, rsp)) {
+		return 0;
+	}
+	connect_test(); /* the result shows in /api/status */
+	reply(rsp, HTTP_202_ACCEPTED, "{\"queued\":true}");
 	return 0;
 }
 
@@ -447,11 +535,13 @@ DYN(index_detail, BIT(HTTP_GET), "text/html", index_cb);
 DYN(config_detail, BIT(HTTP_GET) | BIT(HTTP_POST), "application/json", config_cb);
 DYN(status_detail, BIT(HTTP_GET), "application/json", status_cb);
 DYN(snapshot_detail, BIT(HTTP_GET), "image/jpeg", snapshot_cb);
+DYN(test_detail, BIT(HTTP_POST), "application/json", test_cb);
 
 HTTP_RESOURCE_DEFINE(index_res, prusa_http, "/", &index_detail);
 HTTP_RESOURCE_DEFINE(config_res, prusa_http, "/api/config", &config_detail);
 HTTP_RESOURCE_DEFINE(status_res, prusa_http, "/api/status", &status_detail);
 HTTP_RESOURCE_DEFINE(snapshot_res, prusa_http, "/snapshot.jpg", &snapshot_detail);
+HTTP_RESOURCE_DEFINE(test_res, prusa_http, "/api/test", &test_detail);
 
 int web_init(void)
 {
