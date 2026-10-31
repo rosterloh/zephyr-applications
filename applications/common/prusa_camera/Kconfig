@@ -1,0 +1,30 @@
+# Copyright (c) 2026 Richard Osterloh
+# SPDX-License-Identifier: Apache-2.0
+
+config PRUSA_CAMERA
+	bool "Prusa camera service client"
+	depends on HTTP_CLIENT && NET_SOCKETS_SOCKOPT_TLS && TLS_CREDENTIALS && JSON_LIBRARY
+	help
+	  Camera-info and snapshot uploads to the Prusa camera service
+	  (https://camera-service.prusa3d.com/docs/), the backend of Prusa
+	  Connect cameras.
+
+if PRUSA_CAMERA
+
+config PRUSA_CAMERA_HOST
+	string "Camera service host"
+	default "camera-service.prusa3d.com"
+
+config PRUSA_CAMERA_CA_TAG
+	int "TLS credential tag for the service's CA"
+	default 1
+
+config PRUSA_CAMERA_TIMEOUT_MS
+	int "Request timeout (ms)"
+	default 10000
+
+module = PRUSA_CAMERA
+module-str = prusa_camera
+source "subsys/logging/Kconfig.template.log_config"
+
+endif

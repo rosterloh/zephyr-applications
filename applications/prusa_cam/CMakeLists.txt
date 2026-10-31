@@ -7,6 +7,7 @@ find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(prusa_cam)
 
 include(${CMAKE_CURRENT_LIST_DIR}/../common/http_util/http_util.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/../common/prusa_camera/prusa_camera.cmake)
 
 target_sources(app PRIVATE
   src/main.c
@@ -21,7 +22,6 @@ target_include_directories(app PRIVATE src)
 
 set(gen_dir ${ZEPHYR_BINARY_DIR}/include/generated)
 generate_inc_file_for_target(app src/index.html ${gen_dir}/index.html.gz.inc --gzip)
-generate_inc_file_for_target(app src/isrg_root_x1.der ${gen_dir}/isrg_root_x1.der.inc)
 
 zephyr_linker_sources(SECTIONS sections-rom.ld)
 zephyr_linker_section(NAME http_resource_desc_prusa_http
