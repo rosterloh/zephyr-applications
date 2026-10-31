@@ -58,6 +58,8 @@ function show(c) {
 	f.interval.value = c.interval; f.resolution.value = c.resolution;
 	f.quality.value = c.quality; f.hflip.checked = c.hflip;
 	f.vflip.checked = c.vflip; f.flash.checked = c.flash;
+	f.rotation.value = c.rotation;
+	for (const k of ['ip', 'netmask', 'gateway', 'dns']) f[k].value = c[k];
 	f.token.placeholder = c.token_set ? 'set' : 'not set';
 	document.getElementById('fp').textContent = c.fingerprint;
 }
@@ -75,7 +77,8 @@ f.onsubmit = async e => {
 	e.preventDefault();
 	const c = {interval: +f.interval.value, resolution: f.resolution.value,
 		quality: +f.quality.value, hflip: f.hflip.checked,
-		vflip: f.vflip.checked, flash: f.flash.checked};
+		vflip: f.vflip.checked, flash: f.flash.checked, rotation: +f.rotation.value,
+		ip: f.ip.value, netmask: f.netmask.value, gateway: f.gateway.value, dns: f.dns.value};
 	if (f.token.value) c.token = f.token.value;
 	if (f.password.value) c.password = f.password.value;
 	const r = await fetch('/api/config', {method: 'POST', body: JSON.stringify(c)});
