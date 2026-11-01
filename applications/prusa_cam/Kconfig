@@ -17,5 +17,7 @@ config PRUSA_CAM_STREAM_STACK_SIZE
 endmenu
 
 rsource "../common/prusa_camera/Kconfig"
+rsource "../common/watchdog/Kconfig"
+rsource "../common/img_confirm/Kconfig"
 
 source "Kconfig.zephyr"

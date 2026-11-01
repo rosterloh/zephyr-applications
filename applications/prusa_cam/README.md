@@ -12,7 +12,10 @@ Board and camera driver live in `rosterloh-drivers`
 
 ## Build
 
-    mise run app prusa_cam
+    mise run app prusa_cam --sysbuild
+
+Sysbuild adds MCUboot (swap-using-move), which hawkBit OTA needs; a plain
+build fails at Kconfig. The first flash over USB writes the bootloader too.
 
 ## Setup (serial console, 115200)
 
@@ -71,7 +74,26 @@ and when the address changes. Then a snapshot is sent every interval.
 Shell: `prusa show`, `prusa set <key> <value>`, `prusa test`, `prusa snap`. For a static
 address set `netmask` and `gateway` before `ip`; `prusa set ip dhcp` reverts.
 
+## OTA (hawkBit)
+
+Point it at a hawkBit server once from the shell; the settings persist:
+
+    hawkbit set addr hawkbit.lan     # host name or IP literal
+    hawkbit set port 8080
+    hawkbit set ddi_token <target token>
+    hawkbit run                      # poll now instead of waiting
+
+The target's controller ID is the chip's hardware ID (`hawkbit info`). Upload
+`builds/prusa_cam/prusa_cam/zephyr/zephyr.signed.bin` as the artifact. Plain
+HTTP only.
+
+A new image boots on trial. It is confirmed once the camera has produced a
+frame and WiFi has an IPv4 address; if that does not happen within two minutes
+the task watchdog resets the board and MCUboot boots the old image again, which
+hawkBit then reports as a failed update. The poller only runs on a confirmed
+image. An interrupted download resumes where it stopped.
+
 ## Not done yet
 
 Compared with the upstream firmware: no service AP / captive provisioning,
-OTA, SD card logging or DHT sensor.
+SD card logging or DHT sensor.

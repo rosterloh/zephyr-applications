@@ -4,6 +4,8 @@ sample:
   name: prusa-cam
 common:
   build_only: true
+  # hawkBit needs MCUboot.
+  sysbuild: true
   platform_allow:
     - ai_thinker_esp32_cam/esp32/procpu
   integration_platforms:
