@@ -253,9 +253,12 @@ back and the old image came up `active confirmed` again. This safety net exists
 only because `sysbuild.conf` selects swap-using-move; see the comment in that
 file for why the ESP32 family default would silently remove it.
 
-Images are unsigned for development (`BOOT_SIGNATURE_TYPE_NONE`, the board's
-`Kconfig.sysbuild` default). Generate a key and switch to
-`CONFIG_BOOT_SIGNATURE_TYPE_ECDSA_P256` before shipping.
+Images are unsigned by default (`BOOT_SIGNATURE_TYPE_NONE`, the board's
+`Kconfig.sysbuild` default). `west raptor keygen data_collection` writes an
+ECDSA-P256 key to `keys/mcuboot.pem` (gitignored; back it up), and from then on
+`mise run app data_collection --sysbuild` builds MCUboot to require it and signs
+the image with it (+5.5 KB of MCUboot). Reflash MCUboot over USB once after
+generating it.
 
 Note that the app only logs its DHCP address on the `NET_EVENT_IPV4_ADDR_ADD`
 event, and `main()` registers that callback several seconds after the lease
@@ -299,10 +302,12 @@ Server side (raptor):
 
 - Register a target whose controller id is the `hawkbit info` device id, with
   the same target security token (`CONFIG_HAWKBIT_DDI_TARGET_SECURITY`).
-- Create a software module with **one** artifact,
-  `builds/data_collection/data_collection/zephyr/zephyr.signed.bin`, in a
-  distribution set whose module part is `bApp` (the only part the client
-  accepts), and assign it.
+- `west raptor publish data_collection` checks
+  `builds/data_collection/data_collection/zephyr/zephyr.signed.bin` against the
+  key above, then `raptorctl publish`es it as an `application` module (served
+  as part `bApp`, the only part the client accepts) in an `app` set. Assign it
+  with `west raptor target assign <controller-id> --ds <id>`. Any other
+  `west raptor <args>` goes straight to `raptorctl`.
 - The server must honour `Range` requests for resume. One that answers `200`
   still works, but every interrupted download restarts from zero.
 

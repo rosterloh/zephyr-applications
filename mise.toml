@@ -474,7 +474,12 @@ EXTRA=""
 [ "${usage_sysbuild}" = "true" ] && EXTRA="--sysbuild"
 [ -n "${usage_shield}" ] && EXTRA="$EXTRA --shield ${usage_shield}"
 
-west build -b "$BOARD" -p always $EXTRA --build-dir builds/${usage_app} applications/${usage_app}
+# Sign with the key from `west raptor keygen`; without one the app's sysbuild.conf applies.
+KEY=$PWD/applications/${usage_app}/keys/mcuboot.pem
+SIGN=""
+[ "${usage_sysbuild}" = "true" ] && [ -f "$KEY" ] && SIGN="-DSB_CONFIG_BOOT_SIGNATURE_TYPE_ECDSA_P256=y -DSB_CONFIG_BOOT_SIGNATURE_KEY_FILE=\"$KEY\""
+
+west build -b "$BOARD" -p always $EXTRA --build-dir builds/${usage_app} applications/${usage_app} -- $SIGN
 
 # Keep the ELF under its build ID (applications/common/build_id), so a
 # coredump or log pulled later can be matched to it. Sysbuild nests the app.

@@ -52,3 +52,6 @@ tools/
 # SSH keys from `west provision-ssh-key` (private keys, also baked into the header)
 /keys/
 ssh_keys_blob.h
+
+# MCUboot signing keys from `west raptor keygen` (private)
+/applications/*/keys/
