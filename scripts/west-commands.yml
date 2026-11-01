@@ -9,3 +9,8 @@ west-commands:
       - name: provision-ssh-key
         class: SshProvision
         help: generate an SSH host key + user keypair and install them
+  - file: scripts/west_commands/raptor.py
+    commands:
+      - name: raptor
+        class: Raptor
+        help: MCUboot signing keys and hawkBit publishing via raptorctl
