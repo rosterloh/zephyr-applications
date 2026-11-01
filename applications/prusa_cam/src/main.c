@@ -9,10 +9,17 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <zephyr/dfu/mcuboot.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/mgmt/hawkbit/autohandler.h>
+#include <zephyr/mgmt/hawkbit/hawkbit.h>
+#include <zephyr/net/net_mgmt.h>
+#include <zephyr/net/net_event.h>
 #include <zephyr/shell/shell.h>
 
+#include "app_img_confirm.h"
+#include "app_watchdog.h"
 #include "app_wifi.h"
 #include "cam.h"
 #include "cfg.h"
@@ -167,9 +174,59 @@ SHELL_STATIC_SUBCMD_SET_CREATE(
 	SHELL_CMD_ARG(snap, NULL, "Upload a snapshot now", cmd_snap, 1, 0), SHELL_SUBCMD_SET_END);
 SHELL_CMD_REGISTER(prusa, &prusa_cmds, "Prusa Connect camera", NULL);
 
+/* Only on a confirmed image: the autohandler reboots an unconfirmed one, which
+ * would cut the img_confirm deadline short. A confirmed image starts it even
+ * with a broken camera, so OTA can fix it.
+ */
+static void hawkbit_start_fn(struct k_work *work)
+{
+	static bool started;
+	int ret;
+
+	if (!IS_ENABLED(CONFIG_HAWKBIT) || started || !boot_is_img_confirmed()) {
+		return;
+	}
+	ret = hawkbit_init();
+	if (ret < 0) {
+		LOG_ERR("hawkBit init failed (%d)", ret);
+		return;
+	}
+	started = true;
+	hawkbit_autohandler(true);
+}
+
+static K_WORK_DEFINE(hawkbit_start, hawkbit_start_fn);
+
+static bool cam_ok;
+static struct net_mgmt_event_callback ipv4_cb;
+
+/* Healthy = a frame from the camera and an IPv4 address. */
+static void ipv4_added(struct net_mgmt_event_callback *cb, uint64_t event, struct net_if *iface)
+{
+	if (cam_ok) {
+		app_img_confirm();
+	}
+	k_work_submit(&hawkbit_start);
+}
+
+static bool cam_check(void)
+{
+	const uint8_t *jpeg;
+	size_t len;
+
+	if (cam_frame(&jpeg, &len) < 0) {
+		return false;
+	}
+	cam_release();
+	return true;
+}
+
 int main(void)
 {
 	int ret;
+
+	app_watchdog_init();
+	app_img_confirm_arm();
 
 	ret = cfg_init();
 	if (ret < 0) {
@@ -181,6 +238,11 @@ int main(void)
 	ret = cam_init();
 	if (ret < 0) {
 		LOG_ERR("Camera init failed (%d)", ret); /* keep going: the shell still works */
+	} else {
+		cam_ok = cam_check();
+	}
+	if (!cam_ok) {
+		LOG_ERR("No frame from the camera; a trial image will be reverted");
 	}
 
 	ret = connect_init();
@@ -193,6 +255,10 @@ int main(void)
 	if (ret < 0) {
 		LOG_ERR("HTTP server failed (%d)", ret);
 	}
+
+	net_mgmt_init_event_callback(&ipv4_cb, ipv4_added, NET_EVENT_IPV4_ADDR_ADD);
+	net_mgmt_add_event_callback(&ipv4_cb);
+	k_work_submit(&hawkbit_start);
 
 	return app_wifi_init();
 }
