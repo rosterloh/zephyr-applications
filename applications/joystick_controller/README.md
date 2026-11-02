@@ -77,18 +77,19 @@ In [joystick-p4-box](https://github.com/rosterloh/mechanical-parts/tree/main/joy
 R400B-M4: 10 kOhm pots with a 50° electrical angle, matching the stick's ±25°
 travel. The header has the Raspberry Pi layout (GND on 6, 9, 14, 20, 25, 30, 34,
 39). The handle pot comes wired; the X and Y pots need wires soldered to their
-lugs: daisy-chain their outer lugs onto the handle pot's red and black.
+lugs: daisy-chain their outer lugs onto the handle pot's red and white. The
+handle pot's wiper is its black wire (red to white is the full 10 kOhm).
 
 | Signal | GPIO | Header pin | Wire |
 |---|---|---|---|
 | X wiper | 20 (ADC1 ch4) | 13 | X pot middle lug |
 | Y wiper | 21 (ADC1 ch5) | 11 | Y pot middle lug |
-| Z wiper | 22 (ADC1 ch6) | 12 | handle white |
+| Z wiper | 22 (ADC1 ch6) | 12 | handle black |
 | Pot supply | 3V3 | 1 | handle red + X/Y outer lugs |
-| Pot return | GND | 6 | handle black + X/Y other outer lugs |
+| Pot return | GND | 6 | handle white + X/Y other outer lugs |
 | Grasp | 23 | 7 | handle blue (other blue → GND, e.g. pin 9) |
-| Enable | 6 | 15 | rocker tab (other tab → GND pin 14) |
-| Mod | 48 | 33 | RAFI terminal (other terminal → GND pin 34) |
+| Enable | 6 | 15 | rocker tab (other tab → pin 16, GPIO5 held low as ground) |
+| Mod | 48 | 33 | RAFI terminal, normally closed (other terminal → GND pin 34) |
 
 Do not use the BOOT button: GPIO35 is RMII TXD1 while Ethernet is up.
 Address comes from DHCP.
@@ -126,7 +127,8 @@ Arm (default), with `ros2 topic echo /servo_node/delta_twist_cmds` and
       `ros2 topic echo --field header` on the host's clock
 - [ ] let go → exactly one all-zero message, then silence
 - [ ] push left → `linear.y > 0`; twist counter-clockwise (P4) → `angular.z > 0`.
-      Fix a wrong sign with `invert-output` on that axis in the overlay.
+      Fix a wrong sign with `invert-output` on that axis in the overlay, then
+      recalibrate.
 - [ ] hold mod mid-move → one all-zero message, nothing until centred, then
       forward → `linear.z > 0`
 - [ ] grasp pressed / released → `/grasp` `true` / `false`, only while enabled

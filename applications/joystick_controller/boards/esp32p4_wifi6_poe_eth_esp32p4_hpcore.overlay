@@ -10,12 +10,14 @@
  *   input   GPIO  header pin   wiring
  *   X       20    13           X pot wiper (ADC1 ch4)
  *   Y       21    11           Y pot wiper (ADC1 ch5)
- *   Z       22    12           handle pot white (ADC1 ch6)
- *   pots    -     1 / 6        3V3 / GND: handle pot red / black, X and Y pot
+ *   Z       22    12           handle pot black, its wiper (ADC1 ch6)
+ *   pots    -     1 / 6        3V3 / GND: handle pot red / white, X and Y pot
  *                              outer lugs daisy-chained to them
  *   grasp   23    7            handle button, blue/blue, other side to GND
- *   enable  6     15           Arcolectric H8600 rocker (latching), to GND pin 14
- *   mod     48    33           RAFI 1.10.001.001 button, to GND pin 34
+ *   enable  6     15           Arcolectric H8600 rocker (latching), to GPIO5
+ *   (gnd)   5     16           driven low by a hog: the rocker's 2x1 plug
+ *                              has no GND beside pin 15
+ *   mod     48    33           RAFI 1.10.001.001 button (normally closed), to GND pin 34
  *
  * Not the BOOT button: GPIO35 is shared with RMII TXD1 while Ethernet is up.
  * in-min/in-max are full scale until `teleop cal` stores the real range. Which
@@ -50,6 +52,15 @@
 		zephyr,reference = "ADC_REF_INTERNAL";
 		zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
 		zephyr,resolution = <12>;
+	};
+};
+
+&gpio0 {
+	enable-gnd-hog {
+		gpio-hog;
+		gpios = <5 GPIO_ACTIVE_HIGH>;
+		output-low;
+		line-name = "enable-gnd";
 	};
 };
 
@@ -93,6 +104,10 @@
 
 		axis {
 			io-channels = <&adc0 6>;
+			/* Clockwise raises the wiper; ROS wants anticlockwise positive.
+			 * Needs zephyr/patches 0004 for a signed out range.
+			 */
+			invert-output;
 			in-min = <0>;
 			in-max = <4095>;
 			in-deadzone = <80>;
@@ -105,7 +120,8 @@
 	/* Read directly by main every tick, so a failed read counts as off. */
 	zephyr,user {
 		enable-gpios = <&gpio0 6 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
-		mod-gpios = <&gpio1 16 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>; /* GPIO48 */
+		/* Normally closed: shorted to GND at rest, so pressed reads high. */
+		mod-gpios = <&gpio1 16 (GPIO_ACTIVE_HIGH | GPIO_PULL_UP)>; /* GPIO48 */
 		grasp-gpios = <&gpio0 23 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
 	};
 };
