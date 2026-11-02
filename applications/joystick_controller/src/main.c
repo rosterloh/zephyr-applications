@@ -6,7 +6,10 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/net/conn_mgr_connectivity.h>
 #include <zephyr/net/conn_mgr_monitor.h>
+#include <zephyr/net/dhcpv4.h>
+#include <zephyr/net/ethernet.h>
 #include <zephyr/net/net_event.h>
+#include <zephyr/net/net_if.h>
 #include <zephyr/net/net_mgmt.h>
 #include <zephyr/settings/settings.h>
 
@@ -233,6 +236,14 @@ int main(void)
 	net_mgmt_add_event_callback(&l4_cb);
 	conn_mgr_mon_resend_status();
 	conn_mgr_all_if_connect(true);
+#ifdef CONFIG_NET_L2_ETHERNET
+	/* The Wi-Fi driver starts DHCP on association; nothing does for Ethernet. */
+	struct net_if *eth = net_if_get_first_by_type(&NET_L2_GET_NAME(ETHERNET));
+
+	if (eth != NULL) {
+		net_dhcpv4_start(eth);
+	}
+#endif
 	app_time_start();
 
 	for (;;) {
