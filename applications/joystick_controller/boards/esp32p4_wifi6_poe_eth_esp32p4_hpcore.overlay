@@ -3,17 +3,24 @@
 #include <zephyr/dt-bindings/input/input-event-codes.h>
 
 /*
- * APEM M-series 3-axis joystick, handle 9 (5 kOhm pots + one pushbutton), on
- * the 40-pin header:
+ * HZQS R400B-M4 4-axis joystick (10 kOhm pots, 50 degrees: the full stick
+ * travel, so close to the full ADC range) in mechanical-parts/joystick-p4-box,
+ * with its enable rocker and mod button, on the Raspberry Pi layout header:
  *
- *   axis  ADC1 ch  GPIO  header pin   wires (per pot)
- *   X     4        20    13           red = 3V3 (pin 1), blue = GND,
- *   Y     5        21    11           white = wiper
- *   Z     6        22    12
- *   btn   -        23    7            orange/orange: GPIO23 to GND
+ *   input   GPIO  header pin   wiring
+ *   X       20    13           X pot wiper (ADC1 ch4)
+ *   Y       21    11           Y pot wiper (ADC1 ch5)
+ *   Z       22    12           handle pot white (ADC1 ch6)
+ *   pots    -     1 / 6        3V3 / GND: handle pot red / black, X and Y pot
+ *                              outer lugs daisy-chained to them
+ *   grasp   23    7            handle button, blue/blue, other side to GND
+ *   enable  6     15           Arcolectric H8600 rocker (latching), to GND pin 14
+ *   mod     48    33           RAFI 1.10.001.001 button, to GND pin 34
  *
  * Not the BOOT button: GPIO35 is shared with RMII TXD1 while Ethernet is up.
- * in-min/in-max are full scale until `teleop cal` stores the real range.
+ * in-min/in-max are full scale until `teleop cal` stores the real range. Which
+ * outer pot lug gets 3V3 sets the axis sign; fix a wrong one with
+ * invert-output.
  */
 
 &adc0 {
@@ -95,8 +102,10 @@
 		};
 	};
 
-	/* Read directly by main every tick, so a failed read counts as released. */
+	/* Read directly by main every tick, so a failed read counts as off. */
 	zephyr,user {
-		deadman-gpios = <&gpio0 23 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+		enable-gpios = <&gpio0 6 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+		mod-gpios = <&gpio1 16 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>; /* GPIO48 */
+		grasp-gpios = <&gpio0 23 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
 	};
 };

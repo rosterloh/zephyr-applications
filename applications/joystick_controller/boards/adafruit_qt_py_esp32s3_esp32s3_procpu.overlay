@@ -4,12 +4,13 @@
 
 /*
  * Adafruit Joy FeatherWing (seesaw SAMD09 @ 0x49) on the STEMMA QT bus.
- * 2-axis stick only, so this build publishes linear.x / linear.y only.
+ * 2-axis stick only, so no yaw (or roll with mod). Enable = button A, held
+ * (momentary, so it acts as a deadman); mod = B; grasp = X.
  *
  * Verify on hardware: the X/Y channel order, the invert flags and button A's
  * pin. From Adafruit's Joy FeatherWing guide: stick on seesaw pins 2/3
  * (logical ADC 0/1), buttons A=6, B=7, Y=9, X=10, Select=14. The INT pin is
- * not wired to the QT Py, so the deadman is polled.
+ * not wired to the QT Py, so the buttons are polled.
  *
  * Needs rosterloh/zephyr-drivers#50 (SAMD09 ADC channel offset); before it,
  * channels 0/1 read the unconnected inputs 2/3.
@@ -80,9 +81,11 @@
 	};
 
 	/* Read directly by main every tick: if the seesaw stops answering, the
-	 * read fails and the deadman counts as released instead of stuck held.
+	 * read fails and every button counts as off instead of stuck on.
 	 */
 	zephyr,user {
-		deadman-gpios = <&joy_gpio 6 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+		enable-gpios = <&joy_gpio 6 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+		mod-gpios = <&joy_gpio 7 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+		grasp-gpios = <&joy_gpio 10 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
 	};
 };
