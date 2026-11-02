@@ -7,6 +7,22 @@ static double scale(int16_t v, double max)
 	return CLAMP(v, -TELEOP_AXIS_MAX, TELEOP_AXIS_MAX) * max / TELEOP_AXIS_MAX;
 }
 
+/* analog-axis reports exactly 0 inside its deadzone. */
+static bool centred(const struct teleop_input *in)
+{
+	return in->x == 0 && in->y == 0 && in->rz == 0;
+}
+
+static bool stop(struct teleop_state *s, struct teleop_twist *out)
+{
+	if (!s->active) {
+		return false;
+	}
+	s->active = false;
+	*out = (struct teleop_twist){0};
+	return true;
+}
+
 bool teleop_step(struct teleop_state *s, const struct teleop_input *in,
 		 const struct teleop_limits *lim, struct teleop_twist *out)
 {
@@ -15,27 +31,54 @@ bool teleop_step(struct teleop_state *s, const struct teleop_input *in,
 		return false;
 	}
 
-	if (in->enable) {
-		s->active = true;
+	if (!in->enable || in->mod != s->mod) {
+		s->armed = false;
+		s->mod = in->mod;
+		if (stop(s, out)) {
+			return true;
+		}
+		if (!in->enable) {
+			return false;
+		}
+		/* Nothing owed: a centred stick can arm on this same tick. */
+	}
+
+	if (!s->armed) {
+		s->armed = centred(in);
+		return false;
+	}
+
+	if (centred(in)) {
+		return stop(s, out);
+	}
+
+	s->active = true;
+	*out = (struct teleop_twist){0};
+	if (in->mod) {
+		out->linear_z = scale(in->y, lim->max_linear);
+		out->angular_y = scale(in->x, lim->max_angular);
+		out->angular_x = scale(in->rz, lim->max_angular);
+	} else {
 		out->linear_x = scale(in->y, lim->max_linear);
 		out->linear_y = scale(in->x, lim->max_linear);
 		out->angular_z = scale(in->rz, lim->max_angular);
-		return true;
 	}
+	return true;
+}
 
-	if (s->active) {
-		s->active = false;
-		*out = (struct teleop_twist){0};
-		return true;
+bool teleop_grasp_step(struct teleop_state *s, const struct teleop_input *in, bool *grasp)
+{
+	if (s->blocked || !in->enable || in->grasp == s->grasp) {
+		return false;
 	}
-
-	return false;
+	s->grasp = in->grasp;
+	*grasp = in->grasp;
+	return true;
 }
 
 void teleop_reset(struct teleop_state *s)
 {
-	s->active = false;
-	s->blocked = true;
+	*s = (struct teleop_state){.blocked = true};
 }
 
 bool teleop_cal_symmetric(int16_t rest, int16_t seen_min, int16_t seen_max, int16_t min_span,

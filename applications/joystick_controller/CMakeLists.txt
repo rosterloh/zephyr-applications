@@ -6,8 +6,9 @@ project(joystick_controller)
 # Must be set before picoros.cmake is included.
 set(PICOROS_USER_TYPE_FILE "${CMAKE_CURRENT_LIST_DIR}/src/teleop_types.h")
 include(${CMAKE_CURRENT_LIST_DIR}/../common/picoros/picoros.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/../common/time/time.cmake)
 
-# The main loop owns reconnects so it can force a deadman re-press; zenoh's own
+# The main loop owns reconnects so it can force an enable re-toggle; zenoh's own
 # silent reopen would resume publishing behind its back.
 zephyr_compile_definitions(Z_FEATURE_AUTO_RECONNECT=0)
 

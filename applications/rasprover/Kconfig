@@ -125,41 +125,6 @@ config APP_PICOROS_JOINT_STATE_PUBLISH_HZ
 
 endif # APP_PICOROS
 
-menuconfig APP_TIME_SYNC
-	bool "Enable SNTP time synchronization"
-	default y if APP_PICOROS && NETWORKING
-	depends on NETWORKING
-	depends on NET_SOCKETS
-	depends on DNS_RESOLVER
-	select SNTP
-	select NET_SOCKETS_SERVICE
-	help
-	  Synchronize SYS_CLOCK_REALTIME from an SNTP server. Publishers that
-	  need ROS timestamps can publish immediately with a zero stamp and
-	  switch to realtime stamps after the first successful sync.
-
-if APP_TIME_SYNC
-
-config APP_TIME_SNTP_SERVER
-	string "SNTP server"
-	default "pool.ntp.org"
-
-config APP_TIME_SNTP_TIMEOUT_MS
-	int "SNTP query timeout in milliseconds"
-	default 3000
-
-config APP_TIME_SNTP_RETRY_SEC
-	int "SNTP retry interval after failure, in seconds"
-	default 15
-	range 1 3600
-
-config APP_TIME_SNTP_RESYNC_SEC
-	int "SNTP resync interval after success, in seconds"
-	default 3600
-	range 60 86400
-
-endif # APP_TIME_SYNC
-
 menuconfig APP_MOTORS
 	bool "Enable differential drive motor control"
 	default y
@@ -240,6 +205,7 @@ configdefault HTTP_SERVER_STACK_SIZE
 endif # APP_HTTP
 
 rsource "../common/picoros/Kconfig"
+rsource "../common/time/Kconfig"
 rsource "../common/build_id/Kconfig"
 rsource "../common/watchdog/Kconfig"
 rsource "../common/img_confirm/Kconfig"

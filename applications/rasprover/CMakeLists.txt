@@ -8,6 +8,7 @@ project(rasprover)
 include(${CMAKE_CURRENT_LIST_DIR}/../common/build_id/build_id.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/../common/watchdog/watchdog.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/../common/img_confirm/img_confirm.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/../common/time/time.cmake)
 
 # Pico-ROS generates serdes code for every type in this list, so it is a
 # rasprover-specific trim of upstream's examples/example_types.h rather than
@@ -30,7 +31,6 @@ target_sources_ifdef(CONFIG_NETWORKING app PRIVATE src/app_network.c)
 target_sources_ifdef(CONFIG_APP_PICOROS app PRIVATE src/app_picoros.c)
 target_sources_ifdef(CONFIG_APP_MOTORS app PRIVATE src/app_motors.c)
 target_sources_ifdef(CONFIG_APP_GIMBAL app PRIVATE src/app_gimbal.c)
-target_sources_ifdef(CONFIG_APP_TIME_SYNC app PRIVATE src/app_time.c)
 
 if(CONFIG_APP_HTTP)
   target_sources(app PRIVATE src/app_http.c)

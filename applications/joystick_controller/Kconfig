@@ -1,7 +1,28 @@
 mainmenu "Joystick controller"
 
+choice APP_TELEOP_TARGET
+	prompt "What the stick drives"
+	default APP_TELEOP_TARGET_ARM
+
+config APP_TELEOP_TARGET_ARM
+	bool "Arm end effector (MoveIt Servo)"
+	help
+	  geometry_msgs/TwistStamped for MoveIt Servo; the mod input switches
+	  the stick from x/y/yaw to lift/pitch/roll, and the grasp input
+	  publishes std_msgs/Bool. Servo drops commands whose stamp is older
+	  than its incoming_command_timeout (0.1 s by default), so this needs
+	  SNTP time agreeing with the ROS host: point APP_TIME_SNTP_SERVER at
+	  the host's NTP server.
+
+config APP_TELEOP_TARGET_BASE
+	bool "Mobile base (cmd_vel)"
+	help
+	  geometry_msgs/Twist on cmd_vel; mod and grasp are ignored.
+
+endchoice
+
 menuconfig APP_PICOROS
-	bool "Publish teleop Twist over Pico-ROS"
+	bool "Publish teleop commands over Pico-ROS"
 	select PICOROS
 	default y
 
@@ -25,13 +46,35 @@ config APP_PICOROS_DOMAIN_ID
 config APP_PICOROS_CMD_VEL_TOPIC
 	string "ROS topic for geometry_msgs/Twist"
 	default "cmd_vel"
+	depends on APP_TELEOP_TARGET_BASE
 	help
 	  Fully qualified topic name without the leading slash.
+
+config APP_PICOROS_SERVO_TOPIC
+	string "ROS topic for geometry_msgs/TwistStamped"
+	default "servo_node/delta_twist_cmds"
+	depends on APP_TELEOP_TARGET_ARM
+	help
+	  MoveIt Servo's cartesian_command_in_topic, fully qualified, without
+	  the leading slash.
+
+config APP_PICOROS_SERVO_FRAME_ID
+	string "Frame the twist is expressed in"
+	default "base_link"
+	depends on APP_TELEOP_TARGET_ARM
+	help
+	  Servo transforms the command from this frame into its planning
+	  frame; use the end-effector frame to jog in tool coordinates.
+
+config APP_PICOROS_GRASP_TOPIC
+	string "ROS topic for the grasp std_msgs/Bool"
+	default "grasp"
+	depends on APP_TELEOP_TARGET_ARM
 
 endif # APP_PICOROS
 
 config APP_TELEOP_PUBLISH_HZ
-	int "Twist publish rate while the deadman is held"
+	int "Twist publish rate while the stick is deflected"
 	default 20
 	range 1 100
 	help
@@ -48,5 +91,6 @@ config APP_TELEOP_MAX_ANGULAR_MRAD_S
 	default 1000
 
 rsource "../common/picoros/Kconfig"
+rsource "../common/time/Kconfig"
 
 source "Kconfig.zephyr"

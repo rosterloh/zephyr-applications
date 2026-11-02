@@ -5,13 +5,15 @@ LOG_MODULE_REGISTER(app_time, LOG_LEVEL_INF);
 #include <string.h>
 #include <time.h>
 #include <zephyr/kernel.h>
+#include <zephyr/net/conn_mgr_monitor.h>
 #include <zephyr/net/dns_resolve.h>
+#include <zephyr/net/net_event.h>
 #include <zephyr/net/net_ip.h>
+#include <zephyr/net/net_mgmt.h>
 #include <zephyr/net/sntp.h>
 #include <zephyr/sys/atomic.h>
 #include <zephyr/sys/clock.h>
 
-#include "app_network.h"
 #include "app_time.h"
 
 #define SNTP_SERVER_PORT 123
@@ -29,6 +31,23 @@ static struct net_sockaddr_storage sntp_addr;
 static net_socklen_t sntp_addrlen;
 static atomic_t started;
 static atomic_t synced;
+static atomic_t ipv4_up;
+static struct net_mgmt_event_callback l4_cb;
+
+/* Our own view of the link, so this module needs nothing from the application. */
+static void l4_handler(struct net_mgmt_event_callback *cb, uint64_t event, struct net_if *iface)
+{
+	ARG_UNUSED(cb);
+	ARG_UNUSED(iface);
+
+	atomic_set(&ipv4_up, event == NET_EVENT_L4_IPV4_CONNECTED);
+	/* First sync starts here; a pending resync or retry is left alone, so a
+	 * reconnect never starts a second query on top of one in flight.
+	 */
+	if (event == NET_EVENT_L4_IPV4_CONNECTED) {
+		k_work_schedule(&sync_work, K_NO_WAIT);
+	}
+}
 
 static uint32_t sntp_fraction_to_nsec(uint32_t fraction)
 {
@@ -151,7 +170,7 @@ static void sync_work_handler(struct k_work *work)
 
 	ARG_UNUSED(work);
 
-	if (!app_net_ipv4_ready()) {
+	if (!atomic_get(&ipv4_up)) {
 		LOG_DBG("network is not ready for SNTP");
 		schedule_next(false);
 		return;
@@ -207,7 +226,13 @@ void app_time_start(void)
 		return;
 	}
 
-	k_work_schedule(&sync_work, K_NO_WAIT);
+	net_mgmt_init_event_callback(&l4_cb, l4_handler,
+				     NET_EVENT_L4_IPV4_CONNECTED | NET_EVENT_L4_IPV4_DISCONNECTED);
+	net_mgmt_add_event_callback(&l4_cb);
+	/* Replays the current state (asynchronously), so a link that is already
+	 * up is seen and starts the first sync from l4_handler.
+	 */
+	conn_mgr_mon_resend_status();
 }
 
 bool app_time_synced(void)
