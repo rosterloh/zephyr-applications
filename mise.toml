@@ -53,11 +53,12 @@ description = "Install/update Python deps from uv.lock into .venv"
 
 [tasks.format]
 alias = "fmt"
-depends = ["format:*"]
+run = "mise run format:py && mise run format:c && mise run format:dts"
 description = "Format Python (ruff), C (clang-format) and devicetree (dts-linter) in place"
 
 [tasks.lint]
-depends = ["lint:*"]
+# Keep going after a failure so one run reports every language.
+run = "s=0; for t in py c dts; do mise run lint:$t || s=1; done; exit $s"
 description = "Check Python, C and devicetree formatting without changing files"
 
 [tasks."format:py"]
@@ -86,13 +87,11 @@ run = "npm ci --prefix deps/zephyr/scripts/ci --ignore-scripts --no-audit --no-f
 # Same flags as Zephyr's DevicetreeLintingCheck (scripts/ci/check_compliance.py):
 # upstream style, plus property order (compatible, reg, ..., status) and nodes by address.
 [tasks."format:dts"]
-depends = ["dts-linter-install"]
-run = "npx --prefix deps/zephyr/scripts/ci --no dts-linter -- --formatFixAll --enableSortNodesAndProperties --sortNodesNodesBy address $(find applications boards -type f \\( -name '*.dts' -o -name '*.dtsi' -o -name '*.overlay' \\) | sed 's/^/--file /')"
+run = "mise run dts-linter-install && npx --prefix deps/zephyr/scripts/ci --no dts-linter -- --formatFixAll --enableSortNodesAndProperties --sortNodesNodesBy address $(find applications boards -type f \\( -name '*.dts' -o -name '*.dtsi' -o -name '*.overlay' \\) | sed 's/^/--file /')"
 description = "Format and sort .dts/.dtsi/.overlay files in place (Zephyr dts-linter)"
 
 [tasks."lint:dts"]
-depends = ["dts-linter-install"]
-run = "npx --prefix deps/zephyr/scripts/ci --no dts-linter -- --format --enableSortNodesAndProperties --sortNodesNodesBy address $(find applications boards -type f \\( -name '*.dts' -o -name '*.dtsi' -o -name '*.overlay' \\) | sed 's/^/--file /')"
+run = "mise run dts-linter-install && npx --prefix deps/zephyr/scripts/ci --no dts-linter -- --format --enableSortNodesAndProperties --sortNodesNodesBy address $(find applications boards -type f \\( -name '*.dts' -o -name '*.dtsi' -o -name '*.overlay' \\) | sed 's/^/--file /')"
 description = "Check devicetree formatting and sorting; prints the diff for each failing file"
 
 [tasks.compdb]
