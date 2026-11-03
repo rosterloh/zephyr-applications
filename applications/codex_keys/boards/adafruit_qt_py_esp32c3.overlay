@@ -23,94 +23,94 @@
 	status = "okay";
 
 	neokey0: seesaw@30 {
-		status = "okay";
 		compatible = "adafruit,seesaw-mfd";
 		reg = <0x30>;
 		read-delay-us = <10000>;
+		status = "okay";
 
 		neokey0_gpio: gpio {
-			status = "okay";
 			compatible = "adafruit,seesaw-gpio";
 			gpio-controller;
 			#gpio-cells = <2>;
 			ngpios = <16>;
+			status = "okay";
 		};
 
 		neokey0_leds: neopixel {
-			status = "okay";
 			compatible = "adafruit,seesaw-neopixel";
 			chain-length = <4>;
 			color-mapping = <LED_COLOR_ID_GREEN LED_COLOR_ID_RED LED_COLOR_ID_BLUE>;
 			seesaw-pin = <3>;
 			frequency = <800000>;
+			status = "okay";
 		};
 	};
 
 	neokey1: seesaw@31 {
-		status = "okay";
 		compatible = "adafruit,seesaw-mfd";
 		reg = <0x31>;
 		read-delay-us = <10000>;
+		status = "okay";
 
 		neokey1_gpio: gpio {
-			status = "okay";
 			compatible = "adafruit,seesaw-gpio";
 			gpio-controller;
 			#gpio-cells = <2>;
 			ngpios = <16>;
+			status = "okay";
 		};
 
 		neokey1_leds: neopixel {
-			status = "okay";
 			compatible = "adafruit,seesaw-neopixel";
 			chain-length = <4>;
 			color-mapping = <LED_COLOR_ID_GREEN LED_COLOR_ID_RED LED_COLOR_ID_BLUE>;
 			seesaw-pin = <3>;
 			frequency = <800000>;
+			status = "okay";
 		};
 	};
 
 	neokey2: seesaw@32 {
-		status = "okay";
 		compatible = "adafruit,seesaw-mfd";
 		reg = <0x32>;
 		read-delay-us = <10000>;
+		status = "okay";
 
 		neokey2_gpio: gpio {
-			status = "okay";
 			compatible = "adafruit,seesaw-gpio";
 			gpio-controller;
 			#gpio-cells = <2>;
 			ngpios = <16>;
+			status = "okay";
 		};
 
 		neokey2_leds: neopixel {
-			status = "okay";
 			compatible = "adafruit,seesaw-neopixel";
 			chain-length = <4>;
 			color-mapping = <LED_COLOR_ID_GREEN LED_COLOR_ID_RED LED_COLOR_ID_BLUE>;
 			seesaw-pin = <3>;
 			frequency = <800000>;
+			status = "okay";
 		};
 	};
 
 	encoder_mfd: seesaw@36 {
-		status = "okay";
 		compatible = "adafruit,seesaw-mfd";
 		reg = <0x36>;
 		read-delay-us = <10000>;
+		status = "okay";
 
 		encoder: encoder {
-			status = "okay";
 			compatible = "adafruit,seesaw-encoder";
+			status = "okay";
 		};
 
 		encoder_gpio: gpio {
-			status = "okay";
 			compatible = "adafruit,seesaw-gpio";
 			gpio-controller;
 			#gpio-cells = <2>;
 			ngpios = <32>;
+			status = "okay";
 		};
 	};
 };

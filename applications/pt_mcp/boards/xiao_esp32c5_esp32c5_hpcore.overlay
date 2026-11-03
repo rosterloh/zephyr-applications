@@ -14,22 +14,9 @@
 
 	servo_bus: bus-servo {
 		compatible = "waveshare,bus-servo";
-		status = "okay";
 		#address-cells = <1>;
 		#size-cells = <0>;
-
-		pan_servo: servo@2 {
-			compatible = "rosterloh,actuator-bus-servo";
-			reg = <2>;
-			label = "Pan";
-			default-mode = "position";
-			ticks-per-rev = <4096>;
-			rad-zero-tick = <2047>;
-			position-min-rad-milli = <(-3142)>;
-			position-max-rad-milli = <3142>;
-			speed = <300>;
-			accel = <20>;
-		};
+		status = "okay";
 
 		tilt_servo: servo@1 {
 			compatible = "rosterloh,actuator-bus-servo";
@@ -44,11 +31,25 @@
 			speed = <300>;
 			accel = <20>;
 		};
+
+		pan_servo: servo@2 {
+			compatible = "rosterloh,actuator-bus-servo";
+			reg = <2>;
+			label = "Pan";
+			default-mode = "position";
+			ticks-per-rev = <4096>;
+			rad-zero-tick = <2047>;
+			position-min-rad-milli = <(-3142)>;
+			position-max-rad-milli = <3142>;
+			speed = <300>;
+			accel = <20>;
+		};
 	};
 };
 
 /* Reset-reason record (applications/common/reset_reason) at the start of the
- * SoC's retained LP SRAM, which software and watchdog resets leave intact. */
+ * SoC's retained LP SRAM, which software and watchdog resets leave intact.
+ */
 &retainedmem0 {
 	app_reset_reason: retention@0 {
 		compatible = "zephyr,retention";

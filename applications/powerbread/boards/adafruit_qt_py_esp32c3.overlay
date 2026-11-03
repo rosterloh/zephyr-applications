@@ -36,6 +36,7 @@
 		group1 {
 			pinmux = <SPIM2_SCLK_GPIO10>;
 		};
+
 		group2 {
 			pinmux = <SPIM2_MOSI_GPIO7>;
 			output-low;
@@ -103,9 +104,9 @@
  */
 
 &adc0 {
-	status = "okay";
 	#address-cells = <1>;
 	#size-cells = <0>;
+	status = "okay";
 
 	channel@1 {
 		reg = <1>;
@@ -127,10 +128,12 @@
 			press-thresholds-mv = <510>;
 			zephyr,code = <INPUT_KEY_ENTER>;
 		};
+
 		dial_down {
 			press-thresholds-mv = <910>;
 			zephyr,code = <INPUT_KEY_DOWN>;
 		};
+
 		dial_up {
 			press-thresholds-mv = <1580>;
 			zephyr,code = <INPUT_KEY_UP>;

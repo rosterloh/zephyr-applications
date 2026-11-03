@@ -18,6 +18,8 @@ ccache = "latest"
 # or `sync` shouldn't pay for the download. The shim stays on PATH, so
 # `mise x -- protoc` still works and installs on first use.
 protoc = { version = "latest", lazy = true }
+# Runs Zephyr's dts-linter (deps/zephyr/scripts/ci) for format:dts / lint:dts.
+node = { version = "lts", lazy = true }
 
 [env]
 _.python.venv = { path = ".venv", create = true }
@@ -49,9 +51,48 @@ ESPRESSIF_QEMU_PATH = "{{config_root}}/tools/qemu-espressif/bin"
 run = "uv sync"
 description = "Install/update Python deps from uv.lock into .venv"
 
-[tasks.fmt]
+[tasks.format]
+alias = "fmt"
+run = "mise run format:py && mise run format:c && mise run format:dts"
+description = "Format Python (ruff), C (clang-format) and devicetree (dts-linter) in place"
+
+[tasks.lint]
+# Keep going after a failure so one run reports every language.
+run = "s=0; for t in py c dts; do mise run lint:$t || s=1; done; exit $s"
+description = "Check Python, C and devicetree formatting without changing files"
+
+[tasks."format:py"]
 run = "ruff format"
 description = "Format Python (ruff, line-length 120)"
+
+[tasks."lint:py"]
+run = "ruff check && ruff format --check"
+description = "Lint and format-check Python (ruff)"
+
+[tasks."format:c"]
+run = "find applications boards -type f \\( -name '*.c' -o -name '*.h' -o -name '*.cpp' -o -name '*.hpp' \\) -exec clang-format -i {} +"
+description = "Format C/C++ in applications/ and boards/ (clang-format, in-tree .clang-format)"
+
+[tasks."lint:c"]
+run = "find applications boards -type f \\( -name '*.c' -o -name '*.h' -o -name '*.cpp' -o -name '*.hpp' \\) -exec clang-format --dry-run --Werror {} +"
+description = "Check C/C++ formatting (clang-format), as CI does"
+
+[tasks."dts-linter-install"]
+hide = true
+description = "Install the dts-linter version Zephyr pins in deps/zephyr/scripts/ci"
+sources = ["deps/zephyr/scripts/ci/package-lock.json"]
+outputs = ["deps/zephyr/scripts/ci/node_modules/.package-lock.json"]
+run = "npm ci --prefix deps/zephyr/scripts/ci --ignore-scripts --no-audit --no-fund"
+
+# Same flags as Zephyr's DevicetreeLintingCheck (scripts/ci/check_compliance.py):
+# upstream style, plus property order (compatible, reg, ..., status) and nodes by address.
+[tasks."format:dts"]
+run = "mise run dts-linter-install && npx --prefix deps/zephyr/scripts/ci --no dts-linter -- --formatFixAll --enableSortNodesAndProperties --sortNodesNodesBy address $(find applications boards -type f \\( -name '*.dts' -o -name '*.dtsi' -o -name '*.overlay' \\) | sed 's/^/--file /')"
+description = "Format and sort .dts/.dtsi/.overlay files in place (Zephyr dts-linter)"
+
+[tasks."lint:dts"]
+run = "mise run dts-linter-install && npx --prefix deps/zephyr/scripts/ci --no dts-linter -- --format --enableSortNodesAndProperties --sortNodesNodesBy address $(find applications boards -type f \\( -name '*.dts' -o -name '*.dtsi' -o -name '*.overlay' \\) | sed 's/^/--file /')"
+description = "Check devicetree formatting and sorting; prints the diff for each failing file"
 
 [tasks.compdb]
 description = "Merge every builds/**/compile_commands.json into ./compile_commands.json for clangd. clangd walks up from each source file and finds it at the workspace root, so no per-app .clangd is needed. A source compiled by several apps keeps whichever build's flags come first; re-run after building the app you are working on to put its flags in front."

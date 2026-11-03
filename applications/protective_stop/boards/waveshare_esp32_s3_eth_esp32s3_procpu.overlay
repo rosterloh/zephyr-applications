@@ -34,9 +34,9 @@
 / {
 	zephyr,user {
 		estop-a-out-gpios = <&gpio1 7 GPIO_ACTIVE_HIGH>;  /* GPIO39 */
-		estop-a-in-gpios  = <&gpio1 8 GPIO_ACTIVE_HIGH>;  /* GPIO40 */
+		estop-a-in-gpios = <&gpio1 8 GPIO_ACTIVE_HIGH>;  /* GPIO40 */
 		estop-b-out-gpios = <&gpio1 9 GPIO_ACTIVE_HIGH>;  /* GPIO41 */
-		estop-b-in-gpios  = <&gpio1 10 GPIO_ACTIVE_HIGH>; /* GPIO42 */
+		estop-b-in-gpios = <&gpio1 10 GPIO_ACTIVE_HIGH>; /* GPIO42 */
 	};
 
 	aliases {
@@ -64,7 +64,8 @@
 };
 
 /* Coredump pseudo-device: applications/common/build_id registers the build-ID
- * note with it at boot, so every dump names its ELF. */
+ * note with it at boot, so every dump names its ELF.
+ */
 / {
 	app_coredump: app-coredump {
 		compatible = "zephyr,coredump";

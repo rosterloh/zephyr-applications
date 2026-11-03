@@ -18,10 +18,10 @@
 		/* https://learn.adafruit.com/adafruit-1-14-240x135-color-tft-breakout */
 		st7789v_st7789v_ada_240x135: st7789v@0 {
 			compatible = "sitronix,st7789v";
+			reg = <0>;
 			mipi-max-frequency = <20000000>;
 			mipi-mode = "MIPI_DBI_MODE_SPI_4WIRE";
 			pixel-format = <PANEL_PIXEL_FORMAT_RGB_565>;
-			reg = <0>;
 			width = <240>;
 			height = <135>;
 			x-offset = <40>;
@@ -45,14 +45,14 @@
 };
 
 &sercom2 {
-	status = "okay";
 	current-speed = <115200>;
+	status = "okay";
 
 	dxl_bus: dynamixel {
-		status = "okay";
 		compatible = "robotis,dynamixel";
 		#address-cells = <1>;
 		#size-cells = <0>;
+		status = "okay";
 
 		motor0: motor@1 {
 			compatible = "rosterloh,actuator-dxl";
@@ -65,10 +65,10 @@
 
 &arduino_mkr_i2c {
 	neoslider_mfd: seesaw@30 {
-		status = "okay";
 		compatible = "adafruit,seesaw-mfd";
 		reg = <0x30>;
 		read-delay-us = <100000>;  /* legacy used 100 ms; preserve */
+		status = "okay";
 
 		neoslider_adc: adc {
 			compatible = "adafruit,seesaw-adc";
@@ -85,10 +85,10 @@
 	};
 
 	rotary_encoder_mfd: seesaw@36 {
-		status = "okay";
 		compatible = "adafruit,seesaw-mfd";
 		reg = <0x36>;
 		read-delay-us = <100000>;
+		status = "okay";
 
 		rotary_encoder: encoder {
 			compatible = "adafruit,seesaw-encoder";
@@ -97,8 +97,8 @@
 };
 
 &arduino_mkr_spi {
-	status = "okay";
 	cs-gpios = <&arduino_mkr_header 7 GPIO_ACTIVE_LOW>;		/* D7 */
+	status = "okay";
 };
 
 &zephyr_udc0 {
@@ -106,7 +106,8 @@
 	 * a dedicated pool of 64 B net_bufs (16 at the default, each with its own
 	 * header) rather than a ring buffer, which cost this 32 KB part ~600 B of
 	 * RAM and overflowed it. 8 packets each way is ample for the shell and
-	 * log traffic this port carries; must stay >= 2 x the 64 B bulk MPS. */
+	 * log traffic this port carries; must stay >= 2 x the 64 B bulk MPS.
+	 */
 	cdc_acm_uart0: cdc_acm_uart0 {
 		compatible = "zephyr,cdc-acm-uart";
 		tx-fifo-size = <512>;

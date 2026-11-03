@@ -12,26 +12,26 @@
 	status = "okay";
 
 	neokey_mfd: seesaw@30 {
-		status = "okay";
 		compatible = "adafruit,seesaw-mfd";
 		reg = <0x30>;
 		read-delay-us = <10000>;
+		status = "okay";
 
 		neokey_gpio: gpio {
-			status = "okay";
 			compatible = "adafruit,seesaw-gpio";
 			gpio-controller;
 			#gpio-cells = <2>;
 			ngpios = <16>;
+			status = "okay";
 		};
 
 		neokey_leds: neopixel {
-			status = "okay";
 			compatible = "adafruit,seesaw-neopixel";
 			chain-length = <4>;
 			color-mapping = <LED_COLOR_ID_GREEN LED_COLOR_ID_RED LED_COLOR_ID_BLUE>;
 			seesaw-pin = <3>;
 			frequency = <800000>;
+			status = "okay";
 		};
 	};
 };
