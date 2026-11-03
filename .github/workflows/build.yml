@@ -122,7 +122,8 @@ jobs:
               {"app": "joystick_controller"},
               {"app": "motor_controller"},
               {"app": "pico_fw"},
-              {"app": "protective_stop", "flags": "--board waveshare_esp32_s3_eth/esp32s3/procpu"}
+              {"app": "protective_stop", "flags": "--board waveshare_esp32_s3_eth/esp32s3/procpu"},
+              {"app": "prusa_cam", "flags": "--sysbuild"}
             ]
         run: |
           ALL=$(ls applications | grep -vx common | sort)
