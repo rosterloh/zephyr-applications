@@ -26,6 +26,7 @@
 #include <zephyr/settings/settings.h>
 #include <zephyr/sys/util.h>
 
+#include "codex_hid.h"
 #include "codex_rpc.h"
 
 LOG_MODULE_REGISTER(app, LOG_LEVEL_INF);
@@ -137,6 +138,12 @@ static void bt_ready(int err)
 {
 	if (err) {
 		LOG_ERR("Bluetooth init failed (err %d)", err);
+		return;
+	}
+
+	err = codex_hid_init();
+	if (err) {
+		LOG_ERR("HID service register failed (err %d)", err);
 		return;
 	}
 
