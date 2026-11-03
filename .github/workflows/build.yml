@@ -81,10 +81,15 @@ jobs:
           mise run sync
           mise x -- uv cache prune --ci
 
-      - name: Check clang-format
+      # lint:dts runs the dts-linter Zephyr pins in scripts/ci; west.yml tracks
+      # Zephyr main, so a sparse fetch of that directory is all this job needs.
+      - name: Fetch Zephyr scripts/ci
         run: |
-          files=$(find applications boards -type f \( -name "*.c" -o -name "*.h" -o -name "*.cpp" -o -name "*.hpp" \))
-          mise x -- clang-format --dry-run --Werror $files
+          git clone -q --depth 1 --filter=blob:none --sparse https://github.com/zephyrproject-rtos/zephyr deps/zephyr
+          git -C deps/zephyr sparse-checkout set scripts/ci
+
+      - name: Lint (ruff, clang-format, dts-linter)
+        run: mise run lint
 
   # Routes the build matrix and twister to the apps a PR can affect, via
   # scripts/ci/affected-apps.sh. Pushes to main and manual runs cover everything.
