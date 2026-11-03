@@ -17,8 +17,8 @@
 / {
 	zephyr,user {
 		estop-a-out-gpios = <&gpio0 0 GPIO_ACTIVE_HIGH>;
-		estop-a-in-gpios  = <&gpio0 1 GPIO_ACTIVE_HIGH>;
+		estop-a-in-gpios = <&gpio0 1 GPIO_ACTIVE_HIGH>;
 		estop-b-out-gpios = <&gpio0 2 GPIO_ACTIVE_HIGH>;
-		estop-b-in-gpios  = <&gpio0 3 GPIO_ACTIVE_HIGH>;
+		estop-b-in-gpios = <&gpio0 3 GPIO_ACTIVE_HIGH>;
 	};
 };
