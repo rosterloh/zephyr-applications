@@ -20,6 +20,9 @@
  */
 #define CODEX_JSON_MAX 512
 
+/* Register the HID Service. Call before settings_load() so CCCs restore. */
+int codex_hid_init(void);
+
 /* Frame, fragment and notify `json`. Sleeps between fragments, so it must be
  * called from a thread. Returns 0, -ENOTCONN if the host is not subscribed, or
  * -EMSGSIZE if the message exceeds CODEX_JSON_MAX.

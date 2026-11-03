@@ -74,7 +74,7 @@ Each report body is framed as:
 | … | | zero padding to 63 bytes |
 
 Messages are newline-terminated JSON, fragmented across reports with a 4 ms gap.
-`src/codex_hid.c` owns the service and framing, `src/codex_rpc.c` the messages,
+`src/codex_hid.c` registers Zephyr's HID Service (`CONFIG_BT_HIDS`) and owns the framing, `src/codex_rpc.c` the messages,
 `src/codex_json.c` a minimal top-level member lookup (Zephyr's descriptor-based
 JSON parser can't handle the variant `id` field, and the `id` nested inside
 `v.oai.thstatus` params would otherwise shadow the request id).
@@ -112,12 +112,11 @@ codex_keys starting
 Advertising as "Codex Micro" (303a:8360)
 Connected
 Security changed: level 2
-host subscribed to input reports        <- host found the HID service
 rx: {"method":"sys.version","id":1}     <- host is talking the protocol
 tx: {"id":1,"result":{"version":"0.1.0-qtpy"}}
 ```
 
-If the host connects but never subscribes, the descriptor or identity is being
+If the host connects and pairs but never sends an `rx:`, the descriptor or identity is being
 rejected. Forget the device on the host after any descriptor change so cached
 metadata is refreshed.
 

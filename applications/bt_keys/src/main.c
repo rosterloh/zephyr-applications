@@ -98,6 +98,12 @@ static void bt_ready(int err)
 		return;
 	}
 
+	err = hog_init();
+	if (err) {
+		LOG_ERR("HID service register failed (err %d)", err);
+		return;
+	}
+
 	if (IS_ENABLED(CONFIG_SETTINGS)) {
 		bt_keys_settings_register();
 		settings_load();
