@@ -108,8 +108,11 @@ The west.yml uses `name-allowlist` to clone only the modules these apps need; do
 
 ## Formatting
 
-- Python: `mise run fmt` (ruff format, line-length 120).
-- C / Zephyr code: clang-format using the in-tree `.clang-format`. Verify with `mise x -- clang-format --dry-run --Werror <files>`.
+`mise run format` (alias `fmt`) fixes everything in place; `mise run lint` checks without writing. One language at a time: `format:py|c|dts`, `lint:py|c|dts`.
+
+- Python: ruff (line-length 120).
+- C / Zephyr code: clang-format using the in-tree `.clang-format`.
+- Devicetree (`.dts`/`.dtsi`/`.overlay`): Zephyr's `dts-linter` from `deps/zephyr/scripts/ci`, with upstream's property and node sorting. Needs Node (lazy mise tool); `npm ci` runs on first use and when Zephyr bumps the linter. CI does not run it yet.
 
 ## Out-of-tree modules and PR work
 
