@@ -323,6 +323,16 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # Runs the ESP /qemu integration platforms. The apt list is the binaries'
+      # DT_NEEDED minus what the runner image already has.
+      - name: Install Espressif QEMU
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libsdl2-2.0-0 libslirp0 libpixman-1-0 libgcrypt20
+          mise run qemu-install
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       # After setup, so the entry holds today's updated checkout and blobs.
       # Parallel jobs race to save; the losers only log a warning.
       - name: Save west deps
@@ -342,7 +352,7 @@ jobs:
           TESTS: ${{ needs.changes.outputs.tests }}
         run: |
           if [ "$FULL" = true ]; then
-            mise run test --runnable --min-suites 12
+            mise run test --runnable --min-suites 31
           else
             mise run test --runnable $TESTS
           fi

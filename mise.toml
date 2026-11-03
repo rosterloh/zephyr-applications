@@ -192,42 +192,53 @@ west sdk install --version "$SDK_VER" \
 """
 
 [tasks."qemu-install"]
-description = "Install Espressif's QEMU fork (xtensa) into tools/qemu-espressif, for the /qemu board variants (waveshare_esp32_s3_eth/esp32s3/procpu/qemu). Idempotent."
+description = "Install Espressif's QEMU fork into tools/qemu-espressif, for the /qemu board variants (waveshare_esp32_s3_eth/esp32s3/procpu/qemu, adafruit_qt_py_esp32c3/esp32c3/qemu). Copies an ESP-IDF install from ~/.espressif if present, else downloads xtensa + riscv32 (Linux). Idempotent."
 run = """
 set -e
 REL="esp-develop-9.2.2-20260417"
 VER="esp_develop_9.2.2_20260417"
 DEST="${MISE_PROJECT_ROOT}/tools/qemu-espressif"
+IDF_TOOLS="${HOME}/.espressif/tools"
 
-# Only the xtensa build is fetched: esp32s3 (and esp32) are Xtensa. Add the
-# qemu-riscv32-softmmu asset here if a /qemu variant is ever added for a
-# RISC-V SoC (esp32c3/c6).
+# Reuse `idf_tools.py install qemu-xtensa qemu-riscv32` (the only route on
+# macOS). Both trees unpack to qemu/ and differ only in lib/libfdt.a, which
+# QEMU doesn't load at runtime, so merging them into one bin/ is safe.
+if [ -x "${IDF_TOOLS}/qemu-xtensa/${VER}/qemu/bin/qemu-system-xtensa" ]; then
+    mkdir -p "$DEST"
+    for t in xtensa riscv32; do
+        SRC="${IDF_TOOLS}/qemu-${t}/${VER}/qemu"
+        [ -d "$SRC" ] && cp -R "${SRC}/." "${DEST}/" && echo "Copied ${SRC} to ${DEST}"
+    done
+    exit 0
+fi
+
+# xtensa covers esp32/esp32s3, riscv32 covers esp32c3.
 case "$(uname -m)" in
   x86_64)  ARCH="x86_64-linux-gnu" ;;
   aarch64) ARCH="aarch64-linux-gnu" ;;
   *) echo "no Espressif QEMU build for $(uname -m)" >&2; exit 1 ;;
 esac
-TARBALL="qemu-xtensa-softmmu-${VER}-${ARCH}.tar.xz"
 
-if [ -x "${DEST}/bin/qemu-system-xtensa" ]; then
+if [ -x "${DEST}/bin/qemu-system-xtensa" ] && [ -x "${DEST}/bin/qemu-system-riscv32" ]; then
     echo "Espressif QEMU already at ${DEST}"
-    "${DEST}/bin/qemu-system-xtensa" --version | head -1
     exit 0
 fi
 
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
-echo "Fetching ${TARBALL} (${REL})"
-gh release download "$REL" --repo espressif/qemu -p "$TARBALL" -p '*checksum.sha256' -D "$TMP"
-
-# Verify before extracting: this is a prebuilt binary off the network.
-(cd "$TMP" && grep -F " *${TARBALL}" ./*checksum.sha256 | sha256sum -c -)
-
-mkdir -p "$(dirname "$DEST")"
 rm -rf "$DEST"
-# The tarball unpacks to a single top-level qemu/ directory.
-tar -xf "${TMP}/${TARBALL}" -C "$TMP"
-mv "${TMP}/qemu" "$DEST"
+mkdir -p "$DEST"
+for t in xtensa riscv32; do
+    TARBALL="qemu-${t}-softmmu-${VER}-${ARCH}.tar.xz"
+    echo "Fetching ${TARBALL} (${REL})"
+    gh release download "$REL" --repo espressif/qemu -p "$TARBALL" -p '*checksum.sha256' -D "$TMP" --clobber
+    # Verify before extracting: this is a prebuilt binary off the network.
+    (cd "$TMP" && grep -F " *${TARBALL}" ./*checksum.sha256 | sha256sum -c -)
+    # Each tarball unpacks to a top-level qemu/; merge them as the copy path does.
+    tar -xf "${TMP}/${TARBALL}" -C "$TMP"
+    cp -R "${TMP}/qemu/." "${DEST}/"
+    rm -rf "${TMP}/qemu"
+done
 
 "${DEST}/bin/qemu-system-xtensa" --version | head -1
 echo "Installed to ${DEST}; ESPRESSIF_QEMU_PATH already points there via mise.toml [env]."

@@ -147,7 +147,7 @@ ZTEST(health_logic, test_button_wear)
 	zassert_equal(health_button_level(1000U, 0U, 80U, &pct), HEALTH_OK, "rating 0: disabled");
 	zassert_equal(pct, 0U);
 	zassert_equal(health_button_level(90000U, 100000U, 0U, &pct), HEALTH_OK,
-		      "warn_pct 0: no warning below 100%");
+		      "warn_pct 0: no warning below 100%%");
 	zassert_equal(health_button_level(UINT32_MAX, 100000U, 80U, NULL), HEALTH_CRIT,
 		      "no overflow at UINT32_MAX");
 }
