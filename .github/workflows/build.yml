@@ -352,7 +352,7 @@ jobs:
           TESTS: ${{ needs.changes.outputs.tests }}
         run: |
           if [ "$FULL" = true ]; then
-            mise run test --runnable --min-suites 31
+            mise run test --runnable --min-suites 29
           else
             mise run test --runnable $TESTS
           fi

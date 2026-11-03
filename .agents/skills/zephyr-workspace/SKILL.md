@@ -66,9 +66,10 @@ CI (`.github/workflows`) builds `rasprover --sysbuild`, `data_collection
 native_sim target, and macOS can't build native_sim either. Suites also list
 the Espressif QEMU boards `waveshare_esp32_s3_eth/esp32s3/procpu/qemu` (Xtensa)
 and `adafruit_qt_py_esp32c3/esp32c3/qemu` (RISC-V) in `integration_platforms`.
-They run on a Mac after `mise run qemu-install`, and CI runs them too. Each test
-adds a `boards/<board>_<qualifiers>.overlay` symlink to its
-`qemu_cortex_m3.overlay` for the emulated I2C/GPIO controllers. Float code traps
+They run on a Mac after `mise run qemu-install`, and CI runs them too. Only
+suites that don't need emulated buses use them: an emulated I2C/SPI/GPIO bus
+bypasses the ESP's own peripheral drivers, so it adds nothing over
+`qemu_cortex_m3`. Float code traps
 with EXCCAUSE 32 on the Xtensa board (Zephyr never sets CPENABLE on ESP), so
 float-heavy suites list only the C3.
 
