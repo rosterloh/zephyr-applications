@@ -46,7 +46,7 @@ mise run agent-build motor_controller
 # Override tail counts with TAIL_S / TAIL_F.
 ```
 
-Run the ztest suites with twister via `test`. With no `--platform` it uses each suite's `integration_platforms`; on macOS pass `--platform qemu_cortex_m3` (`native_sim` is Linux-only). Output goes to `twister-out/`.
+Run the ztest suites with twister via `test`. With no `--platform` it uses each suite's `integration_platforms`; on macOS the `native_sim` ones are skipped (Linux-only) and the Espressif `/qemu` ones (`waveshare_esp32_s3_eth/esp32s3/procpu/qemu`, `adafruit_qt_py_esp32c3/esp32c3/qemu`) need `mise run qemu-install` first. Output goes to `twister-out/`.
 
 ```bash
 mise run test                                       # every suite under applications/

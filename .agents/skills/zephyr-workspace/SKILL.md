@@ -63,9 +63,15 @@ app here uses protobuf. `protoc` comes from `mise.toml`.
 CI (`.github/workflows`) builds `rasprover --sysbuild`, `data_collection
 --sysbuild`, `embedded_vision`, `force_sensor`, `joystick_controller`,
 `motor_controller` and `pico_fw` on their default boards. It builds no
-native_sim target, and macOS can't build native_sim either. To run
-emulator-backed ztests on a Mac, use twister on `qemu_cortex_m3 --force-platform`
-with an extra overlay that adds a `zephyr,i2c-emul-controller` labelled `i2c0`.
+native_sim target, and macOS can't build native_sim either. Suites also list
+the Espressif QEMU boards `waveshare_esp32_s3_eth/esp32s3/procpu/qemu` (Xtensa)
+and `adafruit_qt_py_esp32c3/esp32c3/qemu` (RISC-V) in `integration_platforms`.
+They run on a Mac after `mise run qemu-install`, and CI runs them too. Only
+suites that don't need emulated buses use them: an emulated I2C/SPI/GPIO bus
+bypasses the ESP's own peripheral drivers, so it adds nothing over
+`qemu_cortex_m3`. Float code traps
+with EXCCAUSE 32 on the Xtensa board (Zephyr never sets CPENABLE on ESP), so
+float-heavy suites list only the C3.
 
 ## check-skills
 
