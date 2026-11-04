@@ -43,4 +43,6 @@ if(CONFIG_PROTECTIVE_STOP_HTTP)
   )
 endif()
 
+target_sources_ifdef(CONFIG_PROTECTIVE_STOP_ESPHOME app PRIVATE src/ha.c)
+
 target_include_directories(app PRIVATE src)

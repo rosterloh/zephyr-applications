@@ -44,6 +44,7 @@ An HTTP server on port 80 (8080 on native_sim) speaks upstream's
 | `GET/POST /admin/api/settings` | admin | JSON `{"ring_offset":N,"device_id":N}`; device id 0 = from the MAC |
 | `GET/POST /admin/api/wifi` | admin | JSON `{"networks":[{"ssid","pass"}]}`, up to 4; `"********"` keeps a stored password |
 | `GET /admin/api/verbose`, `POST /admin/api/verbose/toggle` | admin | debug logging on/off at runtime |
+| `POST /admin/api/esphome_key` | admin | JSON `{"key":"<base64 of 32 bytes>"}`, the Home Assistant encryption key; never read back |
 
 Admin is HTTP Basic, user `admin`, password `CONFIG_PROTECTIVE_STOP_ADMIN_PASSWORD`.
 There is no default: until one is set the admin routes answer 403 and the
@@ -68,6 +69,22 @@ Upstream's one-remote-many-machines test runs against the simulator as is:
 The simulator's sessions send from 18891+ rather than upstream's 8891+
 (`CONFIG_PROTECTIVE_STOP_LOCAL_PORT`) because that test's machines listen on
 8890+ of the same host.
+
+## Home Assistant
+
+The remote shows up in Home Assistant as an ESPHome device (`pstop`, found by
+mDNS), read-only: Stop (on while either verdict is not OK), Bonded machines,
+Lockstep faults and Health. Home Assistant is never on the stop path; a low
+priority thread polls the lockstep state and publishes changes.
+
+The API is Noise-encrypted and refuses everyone until a key is set. Make one
+with `openssl rand -base64 32`, give it to the remote with
+
+    curl -u admin:... -X POST http://<remote>/admin/api/esphome_key \
+        -d '{"key":"<the key>"}'
+
+and paste the same key into Home Assistant. `CONFIG_PROTECTIVE_STOP_ESPHOME=n`
+leaves it out (about 69 KB flash and 9.4 KB DRAM on the ESP32-S3).
 
 ## Hardware (Waveshare ESP32-S3-ETH)
 

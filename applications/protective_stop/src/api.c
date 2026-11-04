@@ -12,6 +12,7 @@
 #include <zephyr/data/json.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/sys/base64.h>
 #include <zephyr/sys/util.h>
 
 #include "api.h"
@@ -808,3 +809,48 @@ void pstop_api_admin_verbose(bool toggle, const char *auth, char *buf, size_t ca
 
 	reply(buf, cap, rsp, 200, "{\"verbose\":%s}", pstop_verbose_get() ? "true" : "false");
 }
+
+#if defined(CONFIG_PROTECTIVE_STOP_ESPHOME)
+#include <zephyr/net/esphome_api.h>
+
+struct esphome_key_json {
+	const char *key;
+};
+
+static const struct json_obj_descr esphome_key_descr[] = {
+	JSON_OBJ_DESCR_PRIM(struct esphome_key_json, key, JSON_TOK_STRING),
+};
+
+void pstop_api_admin_esphome_key(char *body, size_t body_len, const char *auth, char *buf,
+				 size_t cap, struct pstop_api_response *rsp)
+{
+	struct esphome_key_json in = {0};
+	uint8_t key[32];
+	size_t len = 0U;
+	int ret;
+
+	init_rsp(rsp);
+
+	if (!admin_ok(auth, buf, cap, rsp)) {
+		return;
+	}
+	if ((json_obj_parse(body, body_len, esphome_key_descr, ARRAY_SIZE(esphome_key_descr),
+			    &in) != BIT(0)) ||
+	    (base64_decode(key, sizeof(key), &len, (const uint8_t *)in.key, strlen(in.key)) != 0) ||
+	    (len != sizeof(key))) {
+		reply(buf, cap, rsp, 400,
+		      "{\"ok\":false,\"error\":\"expected {\\\"key\\\":\\\"<base64 of 32 "
+		      "bytes>\\\"}\"}");
+		return;
+	}
+
+	ret = esphome_api_set_psk(key);
+	(void)memset(key, 0, sizeof(key));
+	if (ret != 0) {
+		reply(buf, cap, rsp, 500, "{\"ok\":false,\"error\":\"settings write failed\"}");
+		return;
+	}
+	LOG_INF("Home Assistant API key set");
+	reply(buf, cap, rsp, 200, "{\"ok\":true}");
+}
+#endif /* CONFIG_PROTECTIVE_STOP_ESPHOME */

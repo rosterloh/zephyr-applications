@@ -13,4 +13,9 @@ config PROTECTIVE_STOP_VERBOSE
 	default y
 	select LOG_RUNTIME_FILTERING
 
+# The key route only; main.c stands in for the ESPHome API server.
+config PROTECTIVE_STOP_ESPHOME
+	bool "Home Assistant key route"
+	default y
+
 source "Kconfig.zephyr"
