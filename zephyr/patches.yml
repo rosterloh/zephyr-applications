@@ -8,7 +8,7 @@
 #
 # One manifest per module: checkout-command is a single string run in every
 # module the file names, and `git checkout --` reverts nothing at all if one
-# pathspec is unknown to that module. Pico-ROS is in patches-picoros.yml.
+# pathspec is unknown to that module.
 #
 # include/zenoh-pico/system/platform/zephyr.h, serial/uart_zephyr.c and
 # zephyr/CMakeLists.txt are no longer patched, but stay listed so checkouts and

@@ -91,12 +91,11 @@ manifest:
     #
     # Upstream vendors zenoh-pico and Micro-CDR as git submodules; we do not
     # clone them (`submodules:` is absent) because this workspace already
-    # carries both as west projects. The zenoh-pico submodule in particular
-    # points at a personal fork over SSH, which west cannot fetch.
+    # carries both as west projects.
     - name: picoros
       repo-path: Pico-ROS-software
       remote: pico-ros
-      revision: b739fc713da2ee1caa3d1c278c5ed9cc1702eaa2
+      revision: 36c987909015d1d1b7df54c986bd04f232b1c386
       path: deps/modules/lib/picoros
 
     # Micro-CDR: the CDR codec picoserdes is written against. Upstream Pico-ROS

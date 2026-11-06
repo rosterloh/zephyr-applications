@@ -128,7 +128,7 @@ description = "Fetch/update all west dependencies into deps/, re-applying the ze
 run = '''
 set -e
 
-# The zenoh and Pico-ROS patches edit tracked files in place, so a revision
+# The zenoh and Zephyr patches edit tracked files in place, so a revision
 # bump aborts with "local changes would be overwritten by checkout".
 # `west patch clean` reverts exactly the patched files (each manifest's
 # checkout-command is scoped to them). Anything else modified in those
@@ -137,8 +137,11 @@ set -e
 if [ -d "${MISE_PROJECT_ROOT}/deps/modules/lib/zenoh/.git" ]; then
     west patch clean
 fi
+# shortcut: reverts the Pico-ROS patches merged upstream (#25, #26) in checkouts
+# and cached deps/ that still carry them; drop once those caches have rolled over.
 if [ -d "${MISE_PROJECT_ROOT}/deps/modules/lib/picoros/.git" ]; then
-    west patch -l zephyr/patches-picoros.yml clean
+    git -C "${MISE_PROJECT_ROOT}/deps/modules/lib/picoros" checkout -- \
+        src/picoserdes.c src/picoros.c src/picoros.h src/picoparams.c
 fi
 if [ -d "${MISE_PROJECT_ROOT}/deps/zephyr/.git" ]; then
     west patch -l zephyr/patches-zephyr.yml clean
@@ -146,7 +149,6 @@ fi
 
 west update --narrow
 mise run patch-zenoh
-mise run patch-picoros
 mise run patch-zephyr
 '''
 
@@ -464,17 +466,6 @@ EOF
 echo "zenoh config.h written to $CONFIG_H"
 '''
 
-[tasks."patch-picoros"]
-description = "Apply zephyr/patches-picoros.yml to Pico-ROS: bounded picoserdes decoding, service reply attachments, picoparams parsing. Idempotent."
-run = '''
-set -e
-west patch -l zephyr/patches-picoros.yml clean
-west patch -l zephyr/patches-picoros.yml apply
-if git -C "${MISE_PROJECT_ROOT}/deps/modules/lib/picoros" diff --quiet; then
-    echo "patch-picoros: west patch apply changed nothing - check zephyr/patches-picoros.yml"
-    exit 1
-fi
-'''
 
 [tasks."patch-zephyr"]
 description = "Apply zephyr/patches-zephyr.yml to Zephyr: task_wdt software-only retry after a rejected hardware watchdog; hawkBit resume and revert reporting fixes. Idempotent."
