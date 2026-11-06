@@ -97,4 +97,11 @@ void pstop_api_admin_wifi(bool post, char *body, size_t body_len, const char *au
 void pstop_api_admin_verbose(bool toggle, const char *auth, char *buf, size_t cap,
 			     struct pstop_api_response *rsp);
 
+/* POST /admin/api/esphome_key -- admin. Sets the Home Assistant (ESPHome API)
+ * encryption key from {"key":"<base64 of 32 bytes>"}, as Home Assistant asks
+ * for it, and saves it. The key is never read back. body is parsed in place.
+ */
+void pstop_api_admin_esphome_key(char *body, size_t body_len, const char *auth, char *buf,
+				 size_t cap, struct pstop_api_response *rsp);
+
 #endif /* PROTECTIVE_STOP_API_H */

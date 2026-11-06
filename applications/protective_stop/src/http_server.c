@@ -108,6 +108,7 @@ enum route {
 	ROUTE_ADMIN_WIFI,
 	ROUTE_ADMIN_VERBOSE,
 	ROUTE_ADMIN_VERBOSE_TOGGLE,
+	ROUTE_ADMIN_ESPHOME_KEY,
 };
 
 /* This client's request state, claiming a free slot on its first callback.
@@ -306,6 +307,11 @@ static int route_handler(struct http_client_ctx *client, enum http_transaction_s
 	case ROUTE_ADMIN_VERBOSE_TOGGLE:
 		pstop_api_admin_verbose(true, r->auth, body, sizeof(body), &rsp);
 		break;
+#if defined(CONFIG_PROTECTIVE_STOP_ESPHOME)
+	case ROUTE_ADMIN_ESPHOME_KEY:
+		pstop_api_admin_esphome_key(r->body, r->len, r->auth, body, sizeof(body), &rsp);
+		break;
+#endif
 	default:
 		return -EINVAL;
 	}
@@ -363,6 +369,9 @@ ROUTE_DETAIL(admin_settings_detail, GET | POST, ROUTE_ADMIN_SETTINGS, JSON);
 ROUTE_DETAIL(admin_wifi_detail, GET | POST, ROUTE_ADMIN_WIFI, JSON);
 ROUTE_DETAIL(admin_verbose_detail, GET, ROUTE_ADMIN_VERBOSE, JSON);
 ROUTE_DETAIL(admin_verbose_toggle_detail, POST, ROUTE_ADMIN_VERBOSE_TOGGLE, JSON);
+#if defined(CONFIG_PROTECTIVE_STOP_ESPHOME)
+ROUTE_DETAIL(admin_esphome_key_detail, POST, ROUTE_ADMIN_ESPHOME_KEY, JSON);
+#endif
 
 HTTP_RESOURCE_DEFINE(state_res, pstop_http, "/state.json", &state_detail);
 HTTP_RESOURCE_DEFINE(pstop_peer_res, pstop_http, "/api/pstop_peer", &pstop_peer_detail);
@@ -382,6 +391,10 @@ HTTP_RESOURCE_DEFINE(admin_wifi_res, pstop_http, "/admin/api/wifi", &admin_wifi_
 HTTP_RESOURCE_DEFINE(admin_verbose_res, pstop_http, "/admin/api/verbose", &admin_verbose_detail);
 HTTP_RESOURCE_DEFINE(admin_verbose_toggle_res, pstop_http, "/admin/api/verbose/toggle",
 		     &admin_verbose_toggle_detail);
+#if defined(CONFIG_PROTECTIVE_STOP_ESPHOME)
+HTTP_RESOURCE_DEFINE(admin_esphome_key_res, pstop_http, "/admin/api/esphome_key",
+		     &admin_esphome_key_detail);
+#endif
 
 int pstop_http_start(void)
 {

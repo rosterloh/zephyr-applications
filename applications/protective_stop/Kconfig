@@ -75,6 +75,24 @@ config PROTECTIVE_STOP_VERBOSE
 
 endif # PROTECTIVE_STOP_HTTP
 
+config PROTECTIVE_STOP_ESPHOME
+	bool "Home Assistant (ESPHome native API)"
+	default y
+	select ESPHOME_API
+	select ESPHOME_API_NOISE
+	help
+	  Show the remote in Home Assistant as an ESPHome device: stop state,
+	  bonded machines, lockstep faults and health, read-only. Noise
+	  encrypted; POST /admin/api/esphome_key sets the key. Until a key is
+	  set every client is refused.
+
+config ZVFS_OPEN_ADD_SIZE_PROTECTIVE_STOP_ESPHOME
+	int
+	default 3 if PROTECTIVE_STOP_ESPHOME
+	default 0
+	help
+	  The API's listening socket and its two client slots.
+
 menu "Health counters"
 
 config PROTECTIVE_STOP_BUTTON_RATED_OPS

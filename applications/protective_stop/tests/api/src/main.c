@@ -730,6 +730,52 @@ ZTEST(api, test_admin_settings)
 	zassert_ok(app_settings_set_device_id(0xC0A80105U), "restore for the other cases");
 }
 
+static uint8_t psk_got[32];
+static int psk_calls;
+
+/* Stands in for the ESPHome API server, which this suite does not build. */
+int esphome_api_set_psk(const uint8_t key[32])
+{
+	memcpy(psk_got, key, sizeof(psk_got));
+	psk_calls++;
+	return 0;
+}
+
+static void post_esphome_key(const char *json, const char *auth)
+{
+	static char req[128];
+
+	(void)strncpy(req, json, sizeof(req) - 1U);
+	pstop_api_admin_esphome_key(req, strlen(req), auth, body, sizeof(body), &rsp);
+}
+
+ZTEST(api, test_admin_esphome_key)
+{
+	static const uint8_t want[32] = {0,  1,  2,  3,  4,  5,  6,  7,  8,  9,  10,
+					 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21,
+					 22, 23, 24, 25, 26, 27, 28, 29, 30, 31};
+	const char *good = "{\"key\":\"AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=\"}";
+
+	REQUIRE_ADMIN();
+
+	psk_calls = 0;
+	post_esphome_key(good, NULL);
+	zassert_equal(rsp.status, 401);
+	zassert_equal(psk_calls, 0);
+
+	post_esphome_key("{\"key\":\"AAECAwQF\"}", AUTH_OK);
+	zassert_equal(rsp.status, 400, "16 bytes is not a key");
+	post_esphome_key("{\"nokey\":1}", AUTH_OK);
+	zassert_equal(rsp.status, 400);
+	zassert_equal(psk_calls, 0);
+
+	post_esphome_key(good, AUTH_OK);
+	zassert_equal(rsp.status, 200);
+	assert_body("{\"ok\":true}");
+	zassert_equal(psk_calls, 1);
+	zassert_mem_equal(psk_got, want, sizeof(want));
+}
+
 static void post_wifi(const char *json)
 {
 	static char req[512];
