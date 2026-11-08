@@ -79,6 +79,11 @@ int cam_apply(const struct cfg *c)
 		goto out;
 	}
 
+	/* The DVP driver estimates 2 B/px for JPEG; 1/5 B/px holds a frame at the
+	 * default quality, and drivers drop a larger one.
+	 */
+	fmt.size = MIN(fmt.size, (uint32_t)fmt.width * fmt.height / 5);
+
 	for (int i = 0; i < NBUF; i++) {
 		if (bufs[i] != NULL && bufs[i]->size < fmt.size) {
 			video_buffer_release(bufs[i]);
@@ -107,6 +112,11 @@ int cam_apply(const struct cfg *c)
 	set_ctrl(VIDEO_CID_EXPOSURE, c->auto_exposure);
 	set_ctrl(VIDEO_CID_WHITE_BALANCE_TEMPERATURE, c->auto_wb);
 	set_ctrl(VIDEO_CID_GAIN, c->auto_gain);
+	/* Other sensors (OV3660) take the standard auto controls. */
+	set_ctrl(VIDEO_CID_EXPOSURE_AUTO,
+		 c->auto_exposure ? VIDEO_EXPOSURE_AUTO : VIDEO_EXPOSURE_MANUAL);
+	set_ctrl(VIDEO_CID_AUTO_WHITE_BALANCE, c->auto_wb);
+	set_ctrl(VIDEO_CID_AUTOGAIN, c->auto_gain);
 	use_flash = c->flash;
 
 	ret = video_stream_start(video, VIDEO_BUF_TYPE_OUTPUT);

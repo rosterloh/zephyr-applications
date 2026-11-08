@@ -1,0 +1,6 @@
+/* cam.c drives the "flash" through this label: the IR LEDs on this board. */
+/ {
+	pwmleds {
+		flash_led: ir_led {};
+	};
+};

@@ -1,6 +1,6 @@
 # Build-only: the app needs the camera, WiFi and Prusa Connect to do anything.
 sample:
-  description: Prusa Connect camera for the AI-Thinker ESP32-CAM
+  description: Prusa Connect camera for the AI-Thinker ESP32-CAM and DFRobot DFR1154
   name: prusa-cam
 common:
   build_only: true
@@ -8,7 +8,9 @@ common:
   sysbuild: true
   platform_allow:
     - ai_thinker_esp32_cam/esp32/procpu
+    - dfrobot_esp32s3_ai_cam/esp32s3/procpu
   integration_platforms:
     - ai_thinker_esp32_cam/esp32/procpu
+    - dfrobot_esp32s3_ai_cam/esp32s3/procpu
 tests:
   app.prusa_cam.default: {}

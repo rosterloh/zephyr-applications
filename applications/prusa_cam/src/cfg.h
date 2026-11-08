@@ -35,7 +35,7 @@ struct cfg {
 	uint32_t netmask;
 	uint32_t gateway;
 	uint32_t dns; /* 0: use the gateway */
-	/* OV2640 tuning: levels -2..2, the auto loops on or off */
+	/* Sensor tuning: levels -2..2, the auto loops on or off */
 	int8_t brightness;
 	int8_t contrast;
 	int8_t saturation;

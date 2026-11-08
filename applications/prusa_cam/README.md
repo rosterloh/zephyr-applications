@@ -1,18 +1,23 @@
 # prusa_cam
 
 A [Prusa Connect](https://connect.prusa3d.com) camera for the AI-Thinker
-ESP32-CAM: it takes a JPEG from the OV2640 every N seconds and uploads it to
+ESP32-CAM (OV2640) or the DFRobot ESP32-S3 AI Camera, DFR1154 (OV3660): it
+takes a JPEG every N seconds and uploads it to
 Prusa Connect over HTTPS, using the
 [camera service API v1](https://camera-service.prusa3d.com/docs/). Written from scratch for Zephyr; the feature set and
 the Connect API usage follow
 [Prusa-Firmware-ESP32-Cam](https://github.com/prusa3d/Prusa-Firmware-ESP32-Cam).
 
-Board and camera driver live in `rosterloh-drivers`
-(`ai_thinker_esp32_cam`, `espressif,esp32-i2s-cam`).
+Boards and camera drivers live in `rosterloh-drivers`
+(`ai_thinker_esp32_cam` + `espressif,esp32-i2s-cam`; `dfrobot_esp32s3_ai_cam`
++ `ovti,ov3660`). The DFR1154 uses Zephyr's LCD_CAM driver with JPEG support
+from `zephyr/patches/zephyr/0005-*`. Its "flash" is the IR LEDs, and the
+console is the USB-C port.
 
 ## Build
 
     mise run app prusa_cam --sysbuild
+    mise run app prusa_cam --sysbuild --board dfrobot_esp32s3_ai_cam/esp32s3/procpu
 
 Sysbuild adds MCUboot (swap-using-move), which hawkBit OTA needs; a plain
 build fails at Kconfig. The first flash over USB writes the bootloader too.

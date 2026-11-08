@@ -2,7 +2,7 @@
  * Copyright (c) 2026 Richard Osterloh <richard.osterloh@gmail.com>
  * SPDX-License-Identifier: Apache-2.0
  *
- * Prusa Connect camera: periodic JPEG snapshots from an OV2640 uploaded to
+ * Prusa Connect camera: periodic JPEG snapshots from an OV2640 or OV3660 uploaded to
  * Prusa Connect, configured from the shell or a small web page.
  */
 

@@ -97,9 +97,9 @@ static int send_info(const struct prusa_camera_auth *auth, const struct cfg *c)
 		.wifi_ssid = net.ssid,
 		.type = "ESP32",
 		.firmware_version = APP_VERSION_STRING,
-		.hardware_version = "AI-Thinker ESP32-CAM",
-		.manufacturer = "AI-Thinker",
-		.model = "ESP32-CAM",
+		.hardware_version = CONFIG_PRUSA_CAM_MANUFACTURER " " CONFIG_PRUSA_CAM_MODEL,
+		.manufacturer = CONFIG_PRUSA_CAM_MANUFACTURER,
+		.model = CONFIG_PRUSA_CAM_MODEL,
 	};
 
 	return prusa_camera_put_info(auth, &info);
