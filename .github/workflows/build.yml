@@ -249,15 +249,36 @@ jobs:
           path: deps/
           key: ${{ steps.deps.outputs.cache-primary-key }}
 
+      # The last footprint main recorded, for the change column. zephyr tracks
+      # main, so a delta can include upstream drift since that run.
+      - name: Restore footprint baseline
+        uses: actions/cache/restore@v6
+        with:
+          path: footprint.json
+          key: footprint-${{ matrix.app }}-${{ github.run_id }}
+          restore-keys: footprint-${{ matrix.app }}-
+
       - name: Build firmware
+        # Named so the runner adds pipefail; the default would let tee hide a failed build.
+        shell: bash
         env:
           # A per-app cache measures ~5 MiB, so this is a safety ceiling rather
           # than an allocation — ccache only ever uses what it needs.
           CCACHE_MAXSIZE: 500M
         run: |
           mise x -- ccache --zero-stats
-          mise run app ${{ matrix.app }} ${{ matrix.flags }}
+          mise run app ${{ matrix.app }} ${{ matrix.flags }} 2>&1 | tee build.log
           mise x -- ccache --show-stats
+
+      - name: Report footprint
+        run: mise x -- python scripts/ci/footprint.py build.log --app ${{ matrix.app }} --db footprint.json >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Save footprint baseline
+        if: github.event_name != 'pull_request'
+        uses: actions/cache/save@v6
+        with:
+          path: footprint.json
+          key: footprint-${{ matrix.app }}-${{ github.run_id }}-${{ github.run_attempt }}
 
   # Parallel to the build matrix: twister on native_sim/qemu needs none of the
   # per-app board plumbing. twister-out/ is never cached, so every run is fresh.
