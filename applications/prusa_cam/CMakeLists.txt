@@ -8,6 +8,7 @@ project(prusa_cam)
 
 include(${CMAKE_CURRENT_LIST_DIR}/../common/http_util/http_util.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/../common/prusa_camera/prusa_camera.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/../common/build_id/build_id.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/../common/watchdog/watchdog.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/../common/img_confirm/img_confirm.cmake)
 

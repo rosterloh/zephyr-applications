@@ -1,0 +1,42 @@
+/* Reset-reason record (applications/common/reset_reason) in the last 256 bytes
+ * of RTC slow RAM, which software and watchdog resets leave intact.
+ */
+/ {
+	/* Coredump pseudo-device: applications/common/build_id registers the
+	 * build-ID note with it at boot, so every dump names its ELF.
+	 */
+	app_coredump: app-coredump {
+		compatible = "zephyr,coredump";
+		coredump-type = "COREDUMP_TYPE_MEMCPY";
+	};
+
+	memory@50001f00 {
+		compatible = "zephyr,memory-region", "mmio-sram";
+		reg = <0x50001f00 0x100>;
+		ranges = <0x0 0x50001f00 0x100>;
+		#address-cells = <1>;
+		#size-cells = <1>;
+		zephyr,memory-region = "RTC_SLOW_RAM_RETAINED_MEM";
+		status = "okay";
+
+		retainedmem0: retainedmem {
+			compatible = "zephyr,retained-ram";
+			ranges;
+			#address-cells = <1>;
+			#size-cells = <1>;
+			status = "okay";
+
+			app_reset_reason: retention@0 {
+				compatible = "zephyr,retention";
+				reg = <0x0 0x40>;
+				prefix = [52 53 54 52];
+				checksum = <2>;
+			};
+		};
+	};
+};
+
+/* 8 KB - 256 bytes, so the linker keeps out of the retained region. */
+&rtc_slow_ram {
+	reg = <0x50000000 0x1f00>;
+};
