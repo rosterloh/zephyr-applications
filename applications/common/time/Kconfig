@@ -36,3 +36,13 @@ config APP_TIME_SNTP_RESYNC_SEC
 	range 60 86400
 
 endif # APP_TIME_SYNC
+
+# The sync work (DNS lookup, SNTP socket setup and send) runs on the system
+# workqueue and the SNTP reply handler on the socket service thread. On the
+# ESP32-P4 both overflowed their defaults (1024 and 1200; the workqueue peaked
+# at 1380), silently corrupting a neighbouring thread's stack.
+config SYSTEM_WORKQUEUE_STACK_SIZE
+	default 2048 if APP_TIME_SYNC
+
+config NET_SOCKETS_SERVICE_STACK_SIZE
+	default 2048 if APP_TIME_SYNC

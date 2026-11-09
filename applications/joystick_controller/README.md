@@ -46,17 +46,39 @@ a stop. The robot side must time out stale commands (Servo's
 
 ## Boards
 
+The app boots through MCUboot, so build with `--sysbuild` to get the
+bootloader too; `flash` then writes both.
+
 ```bash
-mise run app joystick_controller                                              # QT Py ESP32-S3 + Joy FeatherWing
-mise run app joystick_controller --board esp32p4_wifi6_poe_eth/esp32p4/hpcore # ESP32-P4 PoE + R400B stick
+mise run app joystick_controller --sysbuild                                              # QT Py ESP32-S3 + Joy FeatherWing
+mise run app joystick_controller --sysbuild --board esp32p4_wifi6_poe_eth/esp32p4/hpcore # ESP32-P4 PoE + R400B stick
+mise run flash joystick_controller
 ```
 
-For a mobile base instead of an arm (the `app` task takes no extra CMake
-arguments):
+With more than one serial device attached, name the port:
+`mise x -- west flash --build-dir builds/joystick_controller --esp-device /dev/cu.usbmodemXXXX`.
+
+### Pointing it at your ROS host
+
+The defaults (router `tcp/192.168.1.10:7447`, `ROS_DOMAIN_ID` 0, SNTP
+`pool.ntp.org`, arm target) rarely match a real setup. Put the overrides in a
+fragment outside the repo, e.g. `builds/joystick_host.conf` (gitignored):
+
+```
+CONFIG_APP_PICOROS_LOCATOR="tcp/<host-ip>:7447"
+CONFIG_APP_PICOROS_DOMAIN_ID=0
+CONFIG_APP_TIME_SNTP_SERVER="<the host's NTP server>"
+# CONFIG_APP_TELEOP_TARGET_BASE=y   # mobile base on /cmd_vel instead of an arm
+```
+
+The `app` task takes no extra CMake arguments, so build with `west` directly.
+Under sysbuild the option needs the image-name prefix and an absolute path:
 
 ```bash
-mise x -- west build -b esp32p4_wifi6_poe_eth/esp32p4/hpcore -p always --build-dir builds/joystick_controller \
-  applications/joystick_controller -- -DCONFIG_APP_TELEOP_TARGET_BASE=y
+mise x -- west build -b esp32p4_wifi6_poe_eth/esp32p4/hpcore -p always --sysbuild \
+  --build-dir builds/joystick_controller applications/joystick_controller -- \
+  -Djoystick_controller_EXTRA_CONF_FILE=$PWD/builds/joystick_host.conf
+mise run flash joystick_controller
 ```
 
 ### Adafruit QT Py ESP32-S3 + Joy FeatherWing (Wi-Fi, 2-axis)
@@ -96,11 +118,32 @@ Address comes from DHCP.
 
 ## Host
 
-Run the router whose zenoh version matches the `zenoh` pin in `west.yml`:
+Run the router whose zenoh version matches the `zenoh` pin in `west.yml`, on
+an address the controller can reach (the locator above), and use the same
+domain as `APP_PICOROS_DOMAIN_ID`:
 
 ```bash
 ros2 run rmw_zenoh_cpp rmw_zenohd
-RMW_IMPLEMENTATION=rmw_zenoh_cpp ros2 topic echo /cmd_vel
+export RMW_IMPLEMENTATION=rmw_zenoh_cpp ROS_DOMAIN_ID=0
+ros2 topic echo /servo_node/delta_twist_cmds   # arm; /cmd_vel for a base build
+```
+
+MoveIt Servo starts out expecting joint jog commands and ignores twists
+until switched (a teleop UI may do this for you):
+
+```bash
+ros2 service call /servo_node/switch_command_type moveit_msgs/srv/ServoCommandType "{command_type: 1}"
+```
+
+To check an arm build without a robot, `host/cube.py` moves a cube in RViz
+from the TwistStamped stream and logs the rate and stamp age once a second
+(Servo drops stamps older than 0.1 s by default). Run both from this
+directory in a ROS 2 env on the controller's domain and router. The camera
+sits behind the robot, so stick forward moves the cube up the screen:
+
+```bash
+python host/cube.py &
+rviz2 -d host/cube.rviz
 ```
 
 ## Calibration
@@ -116,6 +159,12 @@ teleop cal show
 ```
 
 ## Hardware check
+
+For bench bring-up add `debug.conf` to the extra conf files
+(`-Djoystick_controller_EXTRA_CONF_FILE="<abs>/debug.conf;<abs>/joystick_host.conf"`).
+It adds `input dump on` for stick events, `gpio get gpio0 6` etc. for the
+switches and `net iface` for the link and DHCP. `gpio get` prints the logical
+value (the overlay's active-low already applied), not the raw pin level.
 
 Arm (default), with `ros2 topic echo /servo_node/delta_twist_cmds` and
 `ros2 topic hz` on it; base builds publish the same on `/cmd_vel` as Twist:
