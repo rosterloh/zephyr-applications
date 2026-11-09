@@ -103,6 +103,16 @@ ros2 run rmw_zenoh_cpp rmw_zenohd
 RMW_IMPLEMENTATION=rmw_zenoh_cpp ros2 topic echo /cmd_vel
 ```
 
+To check an arm build without a robot, `host/cube.py` moves a cube in RViz
+from the TwistStamped stream and logs the rate and stamp age once a second
+(Servo drops stamps older than 0.1 s). Run both in a ROS 2 env on the
+controller's domain and router:
+
+```bash
+python host/cube.py &
+rviz2 -d host/cube.rviz
+```
+
 ## Calibration
 
 The pots cover only part of the ADC range, so calibrate each new stick. The
