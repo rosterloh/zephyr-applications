@@ -22,6 +22,9 @@ console is the USB-C port.
 Sysbuild adds MCUboot (swap-using-move), which hawkBit OTA needs; a plain
 build fails at Kconfig. The first flash over USB writes the bootloader too.
 
+It also builds for `native_sim/native/64`, with a canned-JPEG camera and host
+sockets, for the integration tests: see `tests/integration/README.md`.
+
 ## Setup (serial console, 115200)
 
 1. In Prusa Connect: printer → Camera → *Add new other camera*, copy the token.

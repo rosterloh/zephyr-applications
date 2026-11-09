@@ -260,5 +260,5 @@ int main(void)
 	net_mgmt_add_event_callback(&ipv4_cb);
 	k_work_submit(&hawkbit_start);
 
-	return app_wifi_init();
+	return IS_ENABLED(CONFIG_WIFI) ? app_wifi_init() : 0;
 }

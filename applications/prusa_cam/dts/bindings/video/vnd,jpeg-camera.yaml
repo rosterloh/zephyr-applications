@@ -1,0 +1,10 @@
+# Copyright (c) 2026 Richard Osterloh
+# SPDX-License-Identifier: Apache-2.0
+
+description: |
+  Stand-in JPEG camera for native_sim builds of prusa_cam: every frame is the
+  same small JPEG (sim/frame.jpg).
+
+compatible: "vnd,jpeg-camera"
+
+include: base.yaml

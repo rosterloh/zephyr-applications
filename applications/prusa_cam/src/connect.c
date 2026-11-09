@@ -54,7 +54,7 @@ static void net_info_update(void)
 	struct net_in_addr *a;
 
 	memset(&net, 0, sizeof(net));
-	if (iface == NULL) {
+	if (!IS_ENABLED(CONFIG_WIFI) || iface == NULL) {
 		return;
 	}
 	ll = net_if_get_link_addr(iface);

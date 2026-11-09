@@ -24,6 +24,20 @@ config PRUSA_CAM_MODEL
 	default "DFR1154" if BOARD_DFROBOT_ESP32S3_AI_CAM
 	default "ESP32-CAM"
 
+# native_sim binds host ports: below 1024 needs root, and protective_stop
+# has 8080 when twister runs both at once.
+config PRUSA_CAM_HTTP_PORT
+	int "Config page and API port"
+	default 8280 if BOARD_NATIVE_SIM
+	default 80
+
+config PRUSA_CAM_STREAM_PORT
+	int "MJPEG stream port"
+	default 8281 if BOARD_NATIVE_SIM
+	default 81
+	help
+	  The config page links to port 81.
+
 endmenu
 
 rsource "../common/prusa_camera/Kconfig"

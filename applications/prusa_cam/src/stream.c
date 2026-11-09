@@ -23,8 +23,8 @@
 
 LOG_MODULE_REGISTER(stream, LOG_LEVEL_INF);
 
-#define PORT        81 /* index.html links here */
-#define IO_TIMEOUT  5  /* seconds; also bounds a viewer that stops reading */
+#define PORT        CONFIG_PRUSA_CAM_STREAM_PORT
+#define IO_TIMEOUT  5 /* seconds; also bounds a viewer that stops reading */
 #define AUTH_PREFIX "Authorization:"
 
 static char req[768];

@@ -15,6 +15,17 @@ config PRUSA_CAMERA_HOST
 	string "Camera service host"
 	default "camera-service.prusa3d.com"
 
+config PRUSA_CAMERA_PORT
+	string "Camera service port"
+	default "443"
+
+config PRUSA_CAMERA_TLS
+	bool "HTTPS to the camera service"
+	default y
+	help
+	  Off only for tests against a local plain-HTTP stand-in for the
+	  service: the token would otherwise go out in clear text.
+
 config PRUSA_CAMERA_CA_TAG
 	int "First of three TLS credential tags for the service's CAs"
 	default 1
