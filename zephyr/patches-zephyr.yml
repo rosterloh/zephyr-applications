@@ -1,6 +1,10 @@
 # Zephyr patches, applied after `west update` via
 # `west patch -l zephyr/patches-zephyr.yml apply` (`mise run patch-zephyr`).
 # Its own manifest for the checkout-command reason in zephyr/patches.yml.
+#
+# drivers/input/input_analog_axis.c and dts/bindings/input/analog-axis.yaml are
+# no longer patched (upstream 19cd5e04a92), but stay listed so checkouts and CI
+# caches carrying the old 0004 edits can still be reverted.
 checkout-command: >-
   git checkout --
   subsys/task_wdt/task_wdt.c
@@ -45,15 +49,3 @@ patches:
     comments: |
       With HAWKBIT_CONFIRM_IMG_ON_INIT=n and an image MCUboot reverted,
       the old image reported the action as a success.
-  - path: zephyr/0004-input-analog_axis-fix-invert-output-with-a-signed-ra.patch
-    sha256sum: 2b19941f5a12cf79b5145ae04c5f3df7c20df736313d776e8ea803a74c5ca7d0
-    module: deps/zephyr
-    author: Richard Osterloh
-    email: richard.osterloh@gmail.com
-    date: 2026-11-02
-    upstreamable: true
-    merge-pr: https://github.com/zephyrproject-rtos/zephyr/pull/124345
-    issue: https://github.com/rosterloh/zephyr-applications/issues/149
-    comments: |
-      invert-output computed out-max - out, so a signed range (e.g.
-      -1000..1000) inverted out of range: centred read 1000.

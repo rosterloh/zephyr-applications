@@ -7,7 +7,8 @@ description: >
   says "check the workspace skill"; or when you need to know which board root,
   module or example app in this repo to look at. Triggers on `mise run app`,
   `mise run flash`, `agent-build`, rosterloh-drivers, applications/<app>,
-  "which boards live where", "which apps use sysbuild", check-skills.
+  "which boards live where", "which apps use sysbuild", check-skills, patching
+  Zephyr or zenoh-pico, `west patch`, zephyr/patches*.yml, patch-zephyr.
 ---
 
 # zephyr-applications workspace
@@ -73,6 +74,52 @@ bypasses the ESP's own peripheral drivers, so it adds nothing over
 with EXCCAUSE 32 on the Xtensa board (Zephyr never sets CPENABLE on ESP), so
 float-heavy suites list only the C3.
 
+## Patching west modules
+
+Fixes not yet upstream are carried as `git format-patch` files and applied with
+`west patch`, never committed into `deps/`.
+
+| Module | Manifest | Patches | Task |
+|---|---|---|---|
+| zenoh-pico (`deps/modules/lib/zenoh`) | `zephyr/patches.yml` | `zephyr/patches/zenoh/` | `mise run patch-zenoh` |
+| Zephyr (`deps/zephyr`) | `zephyr/patches-zephyr.yml` | `zephyr/patches/zephyr/` | `mise run patch-zephyr` |
+
+`mise run west-update` runs `west patch clean` on both, updates, then both
+patch tasks. Each task cleans before applying (`git apply` isn't idempotent) and
+fails if the module tree ends up unchanged, since `west patch apply` reports
+"0 patches applied successfully" instead of failing when `module:` resolves to
+nothing. Use the workspace path (`deps/modules/lib/zenoh`) as `module:`.
+
+Rules the manifests depend on:
+
+- One manifest per module. `checkout-command` runs in every module a manifest
+  names, and `git checkout --` reverts nothing if one pathspec is unknown there.
+- `checkout-command` lists exactly the patched files, and `clean-command` is
+  `""`. The default (`git checkout .` + `git clean -dfx`) would wipe PR work in
+  the checkout and zenoh's generated `config.h`.
+- Editing a `.patch` file means updating its `sha256sum`.
+
+Add a patch:
+
+1. `west patch -l zephyr/patches-zephyr.yml clean` (applied patches are
+   uncommitted edits), then commit the fix on a branch in `deps/zephyr`. The
+   branch doubles as the upstream PR branch.
+2. `git -C deps/zephyr format-patch -1 -o ../../zephyr/patches/zephyr/`, numbered after the last one.
+3. Add an entry: `path`, `sha256sum` (`shasum -a 256 <file>`), `module`,
+   `author`/`email`/`date`, `upstreamable`, `issue` (tracking issue here or the
+   upstream PR), `merge-pr` once an upstream PR exists, and `comments` saying
+   what breaks without it.
+4. Add every file it touches to `checkout-command`.
+5. `git -C deps/zephyr checkout -` back to west's revision, then `mise run patch-zephyr`.
+
+Retire a patch once its `merge-pr` merged and the pinned revision contains it
+(`git -C deps/zephyr merge-base --is-ancestor <merge-sha> HEAD`):
+delete the entry and file, but keep its paths in `checkout-command` with a
+comment, so stale checkouts and CI caches still revert. Close its tracking issue.
+If that empties a manifest, remove the manifest and its patch task too, or the
+"changed nothing" check fails. Pico-ROS carries no patches now; `west-update`
+only reverts the old ones.
+
 ## check-skills
 
 `mise run check-skills` runs the zephyr skill's bundled
@@ -90,3 +137,5 @@ warning to re-check, not a failure.
       just bare `west build`.
 - [ ] After `mise run west-update`, `mise run check-skills` reports no unknown
       symbols.
+- [ ] A new or edited patch has a matching `sha256sum`, its files are in
+      `checkout-command`, and `mise run patch-<module>` succeeds.
