@@ -51,12 +51,13 @@ patches:
       With HAWKBIT_CONFIRM_IMG_ON_INIT=n and an image MCUboot reverted,
       the old image reported the action as a success.
   - path: zephyr/0005-drivers-video-esp32_dvp-capture-JPEG-frames.patch
-    sha256sum: 7983a1ce28bafa6d5a67fde3139021aec04d05c7e8a3b3a02cd918bd38136566
+    sha256sum: cc5f516d82370a85140a3ecc578ed7ce1e001a9075149e88d028d4c9b5b6c5ad
     module: deps/zephyr
     author: Richard Osterloh
     email: richard.osterloh@gmail.com
     date: 2026-11-08
     upstreamable: true
     comments: |
-      The ESP32-S3 LCD_CAM driver could only capture fixed-size frames;
-      JPEG (OV3660 on the DFRobot DFR1154) needs the length from the DMA.
+      The ESP32-S3 LCD_CAM driver could only capture fixed-size frames
+      and stopped after the first one; JPEG (OV3660 on the DFRobot DFR1154)
+      lost frame headers and data at UXGA.
