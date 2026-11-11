@@ -14,6 +14,16 @@ config PRUSA_CAM_STREAM_STACK_SIZE
 	int "MJPEG stream thread stack size"
 	default 2048
 
+config PRUSA_CAM_MANUFACTURER
+	string "Camera manufacturer reported to Prusa Connect"
+	default "DFRobot" if BOARD_DFROBOT_ESP32S3_AI_CAM
+	default "AI-Thinker"
+
+config PRUSA_CAM_MODEL
+	string "Camera model reported to Prusa Connect"
+	default "DFR1154" if BOARD_DFROBOT_ESP32S3_AI_CAM
+	default "ESP32-CAM"
+
 endmenu
 
 rsource "../common/prusa_camera/Kconfig"

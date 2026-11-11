@@ -1,0 +1,236 @@
+From 02d90b6144bac04beaa5ce8ebfeddf222f1d9778 Mon Sep 17 00:00:00 2001
+From: Richard Osterloh <richard.osterloh@gmail.com>
+Date: Sun, 8 Nov 2026 21:00:00 +0000
+Subject: [PATCH] drivers: video: esp32_dvp: capture JPEG frames
+
+The driver programmed pitch * height bytes per buffer, which is 0 for
+JPEG, and only captured fixed-size frames continuously.
+
+For JPEG, give the DMA the whole buffer and end the frame at VSYNC.
+Take the length from EOI on dequeue: the DMA status counts a prefetched
+descriptor. Drop frames without SOI (capture began mid-frame) and
+frames larger than the buffer.
+
+Restart the CAM with each DMA reload, as re-arming the DMA alone lets
+the CAM FIFO overflow and lose the start of the next frame. Use 64-byte
+bursts: single 16-byte PSRAM writes lose data at JPEG frame sizes.
+
+Size DMA blocks to one descriptor each (4032 bytes, 64-byte aligned)
+instead of 4095, which the GDMA split into two.
+
+Resume the DMA on enqueue when it parked for lack of a free buffer;
+capture otherwise stopped after the first frame.
+
+Assisted-by: Claude:claude-opus-5-5
+---
+ drivers/video/video_esp32_dvp.c | 118 +++++++++++++++++++++++++++++++-
+ 1 file changed, 115 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/video/video_esp32_dvp.c b/drivers/video/video_esp32_dvp.c
+index 6f46aa4d011..4a15bec45f9 100644
+--- a/drivers/video/video_esp32_dvp.c
++++ b/drivers/video/video_esp32_dvp.c
+@@ -7,6 +7,7 @@
+ 
+ #define DT_DRV_COMPAT espressif_esp32_lcd_cam_dvp
+ 
++#include <hal/dma_types.h>
+ #include <hal/gdma_channel.h>
+ #include <zephyr/device.h>
+ #include <zephyr/drivers/clock_control/esp32_clock_control.h>
+@@ -15,6 +16,7 @@
+ #include <zephyr/drivers/video.h>
+ #include <zephyr/drivers/interrupt_controller/intc_esp32.h>
+ #include <zephyr/kernel.h>
++#include <zephyr/sys/byteorder.h>
+ #include <hal/cam_hal.h>
+ #include <hal/cam_ll.h>
+ 
+@@ -24,7 +26,8 @@
+ 
+ LOG_MODULE_REGISTER(video_esp32_lcd_cam, CONFIG_VIDEO_LOG_LEVEL);
+ 
+-#define VIDEO_ESP32_DMA_BUFFER_MAX_SIZE 4095
++/* One GDMA descriptor per block: the GDMA splits anything larger. */
++#define VIDEO_ESP32_DMA_BUFFER_MAX_SIZE DMA_DESCRIPTOR_BUFFER_MAX_SIZE_64B_ALIGNED
+ #define VIDEO_ESP32_VSYNC_MASK          0x04
+ 
+ #ifdef CONFIG_POLL
+@@ -71,6 +74,11 @@ struct video_esp32_data {
+ #endif
+ };
+ 
++static bool video_esp32_is_jpeg(const struct video_esp32_data *data)
++{
++	return data->video_format.pixelformat == VIDEO_PIX_FMT_JPEG;
++}
++
+ static int video_esp32_reload_dma(struct video_esp32_data *data)
+ {
+ 	const struct video_esp32_config *cfg = data->config;
+@@ -81,6 +89,15 @@ static int video_esp32_reload_dma(struct video_esp32_data *data)
+ 		return -EAGAIN;
+ 	}
+ 
++	/* Re-arming the DMA alone leaves the CAM FIFO running: it overflows
++	 * meanwhile and loses the start of the next JPEG frame. Restart the CAM
++	 * as for the first frame; a frame it joins midway has no SOI and is
++	 * dropped.
++	 */
++	if (video_esp32_is_jpeg(data)) {
++		cam_ll_stop(data->hal.hw);
++	}
++
+ 	ret = dma_reload(cfg->dma_dev, cfg->rx_dma_channel, 0, (uint32_t)data->active_vbuf->buffer,
+ 			 data->active_vbuf->bytesused);
+ 	if (ret < 0) {
+@@ -94,16 +111,40 @@ static int video_esp32_reload_dma(struct video_esp32_data *data)
+ 		return ret;
+ 	}
+ 
++	if (video_esp32_is_jpeg(data)) {
++		cam_ll_reset(data->hal.hw);
++		cam_ll_fifo_reset(data->hal.hw);
++		cam_ll_start(data->hal.hw);
++	}
++
+ 	return 0;
+ }
+ 
++/* Bytes the DMA has written, counting a prefetched descriptor: an upper bound */
++static size_t video_esp32_jpeg_received(struct video_esp32_data *data)
++{
++	const struct video_esp32_config *cfg = data->config;
++	struct dma_status stat;
++
++	if (dma_get_status(cfg->dma_dev, cfg->rx_dma_channel, &stat) < 0) {
++		return 0;
++	}
++
++	return MIN(stat.total_copied, data->active_vbuf->bytesused);
++}
++
+ void video_esp32_dma_rx_done(const struct device *dev, void *user_data, uint32_t channel,
+ 			     int status)
+ {
+ 	struct video_esp32_data *data = user_data;
+ 
+ 	if (status == DMA_STATUS_BLOCK) {
+-		LOG_DBG("received block");
++		/* A JPEG frame larger than the buffer never reaches EOF: drop it. */
++		if (video_esp32_is_jpeg(data) && data->active_vbuf != NULL &&
++		    video_esp32_jpeg_received(data) >= data->active_vbuf->bytesused) {
++			LOG_WRN("JPEG frame larger than %u B, dropped", data->active_vbuf->size);
++			video_esp32_reload_dma(data);
++		}
+ 		return;
+ 	}
+ 
+@@ -119,6 +160,16 @@ void video_esp32_dma_rx_done(const struct device *dev, void *user_data, uint32_t
+ 		return;
+ 	}
+ 
++	/* No SOI: capture started mid-frame, after a drop or stream start. The
++	 * DMA status does not give the length reliably; dequeue finds EOI.
++	 */
++	if (video_esp32_is_jpeg(data)) {
++		if (data->active_vbuf->buffer[0] != 0xFF || data->active_vbuf->buffer[1] != 0xD8) {
++			video_esp32_reload_dma(data);
++			return;
++		}
++	}
++
+ 	data->active_vbuf->timestamp = k_uptime_get_32();
+ 	k_fifo_put(&data->fifo_out, data->active_vbuf);
+ 	VIDEO_ESP32_RAISE_OUT_SIG_IF_ENABLED(VIDEO_BUF_DONE)
+@@ -214,6 +265,12 @@ static int video_esp32_set_stream(const struct device *dev, bool enable, enum vi
+ 	dma_cfg.user_data = data;
+ 	dma_cfg.dma_slot = SOC_GDMA_TRIG_PERIPH_CAM0;
+ 	dma_cfg.complete_callback_en = 1;
++	/* Single 16-byte PSRAM writes do not keep up with the CAM FIFO at JPEG
++	 * frame sizes and lose data. The GDMA falls back to smaller bursts for
++	 * a buffer not aligned to 64.
++	 */
++	dma_cfg.dest_burst_length = 64;
++	dma_cfg.source_burst_length = 64;
+ 	dma_cfg.head_block = &data->dma_blocks[0];
+ 
+ 	error = dma_config(cfg->dma_dev, cfg->rx_dma_channel, &dma_cfg);
+@@ -299,11 +356,56 @@ static int video_esp32_enqueue(const struct device *dev, struct video_buffer *vb
+ {
+ 	struct video_esp32_data *data = dev->data;
+ 
+-	vbuf->bytesused = data->video_format.pitch * data->video_format.height;
++	if (video_esp32_is_jpeg(data)) {
++		/* Variable length: the DMA may fill the whole buffer */
++		vbuf->bytesused = vbuf->size;
++	} else {
++		vbuf->bytesused = data->video_format.pitch * data->video_format.height;
++	}
+ 	vbuf->line_offset = 0;
+ 
+ 	k_fifo_put(&data->fifo_in, vbuf);
+ 
++	/* The DMA parked when the last frame found no free buffer: resume it */
++	unsigned int key = irq_lock();
++
++	if (data->is_streaming && data->active_vbuf == NULL) {
++		data->active_vbuf = k_fifo_get(&data->fifo_in, K_NO_WAIT);
++		(void)video_esp32_reload_dma(data);
++	}
++	irq_unlock(key);
++
++	return 0;
++}
++
++/*
++ * Length of the JPEG frame at buf, or 0 without EOI. Marker segments are
++ * skipped by their length since their payload (tables) may hold FF D9; in the
++ * entropy-coded data after SOS, 0xFF is only followed by 00 or a marker.
++ */
++static size_t video_esp32_jpeg_len(const uint8_t *buf, size_t size)
++{
++	size_t i = 2;
++
++	while (i + 4 <= size && buf[i] == 0xFF) {
++		uint8_t marker = buf[i + 1];
++
++		if (marker == 0xFF) {
++			i++;
++			continue;
++		}
++		i += 2 + sys_get_be16(&buf[i + 2]);
++		if (marker == 0xDA) {
++			break;
++		}
++	}
++
++	for (; i + 1 < size; i++) {
++		if (buf[i] == 0xFF && buf[i + 1] == 0xD9) {
++			return i + 2;
++		}
++	}
++
+ 	return 0;
+ }
+ 
+@@ -318,6 +420,16 @@ static int video_esp32_dequeue(const struct device *dev, struct video_buffer **v
+ 		return -EAGAIN;
+ 	}
+ 
++	if (video_esp32_is_jpeg(data)) {
++		size_t len = video_esp32_jpeg_len((*vbuf)->buffer, (*vbuf)->bytesused);
++
++		if (len == 0) {
++			LOG_WRN("JPEG frame without EOI");
++		} else {
++			(*vbuf)->bytesused = len;
++		}
++	}
++
+ 	return 0;
+ }
+ 
+-- 
+2.53.0
+
