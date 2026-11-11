@@ -36,11 +36,11 @@ LOG_MODULE_REGISTER(web, LOG_LEVEL_INF);
 
 HTTP_SERVER_REGISTER_HEADER_CAPTURE(capture_authorization, "Authorization");
 
-static uint16_t http_port = 80;
+static uint16_t http_port = CONFIG_PRUSA_CAM_HTTP_PORT;
 HTTP_SERVICE_DEFINE(prusa_http, NULL, &http_port, CONFIG_HTTP_SERVER_MAX_CLIENTS, 2, NULL, NULL,
 		    NULL);
 DNS_SD_REGISTER_TCP_SERVICE(prusa_http_sd, CONFIG_NET_HOSTNAME, "_http", "local", DNS_SD_EMPTY_TXT,
-			    80);
+			    CONFIG_PRUSA_CAM_HTTP_PORT);
 
 static const uint8_t index_gz[] = {
 #include "index.html.gz.inc"

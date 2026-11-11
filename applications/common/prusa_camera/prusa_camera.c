@@ -62,19 +62,21 @@ static int tls_connect(void)
 	int sock;
 	int ret;
 
-	ret = zsock_getaddrinfo(HOST, "443", &hints, &res);
+	ret = zsock_getaddrinfo(HOST, CONFIG_PRUSA_CAMERA_PORT, &hints, &res);
 	if (ret != 0) {
 		LOG_WRN("DNS %s failed (%d)", HOST, ret);
 		return -EHOSTUNREACH;
 	}
 
-	sock = zsock_socket(res->ai_family, SOCK_STREAM, IPPROTO_TLS_1_2);
+	sock = zsock_socket(res->ai_family, SOCK_STREAM,
+			    IS_ENABLED(CONFIG_PRUSA_CAMERA_TLS) ? IPPROTO_TLS_1_2 : IPPROTO_TCP);
 	if (sock < 0) {
 		ret = -errno;
 		goto out;
 	}
-	if (zsock_setsockopt(sock, SOL_TLS, TLS_SEC_TAG_LIST, tags, sizeof(tags)) < 0 ||
-	    zsock_setsockopt(sock, SOL_TLS, TLS_HOSTNAME, HOST, sizeof(HOST)) < 0 ||
+	if ((IS_ENABLED(CONFIG_PRUSA_CAMERA_TLS) &&
+	     (zsock_setsockopt(sock, SOL_TLS, TLS_SEC_TAG_LIST, tags, sizeof(tags)) < 0 ||
+	      zsock_setsockopt(sock, SOL_TLS, TLS_HOSTNAME, HOST, sizeof(HOST)) < 0)) ||
 	    zsock_connect(sock, res->ai_addr, res->ai_addrlen) < 0) {
 		ret = -errno;
 		zsock_close(sock);

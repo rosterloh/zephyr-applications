@@ -1,16 +1,50 @@
-# Build-only: the app needs the camera, WiFi and Prusa Connect to do anything.
 sample:
   description: Prusa Connect camera for the AI-Thinker ESP32-CAM and DFRobot DFR1154
   name: prusa-cam
-common:
-  build_only: true
-  # hawkBit needs MCUboot.
-  sysbuild: true
-  platform_allow:
-    - ai_thinker_esp32_cam/esp32/procpu
-    - dfrobot_esp32s3_ai_cam/esp32s3/procpu
-  integration_platforms:
-    - ai_thinker_esp32_cam/esp32/procpu
-    - dfrobot_esp32s3_ai_cam/esp32s3/procpu
+# Platforms are per scenario, not in common: twister merges list keys into each
+# scenario, and excluding an inherited integration platform is an error.
 tests:
-  app.prusa_cam.default: {}
+  # hawkBit needs MCUboot.
+  app.prusa_cam.default:
+    build_only: true
+    sysbuild: true
+    platform_allow:
+      - ai_thinker_esp32_cam/esp32/procpu
+      - dfrobot_esp32s3_ai_cam/esp32s3/procpu
+    integration_platforms:
+      - ai_thinker_esp32_cam/esp32/procpu
+      - dfrobot_esp32s3_ai_cam/esp32s3/procpu
+  # tests/integration/test_integration.py against a local stand-in for the
+  # camera service, over plain HTTP; the firmware runs on the host.
+  app.prusa_cam.integration:
+    platform_allow:
+      - native_sim/native/64
+    integration_platforms:
+      - native_sim/native/64
+    timeout: 240
+    extra_configs:
+      - CONFIG_PRUSA_CAMERA_TLS=n
+      - CONFIG_PRUSA_CAMERA_PORT="18080"
+      - CONFIG_PRUSA_CAMERA_HOST="127.0.0.1"
+    harness: pytest
+    harness_config:
+      # One boot for the whole module: the tests build on each other's settings.
+      pytest_dut_scope: module
+      pytest_root:
+        - "tests/integration/test_integration.py"
+  # The same tests on the board, over its serial shell and WiFi. Runs only with
+  # --device-testing (`mise run hil prusa_cam`), which also passes the host's
+  # address as CONFIG_PRUSA_CAMERA_HOST; otherwise build-only.
+  app.prusa_cam.hil:
+    sysbuild: true
+    platform_allow:
+      - dfrobot_esp32s3_ai_cam/esp32s3/procpu
+    timeout: 300
+    extra_configs:
+      - CONFIG_PRUSA_CAMERA_TLS=n
+      - CONFIG_PRUSA_CAMERA_PORT="18080"
+    harness: pytest
+    harness_config:
+      pytest_dut_scope: module
+      pytest_root:
+        - "tests/integration/test_integration.py"

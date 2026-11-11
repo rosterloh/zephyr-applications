@@ -502,7 +502,7 @@ case "${usage_app}" in
     rasprover)            ALLOWED="ros_driver/esp32/procpu native_sim/native/64"; DEFAULT="ros_driver/esp32/procpu" ;;
     data_collection)      ALLOWED="esp32p4_nano/esp32p4/hpcore esp32p4_wifi6_poe_eth/esp32p4/hpcore"; DEFAULT="esp32p4_nano/esp32p4/hpcore" ;;
     protective_stop)      ALLOWED="waveshare_esp32_s3_eth/esp32s3/procpu native_sim/native/64"; DEFAULT="native_sim/native/64" ;;
-    prusa_cam)            ALLOWED="ai_thinker_esp32_cam/esp32/procpu dfrobot_esp32s3_ai_cam/esp32s3/procpu"; DEFAULT="ai_thinker_esp32_cam/esp32/procpu" ;;
+    prusa_cam)            ALLOWED="ai_thinker_esp32_cam/esp32/procpu dfrobot_esp32s3_ai_cam/esp32s3/procpu native_sim/native/64"; DEFAULT="ai_thinker_esp32_cam/esp32/procpu" ;;
     *) echo "unknown app: ${usage_app}" >&2; exit 2 ;;
 esac
 
@@ -584,6 +584,33 @@ if [ -n "${usage_min_suites}" ] && [ "$PASSED" -lt "${usage_min_suites}" ]; then
     exit 1
 fi
 exit $STATUS
+"""
+
+[tasks.hil]
+description = "Flash the board and run an app's integration tests on it (twister --device-testing): its app.<app>.hil scenario."
+usage = '''
+arg "<app>" help="App with an app.<app>.hil scenario (prusa_cam)"
+flag "--serial <port>" help="The board's console, e.g. /dev/ttyUSB0 or /dev/cu.usbserial-110"
+flag "-p --platform <platform>" help="Override the app's HIL board"
+flag "--host-ip <ip>" help="This machine's address as the board sees it (default: the one with the default route)"
+'''
+# The board reaches back to the test's stand-in services on this machine, so
+# its address is built in. prusa_cam: PRUSA_HIL_WIFI_SSID/PSK store a network
+# first; without them the board must already have one (`wifi cred add`).
+run = """
+set -e
+case "${usage_app}" in
+    prusa_cam) PLATFORM="dfrobot_esp32s3_ai_cam/esp32s3/procpu"; HOST_CONF=CONFIG_PRUSA_CAMERA_HOST ;;
+    *) echo "no HIL scenario for: ${usage_app}" >&2; exit 2 ;;
+esac
+PLATFORM="${usage_platform:-$PLATFORM}"
+[ -n "${usage_serial}" ] || { echo "--serial is required" >&2; exit 2; }
+IP="${usage_host_ip:-$(python -c 'import socket; s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM); s.connect(("192.0.2.1", 9)); print(s.getsockname()[0])')}"
+echo "board will reach this machine at $IP"
+
+west twister -T applications/${usage_app} -s app.${usage_app}.hil -p "$PLATFORM" \\
+    --device-testing --device-serial "${usage_serial}" --flash-before \\
+    -x="$HOST_CONF=\\"$IP\\"" --inline-logs -O twister-out-hil
 """
 
 [tasks."check-skills"]
