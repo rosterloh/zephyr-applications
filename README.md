@@ -74,10 +74,6 @@ mise tasks ls
 
 ## Notes
 
-- `golioth` and `pouch` are excluded until [pouch](https://github.com/golioth/pouch)
-  adds `full_name` to its `board.yml` (required by the current Zephyr board schema).
-  Re-enable in `west.yml` to restore Golioth support to `bluetooth_proxy_device`.
-  `rasprover` has had Golioth removed and builds cleanly without it.
 - `pico_fw` uses Zephyr's in-tree AIROC driver for the Pico W's CYW43439;
   the firmware blobs come from `hal_infineon` (fetched by `mise run blobs-fetch`).
 - `deps/` is git-ignored. Run `mise run west-update` to refresh after pulling

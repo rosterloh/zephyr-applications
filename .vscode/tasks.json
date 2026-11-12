@@ -340,7 +340,6 @@
 			"type": "pickString",
 			"description": "Application to build",
 			"options": [
-				"applications/bluetooth_proxy_device",
 				"applications/embedded_vision",
 				"applications/force_sensor",
 				"applications/joystick_controller",
