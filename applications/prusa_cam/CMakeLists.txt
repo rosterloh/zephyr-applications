@@ -26,6 +26,7 @@ target_sources(app PRIVATE
   src/web.c
 )
 target_sources_ifdef(CONFIG_WIFI app PRIVATE src/wifi.c)
+target_sources_ifdef(CONFIG_PRUSA_CAM_ESPHOME app PRIVATE src/ha.c)
 target_include_directories(app PRIVATE src)
 
 set(gen_dir ${ZEPHYR_BINARY_DIR}/include/generated)

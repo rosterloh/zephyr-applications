@@ -26,13 +26,14 @@
 #include "cfg.h"
 #include "connect.h"
 #include "exif.h"
+#include "ha.h"
 #include "http_util.h"
 #include "prusa_camera.h"
 
 LOG_MODULE_REGISTER(web, LOG_LEVEL_INF);
 
 #define USER     "admin"
-#define BODY_MAX 512
+#define BODY_MAX 576 /* every config field at its longest: 531 */
 
 HTTP_SERVER_REGISTER_HEADER_CAPTURE(capture_authorization, "Authorization");
 
@@ -252,6 +253,7 @@ struct cfg_post {
 	bool auto_exposure;
 	bool auto_wb;
 	bool auto_gain;
+	const char *ha_key;
 };
 
 static const struct json_obj_descr cfg_post_descr[] = {
@@ -275,6 +277,7 @@ static const struct json_obj_descr cfg_post_descr[] = {
 	JSON_OBJ_DESCR_PRIM(struct cfg_post, auto_exposure, JSON_TOK_TRUE),
 	JSON_OBJ_DESCR_PRIM(struct cfg_post, auto_wb, JSON_TOK_TRUE),
 	JSON_OBJ_DESCR_PRIM(struct cfg_post, auto_gain, JSON_TOK_TRUE),
+	JSON_OBJ_DESCR_PRIM(struct cfg_post, ha_key, JSON_TOK_STRING),
 };
 
 /* "" clears the address (DHCP / gateway as DNS); anything else must parse. */
@@ -372,6 +375,12 @@ static int apply_post(char *body, size_t len)
 	}
 	if (got & BIT(19)) {
 		c.auto_gain = p.auto_gain;
+	}
+	/* Its own store; write-only, never in the config reply. */
+	if ((got & BIT(20)) &&
+	    (!IS_ENABLED(CONFIG_PRUSA_CAM_ESPHOME) || ha_set_key(p.ha_key) < 0)) {
+		memset(&c, 0, sizeof(c));
+		return -EINVAL;
 	}
 	ret = cfg_set(&c);
 	memset(&c, 0, sizeof(c));

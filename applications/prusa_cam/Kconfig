@@ -38,6 +38,24 @@ config PRUSA_CAM_STREAM_PORT
 	help
 	  The config page links to port 81.
 
+config PRUSA_CAM_ESPHOME
+	bool "Home Assistant (ESPHome native API)"
+	default y
+	select ESPHOME_API
+	select ESPHOME_API_NOISE
+	help
+	  Show the camera in Home Assistant as an ESPHome device: the
+	  picture, upload status, uploads, WiFi signal, the flash LED setting
+	  and an upload button. Noise encrypted; set the key with `prusa ha_key` or the
+	  config page. Until a key is set every client is refused.
+
+config ZVFS_OPEN_ADD_SIZE_PRUSA_CAM_ESPHOME
+	int
+	default 2 if PRUSA_CAM_ESPHOME
+	default 0
+	help
+	  The API's listening socket and its one client.
+
 endmenu
 
 rsource "../common/prusa_camera/Kconfig"

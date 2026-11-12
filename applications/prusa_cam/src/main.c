@@ -24,6 +24,7 @@
 #include "cam.h"
 #include "cfg.h"
 #include "connect.h"
+#include "ha.h"
 #include "http_util.h"
 #include "prusa_camera.h"
 
@@ -157,6 +158,16 @@ static int cmd_snap(const struct shell *sh, size_t argc, char **argv)
 	return 0;
 }
 
+static int cmd_ha_key(const struct shell *sh, size_t argc, char **argv)
+{
+	int ret = ha_set_key(argv[1]);
+
+	if (ret < 0) {
+		shell_error(sh, "expected base64 of 32 bytes, or save failed (%d)", ret);
+	}
+	return ret;
+}
+
 SHELL_STATIC_SUBCMD_SET_CREATE(
 	prusa_cmds,
 	SHELL_CMD_ARG(show, NULL, "Show configuration and upload status", cmd_show, 1, 0),
@@ -171,7 +182,11 @@ SHELL_STATIC_SUBCMD_SET_CREATE(
 		"ip: A.B.C.D or dhcp; set netmask and gateway first; applies on reconnect",
 		cmd_set, 3, 0),
 	SHELL_CMD_ARG(test, NULL, "Check token and fingerprint with the service", cmd_test, 1, 0),
-	SHELL_CMD_ARG(snap, NULL, "Upload a snapshot now", cmd_snap, 1, 0), SHELL_SUBCMD_SET_END);
+	SHELL_CMD_ARG(snap, NULL, "Upload a snapshot now", cmd_snap, 1, 0),
+	SHELL_COND_CMD_ARG(CONFIG_PRUSA_CAM_ESPHOME, ha_key, NULL,
+			   "Set the Home Assistant encryption key <base64 of 32 bytes>", cmd_ha_key,
+			   2, 0),
+	SHELL_SUBCMD_SET_END);
 SHELL_CMD_REGISTER(prusa, &prusa_cmds, "Prusa Connect camera", NULL);
 
 /* Only on a confirmed image: the autohandler reboots an unconfirmed one, which
@@ -249,6 +264,10 @@ int main(void)
 	if (ret < 0) {
 		LOG_ERR("Connect init failed (%d)", ret);
 		return ret;
+	}
+
+	if (IS_ENABLED(CONFIG_PRUSA_CAM_ESPHOME)) {
+		ha_start();
 	}
 
 	ret = web_init();

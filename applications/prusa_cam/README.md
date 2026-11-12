@@ -42,7 +42,7 @@ sockets, for the integration tests: see `tests/integration/README.md`.
 `-k 1` is WPA2-PSK; see `wifi cred add -h` for others. `prusa test` checks the
 token and fingerprint with the service; `prusa show` then gives the result.
 
-Then open `http://prusa-esp32cam.local/` (mDNS) or `http://<camera ip>/`, and
+Then open `http://prusa-zcam.local/` (mDNS) or `http://<camera ip>/`, and
 log in as `admin` to change the camera name, resolution, upload interval
 (10 s, 30 s, 60 s or 10 min, the cadences the service knows), JPEG quality,
 mirror/flip, rotation, flash, brightness/contrast/saturation, the auto
@@ -57,7 +57,7 @@ first; until then the API answers 403.
 | `GET /snapshot.jpg` | yes | A fresh frame |
 | `GET /api/status` | yes | Upload count, last result and what it means, and whether uploads are stopped |
 | `POST /api/test` | yes | Check the token with `GET /v1/camera-info`; the result shows in `/api/status` |
-| `GET`/`POST /api/config` | yes | JSON config; POST takes any subset of `name`, `token`, `password`, `interval`, `resolution`, `quality`, `hflip`, `vflip`, `flash`, `rotation` (0/90/180/270), `ip`, `netmask`, `gateway`, `dns` (`""` = DHCP / gateway), `brightness`, `contrast`, `saturation` (-2..2), `auto_exposure`, `auto_wb`, `auto_gain` |
+| `GET`/`POST /api/config` | yes | JSON config; POST takes any subset of `name`, `token`, `password`, `interval`, `resolution`, `quality`, `hflip`, `vflip`, `flash`, `rotation` (0/90/180/270), `ip`, `netmask`, `gateway`, `dns` (`""` = DHCP / gateway), `brightness`, `contrast`, `saturation` (-2..2), `auto_exposure`, `auto_wb`, `auto_gain`, `ha_key` (write-only) |
 | `GET :81/stream` | yes | MJPEG stream, one viewer at a time |
 
 Rotation is not applied to the pixels. Prusa Connect gets it as
@@ -81,6 +81,20 @@ and when the address changes. Then a snapshot is sent every interval.
 
 Shell: `prusa show`, `prusa set <key> <value>`, `prusa test`, `prusa snap`. For a static
 address set `netmask` and `gateway` before `ip`; `prusa set ip dhcp` reverts.
+
+## Home Assistant
+
+The camera shows up in Home Assistant as an ESPHome device (found by mDNS as
+`prusa-zcam`): Camera, Upload (a problem while the last upload failed or
+uploads are stopped), Uploads, WiFi signal, a Flash LED switch and an Upload
+snapshot button. The camera sends a fresh frame, without the flash or Exif
+rotation, each time Home Assistant asks; its live view runs at the round-trip
+rate.
+
+The API is Noise-encrypted and refuses everyone until a key is set. Make one
+with `openssl rand -base64 32`, set it with `prusa ha_key <key>` or the config
+page's Home Assistant key field, and paste the same key into Home Assistant.
+`CONFIG_PRUSA_CAM_ESPHOME=n` leaves it out.
 
 ## OTA (hawkBit)
 
