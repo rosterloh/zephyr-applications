@@ -42,7 +42,7 @@ sockets, for the integration tests: see `tests/integration/README.md`.
 `-k 1` is WPA2-PSK; see `wifi cred add -h` for others. `prusa test` checks the
 token and fingerprint with the service; `prusa show` then gives the result.
 
-Then open `http://prusa-esp32cam.local/` (mDNS) or `http://<camera ip>/`, and
+Then open `http://prusa-zcam.local/` (mDNS) or `http://<camera ip>/`, and
 log in as `admin` to change the camera name, resolution, upload interval
 (10 s, 30 s, 60 s or 10 min, the cadences the service knows), JPEG quality,
 mirror/flip, rotation, flash, brightness/contrast/saturation, the auto
@@ -85,7 +85,7 @@ address set `netmask` and `gateway` before `ip`; `prusa set ip dhcp` reverts.
 ## Home Assistant
 
 The camera shows up in Home Assistant as an ESPHome device (found by mDNS as
-`prusa-esp32cam`): Camera, Upload (a problem while the last upload failed or
+`prusa-zcam`): Camera, Upload (a problem while the last upload failed or
 uploads are stopped), Uploads, WiFi signal, a Flash LED switch and an Upload
 snapshot button. The camera sends a fresh frame, without the flash or Exif
 rotation, each time Home Assistant asks; its live view runs at the round-trip
