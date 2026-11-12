@@ -11,6 +11,7 @@ import base64
 import json
 import os
 import re
+import socket
 import threading
 import time
 import urllib.error
@@ -174,6 +175,16 @@ def test_config_round_trip(host: str) -> None:
     status, _, body = get(f"http://{host}/api/config")
     assert status == 200 and json.loads(body)["quality"] == 55
     assert post_json(f"http://{host}/api/config", {"rotation": 45})[0] == 400
+
+
+def test_home_assistant(host: str) -> None:
+    assert post_json(f"http://{host}/api/config", {"ha_key": "AAECAwQF"})[0] == 400  # not 32 bytes
+    key = base64.b64encode(bytes(range(32))).decode()
+    status, cfg = post_json(f"http://{host}/api/config", {"ha_key": key})
+    assert status == 200 and "ha_key" not in cfg
+    # The ESPHome API listens; Noise itself is covered by the esphome_api tests.
+    with socket.create_connection((host.split(":")[0], 6053), timeout=10):
+        pass
 
 
 def test_snapshot(host: str, native: bool) -> None:

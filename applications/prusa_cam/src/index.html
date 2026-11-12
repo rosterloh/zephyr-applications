@@ -58,6 +58,8 @@ input:not([type=checkbox]),select{width:100%;box-sizing:border-box;padding:.3rem
 <label>Gateway <input name="gateway" inputmode="decimal"></label>
 <label>DNS (empty: gateway) <input name="dns" inputmode="decimal"></label>
 </fieldset>
+<label>Home Assistant key (base64, leave empty to keep)
+<input name="ha_key" type="password" autocomplete="off" maxlength="44"></label>
 <label>New admin password (leave empty to keep)
 <input name="password" type="password" autocomplete="new-password" maxlength="32"></label>
 <button type="submit">Save</button>
@@ -99,9 +101,10 @@ f.onsubmit = async e => {
 	for (const k of bool) c[k] = f[k].checked;
 	if (f.token.value) c.token = f.token.value;
 	if (f.password.value) c.password = f.password.value;
+	if (f.ha_key.value) c.ha_key = f.ha_key.value;
 	const r = await fetch('/api/config', {method: 'POST', body: JSON.stringify(c)});
 	const j = await r.json();
-	if (r.ok) { show(j); f.token.value = ''; f.password.value = ''; msg('Saved'); status(); }
+	if (r.ok) { show(j); f.token.value = ''; f.password.value = ''; f.ha_key.value = ''; msg('Saved'); status(); }
 	else msg(j.error);
 };
 document.getElementById('test').onclick = async () => {
