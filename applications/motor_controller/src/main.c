@@ -42,7 +42,8 @@ static const struct adc_sequence slider_seq = {
 	.buffer_size = sizeof(slider_sample),
 	.resolution = 10,
 };
-static struct k_work_delayable inputs_scan_work;
+#define INPUTS_SCAN_MS 300
+
 static char slide_str[11];
 static lv_obj_t *slide_label;
 static lv_obj_t *slider;
@@ -54,9 +55,11 @@ static void on_feedback(const struct device *dev, const struct actuator_feedback
 		(double)fb->velocity, (double)fb->temperature, fb->fault_flags);
 }
 
-static void inputs_scan_fn(struct k_work *work)
+/* Runs on the main thread: LVGL is not thread-safe, and lvgl_lock() is a no-op
+ * unless LVGL runs on its own work queue.
+ */
+static void inputs_scan(void)
 {
-	ARG_UNUSED(work);
 	int err = adc_read(neoslider_adc, &slider_seq);
 	if (err == 0 && slider_sample != last_slider) {
 		lv_slider_set_value(slider, slider_sample, LV_ANIM_OFF);
@@ -69,7 +72,6 @@ static void inputs_scan_fn(struct k_work *work)
 		float goals[1] = {rad};
 		(void)actuator_group_set_position(&arm, goals);
 	}
-	k_work_reschedule(&inputs_scan_work, K_MSEC(300));
 }
 
 int main(void)
@@ -115,9 +117,6 @@ int main(void)
 		}
 	}
 
-	k_work_init_delayable(&inputs_scan_work, inputs_scan_fn);
-	k_work_reschedule(&inputs_scan_work, K_NO_WAIT);
-
 	display_dev = DEVICE_DT_GET(DT_CHOSEN(zephyr_display));
 	if (!device_is_ready(display_dev)) {
 		LOG_ERR("Device %s not found", display_dev->name);
@@ -135,7 +134,13 @@ int main(void)
 	lv_task_handler();
 	display_blanking_off(display_dev);
 
+	int64_t next_scan = 0;
+
 	while (1) {
+		if (k_uptime_get() >= next_scan) {
+			inputs_scan();
+			next_scan = k_uptime_get() + INPUTS_SCAN_MS;
+		}
 		lv_task_handler();
 		k_sleep(K_MSEC(10));
 	}

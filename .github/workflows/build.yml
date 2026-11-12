@@ -115,8 +115,6 @@ jobs:
           # A PR checks out its merge commit; HEAD^1 is the base it merges into.
           fetch-depth: 2
 
-      # bluetooth_proxy_device needs golioth/pouch, which are not in this
-      # workspace (disabled until pouch fixes board.yml full_name requirement).
       # protective_stop defaults to native_sim, which the test job covers.
       - name: Route
         id: route

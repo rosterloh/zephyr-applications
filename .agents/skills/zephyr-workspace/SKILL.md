@@ -48,7 +48,7 @@ Never vendor its files into this repo.
 
 | Topic in the zephyr skill | Look at |
 |---|---|
-| sysbuild + MCUboot | apps with a `sysbuild.conf`: `bluetooth_proxy_device`, `bt_keys`, `data_collection`, `force_sensor`, `joystick_controller`, `pt_mcp`, `rasprover`. A board-dependent `Kconfig.sysbuild` lives in `bluetooth_proxy_device`. |
+| sysbuild + MCUboot | apps with a `sysbuild.conf`: `bt_keys`, `data_collection`, `force_sensor`, `joystick_controller`, `pt_mcp`, `rasprover`. |
 | video / UVC (`zephyr/references/peripherals/video.md`) | `embedded_vision` (Nicla Vision; ESP32-P4-Nano CSI variant) |
 | USB stack mismatch trap (`zephyr/references/peripherals/usb-device.md`) | `motor_controller/src/usb.c` |
 | Pico-ROS / zenoh, Twist pub/sub | `rasprover` (subscriber), `joystick_controller` (publisher, analog-axis input) |

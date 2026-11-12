@@ -8,8 +8,6 @@ manifest:
       url-base: https://github.com/zephyrproject-rtos
     - name: rosterloh
       url-base: https://github.com/rosterloh
-    - name: golioth
-      url-base: https://github.com/golioth
     - name: eclipse-zenoh
       url-base: https://github.com/eclipse-zenoh
     - name: pico-ros
@@ -53,21 +51,6 @@ manifest:
       remote: rosterloh
       revision: main
       path: deps/modules/lib/rosterloh-drivers
-
-    # golioth and pouch are needed only by rasprover and bluetooth_proxy_device.
-    # Disabled until https://github.com/golioth/pouch adds full_name to its
-    # board.yml (required by the current Zephyr board schema).
-    # - name: golioth
-    #   repo-path: golioth-firmware-sdk
-    #   remote: golioth
-    #   path: deps/modules/lib/golioth-firmware-sdk
-    #   revision: main
-    #   submodules: true
-    #
-    # - name: pouch
-    #   path: deps/modules/lib/pouch
-    #   revision: main
-    #   url: https://github.com/golioth/pouch.git
 
     # Pin to a release tag, not main: zenoh-pico must match the zenoh version
     # of the router it talks to (rmw_zenohd on the ROS 2 host).
