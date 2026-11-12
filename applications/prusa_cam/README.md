@@ -85,9 +85,11 @@ address set `netmask` and `gateway` before `ip`; `prusa set ip dhcp` reverts.
 ## Home Assistant
 
 The camera shows up in Home Assistant as an ESPHome device (found by mDNS as
-`prusa-esp32cam`): Upload (a problem while the last upload failed or uploads
-are stopped), Uploads, WiFi signal, a Flash LED switch and an Upload snapshot
-button. The picture itself is not in Home Assistant.
+`prusa-esp32cam`): Camera, Upload (a problem while the last upload failed or
+uploads are stopped), Uploads, WiFi signal, a Flash LED switch and an Upload
+snapshot button. The camera sends a fresh frame, without the flash or Exif
+rotation, each time Home Assistant asks; its live view runs at the round-trip
+rate.
 
 The API is Noise-encrypted and refuses everyone until a key is set. Make one
 with `openssl rand -base64 32`, set it with `prusa ha_key <key>` or the config

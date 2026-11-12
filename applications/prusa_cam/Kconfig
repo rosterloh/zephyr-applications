@@ -44,9 +44,9 @@ config PRUSA_CAM_ESPHOME
 	select ESPHOME_API
 	select ESPHOME_API_NOISE
 	help
-	  Show the camera in Home Assistant as an ESPHome device: upload
-	  status, uploads, WiFi signal, the flash LED setting and an upload
-	  button. Noise encrypted; set the key with `prusa ha_key` or the
+	  Show the camera in Home Assistant as an ESPHome device: the
+	  picture, upload status, uploads, WiFi signal, the flash LED setting
+	  and an upload button. Noise encrypted; set the key with `prusa ha_key` or the
 	  config page. Until a key is set every client is refused.
 
 config ZVFS_OPEN_ADD_SIZE_PRUSA_CAM_ESPHOME

@@ -2,8 +2,8 @@
  * Copyright (c) 2026 Richard Osterloh <richard.osterloh@gmail.com>
  * SPDX-License-Identifier: Apache-2.0
  *
- * Home Assistant over the ESPHome native API: upload status, WiFi signal, the
- * flash setting and a snapshot-now button. A low-priority thread polls the
+ * Home Assistant over the ESPHome native API: the camera, upload status, WiFi
+ * signal, the flash setting and a snapshot-now button. A low-priority thread polls the
  * uploader and config and publishes changes.
  */
 
@@ -18,6 +18,7 @@
 #include <zephyr/settings/settings.h>
 #include <zephyr/sys/base64.h>
 
+#include "cam.h"
 #include "cfg.h"
 #include "connect.h"
 #include "ha.h"
@@ -46,6 +47,21 @@ static void snapshot_press(struct esphome_entity *e)
 	connect_kick();
 }
 
+/* As the MJPEG stream: no flash, and the camera stays locked while the frame is sent. */
+static int image_get(struct esphome_entity *e, const uint8_t **data, size_t *len)
+{
+	ARG_UNUSED(e);
+	return cam_frame(data, len);
+}
+
+static void image_release(struct esphome_entity *e)
+{
+	ARG_UNUSED(e);
+	cam_release();
+}
+
+ESPHOME_CAMERA_DEFINE(camera, .name = "Camera", .get_image = image_get,
+		      .release_image = image_release);
 ESPHOME_BINARY_SENSOR_DEFINE(upload_problem, .name = "Upload", .device_class = "problem");
 ESPHOME_SENSOR_DEFINE(uploads, .name = "Uploads", .icon = "mdi:cloud-upload",
 		      .state_class = ESPHOME_STATE_CLASS_TOTAL_INCREASING,
