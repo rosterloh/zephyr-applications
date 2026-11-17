@@ -32,28 +32,18 @@ config APP_DISPLAY_BLANK_ON_IDLE
 	bool "Blank display on idle"
 #	default y if SSD1306
 
-choice APP_DISPLAY_WORK_QUEUE
-	prompt "Work queue selection for UI updates"
-
-config APP_DISPLAY_WORK_QUEUE_SYSTEM
-	bool "Use default system work queue for UI updates"
-
-config APP_DISPLAY_WORK_QUEUE_DEDICATED
-	bool "Use dedicated work queue for UI updates"
-
-endchoice
-
-if APP_DISPLAY_WORK_QUEUE_DEDICATED
-
-config APP_DISPLAY_DEDICATED_THREAD_STACK_SIZE
-	int "Stack size for dedicated UI thread/queue"
+# Defaults ahead of the template, so they win over its own.
+config APP_DISPLAY_DEDICATED_WORKQUEUE_STACK_SIZE
 	default 2048
+	depends on APP_DISPLAY_DEDICATED_WORKQUEUE
 
-config APP_DISPLAY_DEDICATED_THREAD_PRIORITY
-	int "Thread priority for dedicated UI thread/queue"
+config APP_DISPLAY_DEDICATED_WORKQUEUE_PRIORITY
 	default 5
+	depends on APP_DISPLAY_DEDICATED_WORKQUEUE
 
-endif # APP_DISPLAY_WORK_QUEUE_DEDICATED
+module = APP_DISPLAY
+module-str = UI updates
+source "kernel/Kconfig.template.workqueue"
 
 endif # APP_DISPLAY
 
