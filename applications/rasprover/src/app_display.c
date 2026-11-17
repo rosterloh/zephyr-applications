@@ -7,6 +7,7 @@ LOG_MODULE_REGISTER(app_display, LOG_LEVEL_DBG);
 #include <zephyr/drivers/display.h>
 #include <zephyr/init.h>
 #include <zephyr/kernel.h>
+#include <zephyr/kernel/dedicated_workq.h>
 #include <lvgl.h>
 #include <lvgl_zephyr.h>
 
@@ -34,23 +35,12 @@ static void display_tick_cb(struct k_work *work)
 
 K_WORK_DEFINE(display_tick_work, display_tick_cb);
 
-#if IS_ENABLED(CONFIG_APP_DISPLAY_WORK_QUEUE_DEDICATED)
-K_THREAD_STACK_DEFINE(display_work_stack_area, CONFIG_APP_DISPLAY_DEDICATED_THREAD_STACK_SIZE);
-static struct k_work_q display_work_q;
-#endif
-
-static struct k_work_q *app_display_work_q(void)
-{
-#if IS_ENABLED(CONFIG_APP_DISPLAY_WORK_QUEUE_DEDICATED)
-	return &display_work_q;
-#else
-	return &k_sys_work_q;
-#endif
-}
+K_DEDICATED_WORK_QUEUE_DECLARE(app_display, APP_DISPLAY);
+K_DEDICATED_WORK_QUEUE_DEFINE(app_display, APP_DISPLAY);
 
 static void display_timer_cb(struct k_timer *timer)
 {
-	k_work_submit_to_queue(app_display_work_q(), &display_tick_work);
+	app_display_work_submit(&display_tick_work);
 }
 
 K_TIMER_DEFINE(display_timer, display_timer_cb, NULL);
@@ -74,12 +64,12 @@ K_WORK_DEFINE(blank_work, blank_display_cb);
 
 void app_display_blank(void)
 {
-	k_work_submit_to_queue(app_display_work_q(), &blank_work);
+	app_display_work_submit(&blank_work);
 }
 
 void app_display_unblank(void)
 {
-	k_work_submit_to_queue(app_display_work_q(), &unblank_work);
+	app_display_work_submit(&unblank_work);
 }
 #endif
 
@@ -137,7 +127,7 @@ static void initialise_display_cb(struct k_work *work)
 	lvgl_unlock();
 	initialised = true;
 
-	k_work_submit_to_queue(app_display_work_q(), &unblank_work);
+	app_display_work_submit(&unblank_work);
 	LOG_INF("Display initialised");
 }
 
@@ -145,16 +135,6 @@ K_WORK_DEFINE(init_work, initialise_display_cb);
 
 int app_display_init(void)
 {
-#if IS_ENABLED(CONFIG_APP_DISPLAY_WORK_QUEUE_DEDICATED)
-	/* Named so its stack shows up identifiably in `kernel thread list`,
-	 * which is how the stack budget above is checked.
-	 */
-	static const struct k_work_queue_config cfg = {.name = "display"};
-
-	k_work_queue_start(&display_work_q, display_work_stack_area,
-			   K_THREAD_STACK_SIZEOF(display_work_stack_area),
-			   CONFIG_APP_DISPLAY_DEDICATED_THREAD_PRIORITY, &cfg);
-#endif
-	k_work_submit_to_queue(app_display_work_q(), &init_work);
+	app_display_work_submit(&init_work);
 	return 0;
 }

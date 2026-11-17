@@ -325,7 +325,7 @@ On startup the firmware initialises the INA219 current sensor, brings up WiFi (u
 | Kconfig | Default | Description |
 |---------|---------|-------------|
 | `APP_DISPLAY` | n | Enable LVGL display subsystem (on for native_sim only) |
-| `APP_DISPLAY_WORK_QUEUE_DEDICATED` | n | Use a dedicated work queue for UI updates |
+| `APP_DISPLAY_DEDICATED_WORKQUEUE` | n | Use a dedicated work queue for UI updates |
 
 Settings are persisted via the Zephyr settings subsystem (ZMS backend). Loop delay and WiFi credentials can be written at runtime using the shell `settings` commands.
 

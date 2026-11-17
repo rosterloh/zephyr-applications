@@ -21,7 +21,9 @@ LOG_MODULE_REGISTER(main, LOG_LEVEL_DBG);
  * Zephyr never retries a failed driver init. i2c_esp32 provides .recover_bus
  * but nothing calls it, so clear the bus here, after the controller
  * (I2C_INIT_PRIORITY=50) and before its children (DISPLAY=85, SENSOR=90).
+ * ESP32 only: native_sim's i2c0 is an emulator with no driver built.
  */
+#if defined(CONFIG_I2C_ESP32)
 static int recover_i2c0(void)
 {
 	const struct device *i2c0 = DEVICE_DT_GET(DT_NODELABEL(i2c0));
@@ -34,6 +36,7 @@ static int recover_i2c0(void)
 }
 
 SYS_INIT(recover_i2c0, POST_KERNEL, 60);
+#endif
 
 static k_tid_t _system_thread = 0;
 
