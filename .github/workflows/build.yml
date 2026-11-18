@@ -313,6 +313,8 @@ jobs:
       matrix:
         shard: [1, 2, 3]
     runs-on: ubuntu-latest
+    # A shard takes ~6 min; a hung setup download otherwise runs for 6 h
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v7
