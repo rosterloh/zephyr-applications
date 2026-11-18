@@ -551,6 +551,7 @@ arg "[app]..." var=#true help="Only run the suites and build scenarios under app
 flag "-p --platform <platform>" help="Run on this platform instead of integration_platforms (e.g. qemu_cortex_m3 on macOS)"
 flag "--min-suites <n>" help="Fail if fewer than n suites passed, so a filtering regression can't report green"
 flag "--runnable" help="Skip build-only scenarios (CI's build matrix owns hardware builds)"
+flag "--subset <slice>" help="Run only this twister slice, e.g. 2/3 (CI shards)"
 '''
 # Each app's tests.yaml (build-only, under twister's -Werror) is picked up too.
 # Top-level tests/ is not a root: it holds pytest scripts, not ztest suites.
@@ -571,6 +572,7 @@ else
     PLATFORM="--integration"
 fi
 [ "${usage_runnable}" = "true" ] && PLATFORM="$PLATFORM --filter runnable"
+[ -n "${usage_subset}" ] && PLATFORM="$PLATFORM --subset ${usage_subset}"
 
 STATUS=0
 west twister $ROOTS $PLATFORM --inline-logs -O twister-out || STATUS=$?
