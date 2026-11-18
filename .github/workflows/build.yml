@@ -302,10 +302,19 @@ jobs:
 
   # Parallel to the build matrix: twister on native_sim/qemu needs none of the
   # per-app board plumbing. twister-out/ is never cached, so every run is fresh.
+  # Split with --subset, which is mostly compile time; the slices are sorted by
+  # suite name, so each shard keeps its own ccache warm. test-summary gates.
   test:
+    name: test ${{ matrix.shard }}/3
     needs: changes
     if: needs.changes.outputs.full == 'true' || needs.changes.outputs.tests != ''
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
     runs-on: ubuntu-latest
+    # A shard takes ~6 min; a hung setup download otherwise runs for 6 h
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -342,20 +351,27 @@ jobs:
             west-deps-${{ hashFiles('west.yml') }}-
             west-deps-
 
-      - name: Cache ccache
-        uses: actions/cache@v6
-        with:
-          path: ~/.cache/ccache
-          key: ccache-twister-${{ github.run_id }}
-          restore-keys: |
-            ccache-twister-
-
       # `mise run setup`, split so the SDK cache can be keyed on the
       # SDK_VERSION that west update has just checked out. Keep in step with it.
       - name: Update west deps
-        run: mise run west-update
+        id: west
+        run: |
+          mise run west-update
+          echo "zephyr=$(git -C deps/zephyr rev-parse HEAD)" >> "$GITHUB_OUTPUT"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # One entry per shard; the same Zephyr revision first, else a PR's older
+      # entry beats main's current one. Saved below even when a test fails.
+      - name: Restore ccache
+        uses: actions/cache/restore@v6
+        with:
+          path: ~/.cache/ccache
+          key: ccache-twister-${{ matrix.shard }}-${{ steps.west.outputs.zephyr }}-${{ github.run_id }}
+          restore-keys: |
+            ccache-twister-${{ matrix.shard }}-${{ steps.west.outputs.zephyr }}-
+            ccache-twister-${{ matrix.shard }}-
+            ccache-twister-
 
       # The SDK version follows zephyr main, not west.yml. No restore-keys: an
       # older SDK would restore beside the new one and be saved into its entry.
@@ -392,16 +408,60 @@ jobs:
           key: ${{ steps.deps.outputs.cache-primary-key }}
 
       # --runnable: hardware builds are the build matrix's job.
-      # On a full run, bump --min-suites when adding a suite. A drop means suites
-      # are being filtered out (the native_sim vs native_sim/native/64 trap from #85).
       - name: Run twister
         env:
           CCACHE_MAXSIZE: 500M
           FULL: ${{ needs.changes.outputs.full }}
           TESTS: ${{ needs.changes.outputs.tests }}
         run: |
-          if [ "$FULL" = true ]; then
-            mise run test --runnable --min-suites 29
-          else
-            mise run test --runnable $TESTS
+          mise x -- ccache --zero-stats
+          if [ "$FULL" = true ]; then TESTS=; fi
+          mise run test --runnable --subset ${{ matrix.shard }}/3 $TESTS
+
+      - name: ccache stats
+        if: ${{ !cancelled() }}
+        run: mise x -- ccache --show-stats
+
+      - name: Save ccache
+        if: ${{ !cancelled() }}
+        uses: actions/cache/save@v6
+        with:
+          path: ~/.cache/ccache
+          key: ccache-twister-${{ matrix.shard }}-${{ steps.west.outputs.zephyr }}-${{ github.run_id }}
+
+      - name: Upload twister report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: twister-${{ matrix.shard }}
+          path: twister-out/twister.json
+
+  # One result for the sharded test job, and the --min-suites check across
+  # all shards. On a full run, bump --min-suites when adding a suite. A drop
+  # means suites are being filtered out (the native_sim vs native_sim/native/64
+  # trap from #85).
+  test-summary:
+    needs: [changes, test]
+    if: ${{ !cancelled() && needs.test.result != 'skipped' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download twister reports
+        uses: actions/download-artifact@v8
+        with:
+          pattern: twister-*
+
+      - name: Check suites
+        env:
+          FULL: ${{ needs.changes.outputs.full }}
+          RESULT: ${{ needs.test.result }}
+          MIN_SUITES: 29
+        run: |
+          echo "Suites by status:"
+          jq -rs '[.[].testsuites[]] | group_by(.status)[] | "  \(.[0].status): \(length)"' twister-*/twister.json
+          PASSED=$(jq -s '[.[].testsuites[] | select(.status == "passed")] | length' twister-*/twister.json)
+          echo "Suites passed: $PASSED"
+          if [ "$FULL" = true ] && [ "$PASSED" -lt "$MIN_SUITES" ]; then
+            echo "expected at least $MIN_SUITES passing suites" >&2
+            exit 1
           fi
+          [ "$RESULT" = success ]
