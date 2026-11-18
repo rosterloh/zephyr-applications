@@ -468,7 +468,7 @@ echo "zenoh config.h written to $CONFIG_H"
 
 
 [tasks."patch-zephyr"]
-description = "Apply zephyr/patches-zephyr.yml to Zephyr: task_wdt software-only retry after a rejected hardware watchdog; hawkBit resume and revert reporting fixes; ESP32-S3 DVP JPEG capture. Idempotent."
+description = "Apply zephyr/patches-zephyr.yml to Zephyr: task_wdt software-only retry after a rejected hardware watchdog; hawkBit resume and revert reporting fixes; ESP32-S3 DVP JPEG capture; offload-only TLS socket build. Idempotent."
 run = '''
 set -e
 west patch -l zephyr/patches-zephyr.yml clean

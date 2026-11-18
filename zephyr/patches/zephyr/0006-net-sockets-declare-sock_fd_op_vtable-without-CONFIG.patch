@@ -1,0 +1,37 @@
+From 725dd58a0ed253ac0d1a3da0b17b3bba22fb5cf8 Mon Sep 17 00:00:00 2001
+From: Richard Osterloh <richard.osterloh@gmail.com>
+Date: Wed, 18 Nov 2026 20:59:47 +0000
+Subject: [PATCH] net: sockets: declare sock_fd_op_vtable without
+ CONFIG_NET_NATIVE
+
+tls_poll_can_prepare_in_update() compares against sock_fd_op_vtable
+behind IS_ENABLED(CONFIG_NET_NATIVE), so the declaration must be
+visible when only offloaded sockets are built (native_sim NSOS).
+
+Assisted-by: Claude:claude-opus-5.5
+---
+ subsys/net/lib/sockets/sockets_internal.h | 5 ++---
+ 1 file changed, 2 insertions(+), 3 deletions(-)
+
+diff --git a/subsys/net/lib/sockets/sockets_internal.h b/subsys/net/lib/sockets/sockets_internal.h
+index 65f89fe5b..76a92812e 100644
+--- a/subsys/net/lib/sockets/sockets_internal.h
++++ b/subsys/net/lib/sockets/sockets_internal.h
+@@ -20,12 +20,11 @@ int zsock_poll_internal(struct zsock_pollfd *fds, int nfds, k_timeout_t timeout)
+ 
+ int zsock_wait_data(struct net_context *ctx, k_timeout_t *timeout);
+ 
+-#if defined(CONFIG_NET_NATIVE)
+ /* Native IP sockets all share this vtable; used to tell them apart from
+- * offloaded sockets by the vtable installed on an fd.
++ * offloaded sockets by the vtable installed on an fd. Declared without
++ * CONFIG_NET_NATIVE so IS_ENABLED() guarded references still compile.
+  */
+ extern const struct socket_op_vtable sock_fd_op_vtable;
+-#endif
+ 
+ static inline void sock_set_flag(struct net_context *ctx, uintptr_t mask,
+ 				 uintptr_t flag)
+-- 
+2.43.0
+
