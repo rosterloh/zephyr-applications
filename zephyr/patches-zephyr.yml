@@ -12,6 +12,7 @@ checkout-command: >-
   drivers/input/input_analog_axis.c
   dts/bindings/input/analog-axis.yaml
   drivers/video/video_esp32_dvp.c
+  subsys/net/lib/sockets/sockets_internal.h
 clean-command: ""
 
 patches:
@@ -61,3 +62,15 @@ patches:
       The ESP32-S3 LCD_CAM driver could only capture fixed-size frames
       and stopped after the first one; JPEG (OV3660 on the DFRobot DFR1154)
       lost frame headers and data at UXGA.
+  - path: zephyr/0006-net-sockets-declare-sock_fd_op_vtable-without-CONFIG.patch
+    sha256sum: cd29b06af53d28cf62d8836376f006af72ddbe90914af456d4122e87a5bee127
+    module: deps/zephyr
+    author: Richard Osterloh
+    email: richard.osterloh@gmail.com
+    date: 2026-11-18
+    upstreamable: true
+    comments: |
+      Upstream 34dd049cf references sock_fd_op_vtable behind
+      IS_ENABLED(CONFIG_NET_NATIVE), but the extern is under #if, so
+      offload-only builds (prusa_cam integration on native_sim) fail.
+      Drop once upstream fixes it.

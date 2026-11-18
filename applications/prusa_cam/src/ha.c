@@ -12,6 +12,7 @@
 
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/mgmt/hawkbit/event.h>
 #include <zephyr/net/esphome_api.h>
 #include <zephyr/net/net_if.h>
 #include <zephyr/net/wifi_mgmt.h>
@@ -158,7 +159,20 @@ static void ha_thread(void *p1, void *p2, void *p3)
 K_THREAD_DEFINE(prusa_ha, 1536, ha_thread, NULL, NULL, NULL, K_LOWEST_APPLICATION_THREAD_PRIO, 0,
 		SYS_FOREVER_MS);
 
+/* Home Assistant marks the entities unavailable now, not after its keepalive timeout. */
+static void before_reboot(struct hawkbit_event_callback *cb, enum hawkbit_event_type event)
+{
+	ARG_UNUSED(cb);
+	ARG_UNUSED(event);
+	esphome_api_shutdown();
+}
+
 void ha_start(void)
 {
+	static HAWKBIT_EVENT_CREATE_CALLBACK(reboot_cb, before_reboot, HAWKBIT_EVENT_BEFORE_REBOOT);
+
+	if (IS_ENABLED(CONFIG_HAWKBIT_EVENT_CALLBACKS)) {
+		(void)hawkbit_event_add_callback(&reboot_cb);
+	}
 	k_thread_start(prusa_ha);
 }
