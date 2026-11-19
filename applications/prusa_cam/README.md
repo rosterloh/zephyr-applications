@@ -81,6 +81,13 @@ and when the address changes. Then a snapshot is sent every interval.
 
 Shell: `prusa show`, `prusa set <key> <value>`, `prusa test`, `prusa snap`. For a static
 address set `netmask` and `gateway` before `ip`; `prusa set ip dhcp` reverts.
+`prusa factory_reset` erases all settings (config, WiFi networks, Home Assistant and
+hawkBit settings) and reboots.
+
+Resolutions run from QVGA to UXGA plus HD (1280x720) and FHD (1920x1080); the page and
+the shell offer only those the sensor reports as JPEG sizes (the OV2640 driver has no
+HD/FHD). WiFi retries back off from 10 s to 5 minutes while the network is missing or
+rejects the password.
 
 ## Home Assistant
 

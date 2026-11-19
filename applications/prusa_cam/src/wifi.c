@@ -3,8 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
  *
  * Station mode from networks stored with `wifi cred add`; retry after a
- * failed or dropped connection. Addressing is DHCP unless a static IPv4
- * address is configured (CONFIG_WIFI_STA_AUTO_DHCPV4 is off for that).
+ * failed or dropped connection, backing off from 10 s to 5 min. Addressing
+ * is DHCP unless a static IPv4 address is configured
+ * (CONFIG_WIFI_STA_AUTO_DHCPV4 is off for that).
  */
 
 #include <string.h>
@@ -23,9 +24,20 @@
 
 LOG_MODULE_REGISTER(app_wifi, LOG_LEVEL_INF);
 
-#define RETRY K_SECONDS(10)
+/* Back off on a missing network or a wrong password instead of hammering the AP. */
+#define RETRY_MIN_S 10U
+#define RETRY_MAX_S 300U
+
+static uint32_t retry_s = RETRY_MIN_S;
 
 static struct net_mgmt_event_callback wifi_cb;
+
+static void retry_later(struct k_work_delayable *work)
+{
+	LOG_WRN("Not connected, retrying in %u s", retry_s);
+	k_work_reschedule(work, K_SECONDS(retry_s));
+	retry_s = MIN(retry_s * 2U, RETRY_MAX_S);
+}
 
 static void connect_work_fn(struct k_work *work)
 {
@@ -36,8 +48,7 @@ static void connect_work_fn(struct k_work *work)
 		return;
 	}
 	if (net_mgmt(NET_REQUEST_WIFI_CONNECT_STORED, iface, NULL, 0) < 0) {
-		LOG_WRN("Connect request failed, retrying");
-		k_work_reschedule((struct k_work_delayable *)work, RETRY);
+		retry_later(k_work_delayable_from_work(work));
 	}
 }
 
@@ -90,12 +101,13 @@ static void wifi_event(struct net_mgmt_event_callback *cb, uint64_t event, struc
 
 	if (event == NET_EVENT_WIFI_CONNECT_RESULT && st->status == 0) {
 		LOG_INF("Connected");
+		retry_s = RETRY_MIN_S;
 		ipv4_up(iface);
 		return;
 	}
-	/* Failed connect or disconnect: try again later. */
+	/* Failed connect or disconnect: try again later, each failure waiting longer. */
 	net_dhcpv4_stop(iface);
-	k_work_reschedule(&connect_work, RETRY);
+	retry_later(&connect_work);
 }
 
 int app_wifi_init(void)
@@ -110,5 +122,6 @@ int app_wifi_init(void)
 
 void app_wifi_reconnect(void)
 {
+	retry_s = RETRY_MIN_S;
 	k_work_reschedule(&connect_work, K_NO_WAIT);
 }

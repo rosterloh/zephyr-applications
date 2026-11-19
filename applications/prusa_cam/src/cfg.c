@@ -12,8 +12,11 @@
 
 #include <zephyr/drivers/hwinfo.h>
 #include <zephyr/kernel.h>
+#include <zephyr/kvss/zms.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/logging/log_ctrl.h>
 #include <zephyr/settings/settings.h>
+#include <zephyr/sys/reboot.h>
 #include <zephyr/sys/util.h>
 
 #include "cfg.h"
@@ -21,11 +24,10 @@
 
 LOG_MODULE_REGISTER(cfg, LOG_LEVEL_INF);
 
-const struct cfg_resolution cfg_resolutions[] = {
-	{"QVGA", 320, 240}, {"VGA", 640, 480},    {"SVGA", 800, 600},
-	{"XGA", 1024, 768}, {"SXGA", 1280, 1024}, {"UXGA", 1600, 1200},
+const struct cfg_resolution cfg_resolutions[CFG_RESOLUTION_COUNT] = {
+	{"QVGA", 320, 240},   {"VGA", 640, 480},    {"SVGA", 800, 600}, {"XGA", 1024, 768},
+	{"SXGA", 1280, 1024}, {"UXGA", 1600, 1200}, {"HD", 1280, 720},  {"FHD", 1920, 1080},
 };
-const uint8_t cfg_resolution_count = ARRAY_SIZE(cfg_resolutions);
 
 static struct cfg cfg = {
 	.name = CONFIG_NET_HOSTNAME,
@@ -100,7 +102,7 @@ int cfg_set(const struct cfg *in)
 	    (tmp.token[0] != '\0' && !prusa_camera_token_valid(tmp.token)) || tmp.name[0] == '\0' ||
 	    strnlen(tmp.name, sizeof(tmp.name)) > CFG_NAME_MAX ||
 	    !IN_RANGE(tmp.brightness, -2, 2) || !IN_RANGE(tmp.contrast, -2, 2) ||
-	    !IN_RANGE(tmp.saturation, -2, 2) || tmp.resolution >= cfg_resolution_count ||
+	    !IN_RANGE(tmp.saturation, -2, 2) || tmp.resolution >= CFG_RESOLUTION_COUNT ||
 	    tmp.quality > 100 || tmp.rotation > 3 ||
 	    (tmp.ip != 0 && (tmp.netmask == 0 || tmp.gateway == 0)) ||
 	    strnlen(tmp.token, sizeof(tmp.token)) > CFG_TOKEN_MAX ||
@@ -123,12 +125,31 @@ int cfg_set(const struct cfg *in)
 
 int cfg_resolution_find(const char *name)
 {
-	for (int i = 0; i < cfg_resolution_count; i++) {
+	for (int i = 0; i < CFG_RESOLUTION_COUNT; i++) {
 		if (strcasecmp(name, cfg_resolutions[i].name) == 0) {
 			return i;
 		}
 	}
 	return -1;
+}
+
+int cfg_factory_reset(void)
+{
+	void *fs;
+	int ret;
+
+	k_mutex_lock(&cfg_lock, K_FOREVER);
+	ret = settings_storage_get(&fs);
+	if (ret == 0) {
+		ret = zms_clear(fs);
+	}
+	if (ret == 0) {
+		LOG_WRN("Settings erased, rebooting");
+		log_panic();
+		sys_reboot(SYS_REBOOT_COLD);
+	}
+	k_mutex_unlock(&cfg_lock);
+	return ret;
 }
 
 const char *cfg_fingerprint(void)

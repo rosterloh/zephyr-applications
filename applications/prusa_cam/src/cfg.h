@@ -44,8 +44,9 @@ struct cfg {
 	bool auto_gain;
 };
 
-extern const struct cfg_resolution cfg_resolutions[];
-extern const uint8_t cfg_resolution_count;
+#define CFG_RESOLUTION_COUNT 8
+/* Append only: the stored config keeps an index. */
+extern const struct cfg_resolution cfg_resolutions[CFG_RESOLUTION_COUNT];
 
 /* Load from settings (defaults for anything unset). */
 int cfg_init(void);
@@ -55,6 +56,9 @@ void cfg_get(struct cfg *out);
 
 /* Validate and persist; -EINVAL leaves the stored config untouched. */
 int cfg_set(const struct cfg *in);
+
+/* Erase all settings (config, WiFi networks, keys) and reboot. Returns only on error. */
+int cfg_factory_reset(void);
 
 /* Index of a resolution by name, or -1. */
 int cfg_resolution_find(const char *name);
