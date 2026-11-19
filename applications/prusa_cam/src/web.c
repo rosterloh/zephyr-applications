@@ -21,7 +21,6 @@
 #include <zephyr/net/http/server.h>
 #include <zephyr/net/dns_sd.h>
 #include <zephyr/net/http/service.h>
-#include <zephyr/shell/shell_websocket.h>
 
 #include "cam.h"
 #include "cfg.h"
@@ -563,6 +562,8 @@ HTTP_RESOURCE_DEFINE(snapshot_res, prusa_http, "/snapshot.jpg", &snapshot_detail
 HTTP_RESOURCE_DEFINE(test_res, prusa_http, "/api/test", &test_detail);
 
 #if defined(CONFIG_SHELL_BACKEND_WEBSOCKET)
+#include <zephyr/shell/shell_websocket.h>
+
 /* Shell at /shell behind the same login; the backend's own console macro has no auth hook. */
 SHELL_WEBSOCKET_DEFINE(prusa_http);
 SHELL_DEFINE(shell_websocket_prusa_http, CONFIG_SHELL_WEBSOCKET_PROMPT,

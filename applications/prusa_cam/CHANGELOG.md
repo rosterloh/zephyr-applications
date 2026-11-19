@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-11-19
+
+### Added
+
+- Terminal in the web page: the device shell over a WebSocket at `/shell`,
+  behind the same admin login as the API. ESP32 boards only; costs about 8 KB
+  of DRAM (the AI-Thinker goes from 92% to 96% DRAM).
+
+### Changed
+
+- Redesigned web page: status header, snapshot with stat tiles, settings in
+  tabs, status refreshed every 10 s, dark and light themes.
+
 ## [0.2.0] - 2026-11-19
 
 Ports the applicable changes from Prusa-Firmware-ESP32-Cam v1.1.3.
