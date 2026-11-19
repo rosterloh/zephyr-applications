@@ -102,7 +102,8 @@ static int cmd_set(const struct shell *sh, size_t argc, char **argv)
 		strcpy(c.password, val);
 	} else if (strcmp(key, "interval") == 0) {
 		c.interval_s = CLAMP(strtol(val, NULL, 10), 0, UINT16_MAX);
-	} else if (strcmp(key, "resolution") == 0 && cfg_resolution_find(val) >= 0) {
+	} else if (strcmp(key, "resolution") == 0 && cfg_resolution_find(val) >= 0 &&
+		   cam_resolution_ok(&cfg_resolutions[cfg_resolution_find(val)])) {
 		c.resolution = cfg_resolution_find(val);
 	} else if (strcmp(key, "quality") == 0) {
 		c.quality = CLAMP(strtol(val, NULL, 10), 0, UINT8_MAX);
@@ -144,6 +145,14 @@ static int cmd_set(const struct shell *sh, size_t argc, char **argv)
 	return ret;
 }
 
+static int cmd_factory_reset(const struct shell *sh, size_t argc, char **argv)
+{
+	int ret = cfg_factory_reset();
+
+	shell_error(sh, "erase failed (%d)", ret);
+	return ret;
+}
+
 static int cmd_test(const struct shell *sh, size_t argc, char **argv)
 {
 	connect_test();
@@ -177,12 +186,16 @@ SHELL_STATIC_SUBCMD_SET_CREATE(
 		"     rotation|brightness|contrast|saturation|auto_exposure|auto_wb|auto_gain|\n"
 		"     ip|netmask|gateway|dns> <value>\n"
 		"token: 20 letters/digits; interval: 10 30 60 600\n"
-		"resolution: QVGA VGA SVGA XGA SXGA UXGA; rotation: 0 90 180 270\n"
+		"resolution: QVGA VGA SVGA XGA SXGA UXGA HD FHD, as the sensor allows\n"
+		"rotation: 0 90 180 270\n"
 		"brightness/contrast/saturation: -2..2; auto_*: 0 or 1\n"
 		"ip: A.B.C.D or dhcp; set netmask and gateway first; applies on reconnect",
 		cmd_set, 3, 0),
 	SHELL_CMD_ARG(test, NULL, "Check token and fingerprint with the service", cmd_test, 1, 0),
 	SHELL_CMD_ARG(snap, NULL, "Upload a snapshot now", cmd_snap, 1, 0),
+	SHELL_CMD_ARG(factory_reset, NULL,
+		      "Erase all settings (config, WiFi networks, keys) and reboot",
+		      cmd_factory_reset, 1, 0),
 	SHELL_COND_CMD_ARG(CONFIG_PRUSA_CAM_ESPHOME, ha_key, NULL,
 			   "Set the Home Assistant encryption key <base64 of 32 bytes>", cmd_ha_key,
 			   2, 0),

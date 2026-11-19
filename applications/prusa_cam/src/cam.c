@@ -18,6 +18,8 @@ LOG_MODULE_REGISTER(cam, LOG_LEVEL_INF);
 
 #define NBUF          2
 #define FRAME_TIMEOUT K_SECONDS(3)
+/* Frames to try before giving up on one that is not a whole JPEG. */
+#define FRAME_TRIES   3
 /* Upstream caps the flash LED at 80 % to spare it. */
 #define FLASH_PERCENT 80
 #define FLASH_SETTLE  K_MSEC(150)
@@ -128,6 +130,31 @@ out:
 	return ret;
 }
 
+bool cam_resolution_ok(const struct cfg_resolution *r)
+{
+	struct video_caps caps = {.type = VIDEO_BUF_TYPE_OUTPUT};
+	struct video_format fmt = {
+		.pixelformat = VIDEO_PIX_FMT_JPEG,
+		.width = r->width,
+		.height = r->height,
+	};
+	size_t idx;
+
+	/* A driver without caps (the native_sim stand-in) is left to video_set_format(). */
+	if (!device_is_ready(video) || video_get_caps(video, &caps) < 0) {
+		return true;
+	}
+	return video_format_caps_index(caps.format_caps, &fmt, &idx) == 0;
+}
+
+static bool whole_jpeg(const struct video_buffer *vb)
+{
+	const uint8_t *b = vb->buffer;
+	size_t n = vb->bytesused;
+
+	return n >= 4U && b[0] == 0xFFU && b[1] == 0xD8U && b[n - 2] == 0xFFU && b[n - 1] == 0xD9U;
+}
+
 int cam_init(void)
 {
 	struct cfg c;
@@ -160,7 +187,15 @@ static int grab(const uint8_t **jpeg, size_t *len, bool flash)
 
 	/* Frames already queued are stale: hand them back and wait for a new one. */
 	requeue_all();
-	ret = video_dequeue(video, &held, FRAME_TIMEOUT);
+	for (int i = 0; i < FRAME_TRIES; i++) {
+		ret = video_dequeue(video, &held, FRAME_TIMEOUT);
+		if (ret < 0 || whole_jpeg(held)) {
+			break;
+		}
+		LOG_WRN("Broken frame (%u B), dropped", held->bytesused);
+		video_enqueue(video, held);
+		ret = -EIO;
+	}
 
 	if (flash) {
 		led_off_dt(&flash_led);

@@ -145,6 +145,8 @@ struct config_out {
 	bool auto_exposure;
 	bool auto_wb;
 	bool auto_gain;
+	const char *resolutions[CFG_RESOLUTION_COUNT];
+	size_t resolutions_len;
 };
 
 static const struct json_obj_descr config_out_descr[] = {
@@ -168,6 +170,8 @@ static const struct json_obj_descr config_out_descr[] = {
 	JSON_OBJ_DESCR_PRIM(struct config_out, auto_exposure, JSON_TOK_TRUE),
 	JSON_OBJ_DESCR_PRIM(struct config_out, auto_wb, JSON_TOK_TRUE),
 	JSON_OBJ_DESCR_PRIM(struct config_out, auto_gain, JSON_TOK_TRUE),
+	JSON_OBJ_DESCR_ARRAY(struct config_out, resolutions, CFG_RESOLUTION_COUNT, resolutions_len,
+			     JSON_TOK_STRING),
 };
 
 struct status_out {
@@ -228,6 +232,11 @@ static void reply_config(struct http_response_ctx *rsp)
 		.auto_wb = c.auto_wb,
 		.auto_gain = c.auto_gain,
 	};
+	for (int i = 0; i < CFG_RESOLUTION_COUNT; i++) {
+		if (cam_resolution_ok(&cfg_resolutions[i])) {
+			o.resolutions[o.resolutions_len++] = cfg_resolutions[i].name;
+		}
+	}
 	reply_json(rsp, config_out_descr, ARRAY_SIZE(config_out_descr), &o);
 	memset(&c, 0, sizeof(c)); /* after encoding: o.name points into c */
 }
@@ -321,7 +330,7 @@ static int apply_post(char *body, size_t len)
 	if (got & BIT(3)) {
 		int i = cfg_resolution_find(p.resolution);
 
-		if (i < 0) {
+		if (i < 0 || !cam_resolution_ok(&cfg_resolutions[i])) {
 			return -EINVAL;
 		}
 		c.resolution = i;

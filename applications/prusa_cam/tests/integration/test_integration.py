@@ -177,6 +177,20 @@ def test_config_round_trip(host: str) -> None:
     assert post_json(f"http://{host}/api/config", {"rotation": 45})[0] == 400
 
 
+def test_resolutions(host: str, native: bool) -> None:
+    status, _, body = get(f"http://{host}/api/config")
+    cfg = json.loads(body)
+    assert status == 200 and cfg["resolution"] in cfg["resolutions"]
+    if native:
+        # The stand-in camera has no caps, so every resolution is offered.
+        assert cfg["resolutions"][-2:] == ["HD", "FHD"]
+    assert post_json(f"http://{host}/api/config", {"resolution": "4K"})[0] == 400
+    largest = cfg["resolutions"][-1]
+    status, new = post_json(f"http://{host}/api/config", {"resolution": largest})
+    assert status == 200 and new["resolution"] == largest
+    assert post_json(f"http://{host}/api/config", {"resolution": cfg["resolution"]})[0] == 200
+
+
 def test_home_assistant(host: str) -> None:
     assert post_json(f"http://{host}/api/config", {"ha_key": "AAECAwQF"})[0] == 400  # not 32 bytes
     key = base64.b64encode(bytes(range(32))).decode()
