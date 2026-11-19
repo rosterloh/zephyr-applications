@@ -21,6 +21,7 @@
 #include <zephyr/net/http/server.h>
 #include <zephyr/net/dns_sd.h>
 #include <zephyr/net/http/service.h>
+#include <zephyr/shell/shell_websocket.h>
 
 #include "cam.h"
 #include "cfg.h"
@@ -561,7 +562,43 @@ HTTP_RESOURCE_DEFINE(status_res, prusa_http, "/api/status", &status_detail);
 HTTP_RESOURCE_DEFINE(snapshot_res, prusa_http, "/snapshot.jpg", &snapshot_detail);
 HTTP_RESOURCE_DEFINE(test_res, prusa_http, "/api/test", &test_detail);
 
+#if defined(CONFIG_SHELL_BACKEND_WEBSOCKET)
+/* Shell at /shell behind the same login; the backend's own console macro has no auth hook. */
+SHELL_WEBSOCKET_DEFINE(prusa_http);
+SHELL_DEFINE(shell_websocket_prusa_http, CONFIG_SHELL_WEBSOCKET_PROMPT,
+	     &GET_WS_TRANSPORT_NAME(prusa_http), CONFIG_SHELL_WEBSOCKET_LOG_MESSAGE_QUEUE_SIZE,
+	     CONFIG_SHELL_WEBSOCKET_LOG_MESSAGE_QUEUE_TIMEOUT, SHELL_FLAG_OLF_CRLF);
+
+/* Runs after the 101 reply: a negative return closes the socket unused. */
+static int shell_ws_cb(int sock, struct http_request_ctx *req, void *ud)
+{
+	struct route r = {0};
+	struct http_response_ctx rsp = {0};
+
+	capture(&r, req);
+	if (!authorised(&r, &rsp)) {
+		LOG_WRN("shell: unauthorised");
+		return -EACCES;
+	}
+	return shell_websocket_setup(sock, req, ud);
+}
+
+static uint8_t shell_ws_buf[SHELL_WS_TEMP_RECV_BUF_SIZE];
+static struct http_resource_detail_websocket shell_ws_detail = {
+	.common = {.type = HTTP_RESOURCE_TYPE_WEBSOCKET,
+		   .bitmask_of_supported_http_methods = BIT(HTTP_GET)},
+	.cb = shell_ws_cb,
+	.data_buffer = shell_ws_buf,
+	.data_buffer_len = sizeof(shell_ws_buf),
+	.user_data = &GET_WS_NAME(prusa_http),
+};
+HTTP_RESOURCE_DEFINE(shell_res, prusa_http, "/shell", &shell_ws_detail);
+#endif
+
 int web_init(void)
 {
+#if defined(CONFIG_SHELL_BACKEND_WEBSOCKET)
+	(void)shell_websocket_enable(&shell_websocket_prusa_http);
+#endif
 	return http_server_start();
 }
