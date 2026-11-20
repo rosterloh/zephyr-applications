@@ -1,5 +1,5 @@
 version = 1
-revision = 5
+revision = 3
 requires-python = ">=3.15, <4.0"
 
 [manifest]
@@ -1640,6 +1640,21 @@ wheels = [
 ]
 
 [[package]]
+name = "tree-sitter"
+version = "0.25.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/66/7c/0350cfc47faadc0d3cf7d8237a4e34032b3014ddf4a12ded9933e1648b55/tree-sitter-0.25.2.tar.gz", hash = "sha256:fe43c158555da46723b28b52e058ad444195afd1db3ca7720c59a254544e9c20", size = 177961, upload-time = "2025-09-25T17:37:59.751Z" }
+
+[[package]]
+name = "tree-sitter-cmake"
+version = "0.7.2.post1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/d0/f4/928d5378ef701577ef1b19658fc626a8c70b32447148898771a17c3c66a1/tree_sitter_cmake-0.7.2.post1.tar.gz", hash = "sha256:64a3751ca67f37112821d67057b8de6ecab5c7e94d6053467a4b78ceab348640", size = 47174, upload-time = "2025-11-24T08:59:05.881Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f8/0b/820ab5f8581f3b39e4bb6837e9f8573d70cfa71e8530a7a97355898b8751/tree_sitter_cmake-0.7.2.post1-cp310-abi3-win_amd64.whl", hash = "sha256:c1b7a754e17442087df3efccea6535a9f2a8c4b4bf558e31fd3caccd8d1ce830", size = 28032, upload-time = "2025-11-24T08:59:04.794Z" },
+]
+
+[[package]]
 name = "typer"
 version = "0.27.1"
 source = { registry = "https://pypi.org/simple" }
@@ -1877,6 +1892,8 @@ dev = [
     { name = "semver" },
     { name = "tabulate" },
     { name = "tqdm" },
+    { name = "tree-sitter" },
+    { name = "tree-sitter-cmake" },
     { name = "unidiff" },
     { name = "west" },
     { name = "yamllint" },
@@ -1932,6 +1949,8 @@ dev = [
     { name = "semver", specifier = ">=3.1.0" },
     { name = "tabulate", specifier = ">=0.9.0" },
     { name = "tqdm", specifier = ">=4.70.1" },
+    { name = "tree-sitter", specifier = ">=0.25.2,<0.26" },
+    { name = "tree-sitter-cmake", specifier = ">=0.7.2" },
     { name = "unidiff", specifier = ">=1.0.1" },
     { name = "west", specifier = ">=1.5.0" },
     { name = "windows-curses", marker = "python_full_version < '3.15' and sys_platform == 'win32'", specifier = ">=2.4.2" },

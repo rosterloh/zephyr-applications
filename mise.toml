@@ -58,8 +58,8 @@ description = "Format Python (ruff), C (clang-format) and devicetree (dts-linter
 
 [tasks.lint]
 # Keep going after a failure so one run reports every language.
-run = "s=0; for t in py c dts; do mise run lint:$t || s=1; done; exit $s"
-description = "Check Python, C and devicetree formatting without changing files"
+run = "s=0; for t in py c dts cmake; do mise run lint:$t || s=1; done; exit $s"
+description = "Check Python, C, devicetree and CMake formatting without changing files"
 
 [tasks."format:py"]
 run = "ruff format"
@@ -76,6 +76,11 @@ description = "Format C/C++ in applications/ and boards/ (clang-format, in-tree 
 [tasks."lint:c"]
 run = "find applications boards -type f \\( -name '*.c' -o -name '*.h' -o -name '*.cpp' -o -name '*.hpp' \\) -exec clang-format --dry-run --Werror {} +"
 description = "Check C/C++ formatting (clang-format), as CI does"
+
+# Zephyr's CMakeStyle compliance check. Check-only: cmake_style.py has no fix mode.
+[tasks."lint:cmake"]
+run = "find CMakeLists.txt applications boards -type f \\( -name CMakeLists.txt -o -name '*.cmake' \\) -exec python deps/zephyr/scripts/cmake/cmake_style.py {} +"
+description = "Check CMake style (Zephyr cmake_style.py: 2-space indent, lowercase commands, no space before '(')"
 
 [tasks."dts-linter-install"]
 hide = true

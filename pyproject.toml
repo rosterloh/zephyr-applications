@@ -49,6 +49,9 @@ dev = [
   "semver>=3.1.0",
   "tabulate>=0.9.0",
   "tqdm>=4.70.1",
+  # Upstream Zephyr's cap: 0.26.0 segfaults walking tree-sitter-cmake trees (cmake_style.py).
+  "tree-sitter>=0.25.2,<0.26",
+  "tree-sitter-cmake>=0.7.2",
   "unidiff>=1.0.1",
   "west>=1.5.0",
   # shortcut: no cp315 wheel yet, so menuconfig's curses UI is unavailable on Windows; drop the python_version bound once one ships.
