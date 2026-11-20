@@ -32,6 +32,15 @@ task and layout rules are in `AGENTS.md`. Task authoring is in the `mise` skill.
 A board must be in the `app` task's `case` in `mise.toml` before `mise run app`
 accepts it (see the `mise` skill), even if `west build -b` works.
 
+## Debugging a flashed image
+
+`mise run app` archives every ELF under `builds/by-id/<build id>/`. The boot
+log prints the running image's id (`app_build_id: Build ID 97f51a6379ca`):
+debug and decode coredumps with that ELF, since `builds/<app>/` holds
+whatever was built last. Per-developer Kconfig (hawkBit server, tokens) goes
+in a gitignored `applications/<app>/local.conf`, which `mise run app` adds
+to the app image only.
+
 ## Board roots
 
 | Root | Boards |
