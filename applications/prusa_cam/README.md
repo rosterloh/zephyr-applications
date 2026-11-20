@@ -47,7 +47,9 @@ log in as `admin` to change the camera name, resolution, upload interval
 (10 s, 30 s, 60 s or 10 min, the cadences the service knows), JPEG quality,
 mirror/flip, rotation, flash, brightness/contrast/saturation, the auto
 exposure/white balance/gain loops, and a static IPv4 address. The page needs a password set
-first; until then the API answers 403.
+first; until then the API answers 403. The page's Terminal tab is the device shell
+(`/shell`, same login; ESP32 boards only, not native_sim). It is line mode: the page
+turns the shell's echo and VT100 codes off, and Up/Down recall earlier commands.
 
 ## Interfaces
 
@@ -58,6 +60,7 @@ first; until then the API answers 403.
 | `GET /api/status` | yes | Upload count, last result and what it means, and whether uploads are stopped |
 | `POST /api/test` | yes | Check the token with `GET /v1/camera-info`; the result shows in `/api/status` |
 | `GET`/`POST /api/config` | yes | JSON config; POST takes any subset of `name`, `token`, `password`, `interval`, `resolution`, `quality`, `hflip`, `vflip`, `flash`, `rotation` (0/90/180/270), `ip`, `netmask`, `gateway`, `dns` (`""` = DHCP / gateway), `brightness`, `contrast`, `saturation` (-2..2), `auto_exposure`, `auto_wb`, `auto_gain`, `ha_key` (write-only) |
+| `GET /shell` (WebSocket) | yes | Device shell; a bad login is closed right after the upgrade |
 | `GET :81/stream` | yes | MJPEG stream, one viewer at a time |
 
 Rotation is not applied to the pixels. Prusa Connect gets it as

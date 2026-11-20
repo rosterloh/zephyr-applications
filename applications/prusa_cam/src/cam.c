@@ -86,11 +86,17 @@ int cam_apply(const struct cfg *c)
 	 */
 	fmt.size = MIN(fmt.size, (uint32_t)fmt.width * fmt.height / 5);
 
+	/* Resize on any change: the DVP driver sizes JPEG DMA to the whole buffer,
+	 * so one kept from a larger resolution needs more descriptors than exist.
+	 * Release all before allocating so the pool never holds both sizes.
+	 */
 	for (int i = 0; i < NBUF; i++) {
-		if (bufs[i] != NULL && bufs[i]->size < fmt.size) {
+		if (bufs[i] != NULL && bufs[i]->size != fmt.size) {
 			video_buffer_release(bufs[i]);
 			bufs[i] = NULL;
 		}
+	}
+	for (int i = 0; i < NBUF; i++) {
 		if (bufs[i] == NULL) {
 			bufs[i] = video_buffer_aligned_alloc(
 				fmt.size, CONFIG_VIDEO_BUFFER_POOL_ALIGN, K_NO_WAIT);

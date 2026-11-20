@@ -168,6 +168,49 @@ def test_api_needs_password(host: str) -> None:
     assert status == 401
 
 
+def ws_shell(host: str, auth: bool) -> socket.socket:
+    """Open /shell with a raw WebSocket handshake (stdlib only)."""
+    name, port = (host.split(":") + ["80"])[:2]
+    sock = socket.create_connection((name, int(port)), timeout=10)
+    hdr = f"Authorization: {AUTH['Authorization']}\r\n" if auth else ""
+    sock.sendall(
+        f"GET /shell HTTP/1.1\r\nHost: {host}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"
+        f"Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n{hdr}\r\n".encode()
+    )
+    return sock
+
+
+def ws_send(sock: socket.socket, text: str) -> None:
+    data, mask = text.encode(), b"\x01\x02\x03\x04"
+    sock.sendall(bytes([0x81, 0x80 | len(data)]) + mask + bytes(b ^ mask[i % 4] for i, b in enumerate(data)))
+
+
+def ws_read_until(sock: socket.socket, needle: bytes, timeout: float = 10) -> bytes:
+    got, deadline = b"", time.monotonic() + timeout
+    while needle not in got and time.monotonic() < deadline:
+        try:
+            chunk = sock.recv(1024)
+        except TimeoutError:
+            break
+        if not chunk:
+            break
+        got += chunk
+    return got
+
+
+def test_web_shell(host: str, native: bool) -> None:
+    if native:
+        pytest.skip("the WebSocket shell needs the native IP stack; native_sim uses offloaded sockets")
+    # The upgrade is answered before the login is checked; a bad login then closes the socket.
+    with ws_shell(host, auth=False) as sock:
+        got = ws_read_until(sock, b"never")
+        assert b" 101 " in got and b"Uptime" not in got
+    with ws_shell(host, auth=True) as sock:
+        assert b" 101 " in ws_read_until(sock, b"\r\n\r\n")
+        ws_send(sock, "shell echo off\nkernel uptime\n")
+        assert b"Uptime:" in ws_read_until(sock, b"Uptime:")
+
+
 def test_config_round_trip(host: str) -> None:
     status, cfg = post_json(f"http://{host}/api/config", {"quality": 55, "rotation": 0, "hflip": True})
     assert status == 200

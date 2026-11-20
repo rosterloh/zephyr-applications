@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-11-19
+
+### Added
+
+- Terminal in the web page: the device shell over a WebSocket at `/shell`,
+  behind the same admin login as the API. ESP32 boards only; costs about 8 KB
+  of DRAM (the AI-Thinker goes from 92% to 96% DRAM).
+
+### Changed
+
+- Redesigned web page: status header, snapshot with stat tiles, settings in
+  tabs, status refreshed every 10 s, dark and light themes.
+
+### Fixed
+
+- Camera stopped producing frames after the resolution was changed on the
+  DFR1154: FHD needed more DMA descriptors than were reserved, and buffers
+  kept from a larger resolution overran them after switching back.
+- Back-to-back web requests were refused (RST): closed connections held a
+  network context for 1.5 s in TIME_WAIT, now 500 ms.
+
 ## [0.2.0] - 2026-11-19
 
 Ports the applicable changes from Prusa-Firmware-ESP32-Cam v1.1.3.
@@ -47,4 +68,3 @@ DFRobot ESP32-S3 AI Camera (DFR1154).
   controls.
 - Core dumps to flash and a build ID in the image.
 - native_sim integration tests and on-board HIL tests (`mise run hil prusa_cam`).
-
