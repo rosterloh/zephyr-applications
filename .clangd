@@ -17,6 +17,8 @@ CompileFlags:
     - -fstrict-volatile-bitfields
     - -fdump-rtl-expand
     - --param=*
+    # GCC-only, native_sim (hosted) builds
+    - -fno-freestanding
     # GCC-only target flags (Xtensa / ARM)
     - -mlongcalls
     - -mfp16-format=*

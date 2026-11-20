@@ -6,5 +6,5 @@ project(embedded_vision)
 # We always want colored gcc output
 zephyr_compile_options(-fdiagnostics-color=always)
 
-FILE(GLOB app_sources src/*.c)
+file(GLOB app_sources src/*.c)
 target_sources(app PRIVATE ${app_sources})

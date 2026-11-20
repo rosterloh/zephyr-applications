@@ -89,14 +89,15 @@ jobs:
           mise run sync
           mise x -- uv cache prune --ci
 
-      # lint:dts runs the dts-linter Zephyr pins in scripts/ci; west.yml tracks
-      # Zephyr main, so a sparse fetch of that directory is all this job needs.
-      - name: Fetch Zephyr scripts/ci
+      # lint:dts runs the dts-linter Zephyr pins in scripts/ci and lint:cmake runs
+      # scripts/cmake/cmake_style.py; west.yml tracks Zephyr main, so a sparse
+      # fetch of those directories is all this job needs.
+      - name: Fetch Zephyr scripts/ci and scripts/cmake
         run: |
           git clone -q --depth 1 --filter=blob:none --sparse https://github.com/zephyrproject-rtos/zephyr deps/zephyr
-          git -C deps/zephyr sparse-checkout set scripts/ci
+          git -C deps/zephyr sparse-checkout set scripts/ci scripts/cmake
 
-      - name: Lint (ruff, clang-format, dts-linter)
+      - name: Lint (ruff, clang-format, dts-linter, cmake_style)
         run: mise run lint
 
   # Routes the build matrix and twister to the apps a PR can affect, via
