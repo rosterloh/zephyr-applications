@@ -13,6 +13,8 @@ checkout-command: >-
   dts/bindings/input/analog-axis.yaml
   drivers/video/video_esp32_dvp.c
   subsys/net/lib/sockets/sockets_internal.h
+  subsys/net/lib/dns/dispatcher.c
+  subsys/net/lib/dns/llmnr_responder.c
 clean-command: ""
 
 patches:
@@ -74,3 +76,15 @@ patches:
       IS_ENABLED(CONFIG_NET_NATIVE), but the extern is under #if, so
       offload-only builds (prusa_cam integration on native_sim) fail.
       Drop once upstream fixes it.
+  - path: zephyr/0007-net-dns-read-datagrams-without-blocking-in-socket-ha.patch
+    sha256sum: 7318e47c9e02e0a03b54bef2e4902d6b9eefa771c2e1aa7df4306b420330d1f5
+    module: deps/zephyr
+    author: Richard Osterloh
+    email: richard.osterloh@gmail.com
+    date: 2026-11-20
+    upstreamable: true
+    comments: |
+      The DNS dispatcher (mDNS) reads with a blocking recvfrom() from the
+      socket service; with an empty queue it waits holding the socket's
+      lock, which the RX thread needs, and the network deadlocks. Home
+      Assistant resolving prusa_cam over mDNS hangs the DFR1154.

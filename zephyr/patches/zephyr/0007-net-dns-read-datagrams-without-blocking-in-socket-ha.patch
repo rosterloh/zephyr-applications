@@ -1,0 +1,82 @@
+From 3d1a60a0698d8b264e502ddf934dec8db3924998 Mon Sep 17 00:00:00 2001
+From: Richard Osterloh <richard.osterloh@gmail.com>
+Date: Fri, 20 Nov 2026 15:25:06 +0000
+Subject: [PATCH] net: dns: read datagrams without blocking in socket handlers
+
+The DNS dispatcher and the LLMNR responder read a datagram when the
+socket service reports the socket readable, but with blocking
+recvfrom(). When the receive queue is empty by the time the handler
+reads, zsock_recv_dgram() waits in k_fifo_get() while holding the
+socket's lock. The RX thread needs that lock to queue the next
+datagram, so both stop, every incoming packet is dropped for lack of
+buffers, and the network is down until reset. Seen with mDNS queries
+on an ESP32-S3.
+
+Read with ZSOCK_MSG_DONTWAIT and treat EAGAIN as nothing to do.
+
+Assisted-by: Claude:claude-opus-5.5
+---
+ subsys/net/lib/dns/dispatcher.c      | 13 ++++++++++---
+ subsys/net/lib/dns/llmnr_responder.c |  7 ++++++-
+ 2 files changed, 16 insertions(+), 4 deletions(-)
+
+diff --git a/subsys/net/lib/dns/dispatcher.c b/subsys/net/lib/dns/dispatcher.c
+index 9e6824f99c7..3e90ab8abe1 100644
+--- a/subsys/net/lib/dns/dispatcher.c
++++ b/subsys/net/lib/dns/dispatcher.c
+@@ -234,8 +234,8 @@ static int recv_data(struct net_socket_service_event *pev)
+ 		uint8_t discard;
+ 
+ 		/* Flush the pending datagram to release its net_pkt and avoid RX starvation. */
+-		if (zsock_recvfrom(pev->event.fd, &discard, sizeof(discard), 0,
+-				   NULL, NULL) < 0) {
++		if (zsock_recvfrom(pev->event.fd, &discard, sizeof(discard),
++				   ZSOCK_MSG_DONTWAIT, NULL, NULL) < 0) {
+ 			NET_DBG("DNS discard recv failed (%d)", errno);
+ 		}
+ 
+@@ -243,11 +243,18 @@ static int recv_data(struct net_socket_service_event *pev)
+ 		goto unlock;
+ 	}
+ 
++	/* A blocking read on an empty socket would wait while holding the
++	 * socket's lock, which the RX thread needs to queue the datagram.
++	 */
+ 	ret = zsock_recvfrom(pev->event.fd, dns_data->data,
+-			     net_buf_tailroom(dns_data), 0,
++			     net_buf_tailroom(dns_data), ZSOCK_MSG_DONTWAIT,
+ 			     net_sad(&addr), &addrlen);
+ 	if (ret < 0) {
+ 		ret = -errno;
++		if (ret == -EAGAIN) {
++			ret = 0;
++			goto free_buf;
++		}
+ 		NET_ERR("recv failed on IPv%d socket (%d)",
+ 			family == NET_AF_INET ? 4 : 6, -ret);
+ 		goto free_buf;
+diff --git a/subsys/net/lib/dns/llmnr_responder.c b/subsys/net/lib/dns/llmnr_responder.c
+index 82c3574ae54..a73f5f4fc51 100644
+--- a/subsys/net/lib/dns/llmnr_responder.c
++++ b/subsys/net/lib/dns/llmnr_responder.c
+@@ -519,11 +519,16 @@ static int recv_data(struct net_socket_service_event *pev)
+ 		goto quit;
+ 	}
+ 
++	/* Non-blocking: see recv_data() in dispatcher.c */
+ 	ret = zsock_recvfrom(pev->event.fd, dns_data->data,
+-			     net_buf_tailroom(dns_data), 0,
++			     net_buf_tailroom(dns_data), ZSOCK_MSG_DONTWAIT,
+ 			     (struct net_sockaddr *)&addr, &addrlen);
+ 	if (ret < 0) {
+ 		ret = -errno;
++		if (ret == -EAGAIN) {
++			ret = 0;
++			goto free_buf;
++		}
+ 		NET_ERR("recv failed on IPv%d socket (%d)",
+ 			family == NET_AF_INET ? 4 : 6, -ret);
+ 		goto free_buf;
+-- 
+2.53.0
+
