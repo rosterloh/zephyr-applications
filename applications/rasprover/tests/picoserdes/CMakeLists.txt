@@ -21,18 +21,18 @@ set(PICOROS_DIR "${_ws}/deps/modules/lib/picoros")
 set(MICROCDR_DIR "${_ws}/deps/modules/lib/micro-cdr")
 
 target_sources(app PRIVATE
-	src/main.c
-	${PICOROS_DIR}/src/picoserdes.c
-	${MICROCDR_DIR}/src/c/common.c
-	${MICROCDR_DIR}/src/c/types/array.c
-	${MICROCDR_DIR}/src/c/types/basic.c
-	${MICROCDR_DIR}/src/c/types/sequence.c
-	${MICROCDR_DIR}/src/c/types/string.c
+  src/main.c
+  ${PICOROS_DIR}/src/picoserdes.c
+  ${MICROCDR_DIR}/src/c/common.c
+  ${MICROCDR_DIR}/src/c/types/array.c
+  ${MICROCDR_DIR}/src/c/types/basic.c
+  ${MICROCDR_DIR}/src/c/types/sequence.c
+  ${MICROCDR_DIR}/src/c/types/string.c
 )
 target_include_directories(app PRIVATE
-	${APP_SRC}
-	${PICOROS_DIR}/src
-	${MICROCDR_DIR}/include
-	${COMMON_PICOROS}
+  ${APP_SRC}
+  ${PICOROS_DIR}/src
+  ${MICROCDR_DIR}/include
+  ${COMMON_PICOROS}
 )
 target_compile_definitions(app PRIVATE USER_TYPE_FILE="${APP_SRC}/rasprover_types.h")
