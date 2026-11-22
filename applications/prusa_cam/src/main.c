@@ -288,9 +288,9 @@ int main(void)
 		LOG_ERR("HTTP server failed (%d)", ret);
 	}
 
+	/* hawkBit starts from ipv4_added(): before an address it can only fail to resolve */
 	net_mgmt_init_event_callback(&ipv4_cb, ipv4_added, NET_EVENT_IPV4_ADDR_ADD);
 	net_mgmt_add_event_callback(&ipv4_cb);
-	k_work_submit(&hawkbit_start);
 
 	return IS_ENABLED(CONFIG_WIFI) ? app_wifi_init() : 0;
 }
