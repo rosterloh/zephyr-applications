@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- The board hung a few seconds after Home Assistant connected: the thread
+  publishing states to it overflowed its 1.5 KB stack into the web shell's.
+  It now has 3 KB (`CONFIG_PRUSA_CAM_HA_STACK_SIZE`).
+- Home Assistant resolving the camera over mDNS could deadlock the network
+  stack until reset (Zephyr patch 0007).
+- With a hawkBit server set, every DNS lookup timed out until reboot:
+  hawkBit's failed first probe closed the mDNS responder's socket (Zephyr
+  patch 0008). hawkBit now also waits for an IPv4 address before probing.
+- Answering Home Assistant's mDNS queries overflowed the socket service
+  thread's stack into the RX packet pool and crashed the board; it now has
+  2.5 KB (ESP32 boards).
+- hawkBit polls never completed: requests carried an empty `Host` header,
+  and a DDI token over 32 characters cut the end off the request so the
+  server waited for more (Zephyr patch 0009 now rejects such a token).
+
 ## [0.3.0] - 2026-11-19
 
 ### Added

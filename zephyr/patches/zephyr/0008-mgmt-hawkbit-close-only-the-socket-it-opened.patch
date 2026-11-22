@@ -1,0 +1,79 @@
+From 065b2af221e664c85b73b51b085c0fc65529b912 Mon Sep 17 00:00:00 2001
+From: Richard Osterloh <richard.osterloh@gmail.com>
+Date: Fri, 20 Nov 2026 16:17:58 +0000
+Subject: [PATCH] mgmt: hawkbit: close only the socket it opened
+
+start_http_client() returns early when the server name does not
+resolve, without setting the socket, and the HTTP state's exit action
+then closes whatever descriptor the context holds: 0 on a first probe.
+That closed another subsystem's socket, here the mDNS responder's,
+whose descriptor the DNS resolver later reused; its answers were then
+dispatched to the responder and dropped. The error and allocation
+failure paths also closed the socket a second time.
+
+Mark the socket -1 before connecting and after closing it, and close
+it only when it is open.
+
+Assisted-by: Claude:claude-opus-5.5
+---
+ subsys/mgmt/hawkbit/hawkbit.c | 25 +++++++++++++++++--------
+ 1 file changed, 17 insertions(+), 8 deletions(-)
+
+diff --git a/subsys/mgmt/hawkbit/hawkbit.c b/subsys/mgmt/hawkbit/hawkbit.c
+index d0d2e7e22be..e55d96a1163 100644
+--- a/subsys/mgmt/hawkbit/hawkbit.c
++++ b/subsys/mgmt/hawkbit/hawkbit.c
+@@ -447,6 +447,19 @@ int hawkbit_event_remove_callback(struct hawkbit_event_callback *cb)
+ }
+ #endif /* CONFIG_HAWKBIT_EVENT_CALLBACKS */
+ 
++static void cleanup_connection(int *hb_sock)
++{
++	if (*hb_sock < 0) {
++		return;
++	}
++
++	if (zsock_close(*hb_sock) < 0) {
++		LOG_ERR("Failed to close the socket");
++	}
++
++	*hb_sock = -1;
++}
++
+ static bool start_http_client(int *hb_sock)
+ {
+ 	int ret = -1;
+@@ -463,6 +476,9 @@ static bool start_http_client(int *hb_sock)
+ 		hints.ai_socktype = NET_SOCK_STREAM;
+ 	}
+ 
++	/* The HTTP state's exit action closes this on every path, even a failure here */
++	*hb_sock = -1;
++
+ 	while (resolve_attempts--) {
+ 		ret = zsock_getaddrinfo(HAWKBIT_SERVER_ADDR, HAWKBIT_PORT, &hints, &addr);
+ 		if (ret == 0) {
+@@ -509,19 +525,12 @@ static bool start_http_client(int *hb_sock)
+ 	return true;
+ 
+ err_sock:
+-	zsock_close(*hb_sock);
++	cleanup_connection(hb_sock);
+ err:
+ 	zsock_freeaddrinfo(addr);
+ 	return false;
+ }
+ 
+-static void cleanup_connection(int *hb_sock)
+-{
+-	if (zsock_close(*hb_sock) < 0) {
+-		LOG_ERR("Failed to close the socket");
+-	}
+-}
+-
+ static int hawkbit_time2sec(const char *s)
+ {
+ 	int sec;
+-- 
+2.53.0
+

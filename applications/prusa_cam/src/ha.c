@@ -156,8 +156,8 @@ static void ha_thread(void *p1, void *p2, void *p3)
 	}
 }
 
-K_THREAD_DEFINE(prusa_ha, 1536, ha_thread, NULL, NULL, NULL, K_LOWEST_APPLICATION_THREAD_PRIO, 0,
-		SYS_FOREVER_MS);
+K_THREAD_DEFINE(prusa_ha, CONFIG_PRUSA_CAM_HA_STACK_SIZE, ha_thread, NULL, NULL, NULL,
+		K_LOWEST_APPLICATION_THREAD_PRIO, 0, SYS_FOREVER_MS);
 
 /* Home Assistant marks the entities unavailable now, not after its keepalive timeout. */
 static void before_reboot(struct hawkbit_event_callback *cb, enum hawkbit_event_type event)

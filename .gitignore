@@ -55,3 +55,6 @@ ssh_keys_blob.h
 
 # MCUboot signing keys from `west raptor keygen` (private)
 /applications/*/keys/
+
+# Per-developer Kconfig picked up by `mise run app` (hawkBit server, tokens)
+/applications/*/local.conf

@@ -49,6 +49,15 @@ config PRUSA_CAM_ESPHOME
 	  and an upload button. Noise encrypted; set the key with `prusa ha_key` or the
 	  config page. Until a key is set every client is refused.
 
+config PRUSA_CAM_HA_STACK_SIZE
+	int "Home Assistant state thread stack size"
+	depends on PRUSA_CAM_ESPHOME
+	default 3072
+	help
+	  Publishing a state encodes and Noise-encrypts the frame on this
+	  stack. 1536 overflowed into the next thread's stack once a client
+	  connected.
+
 config ZVFS_OPEN_ADD_SIZE_PRUSA_CAM_ESPHOME
 	int
 	default 2 if PRUSA_CAM_ESPHOME

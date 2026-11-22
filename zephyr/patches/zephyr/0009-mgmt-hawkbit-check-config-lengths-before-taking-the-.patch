@@ -1,0 +1,79 @@
+From 0b34a37840e3de7f5139987c2f368c290d558524 Mon Sep 17 00:00:00 2001
+From: Richard Osterloh <richard.osterloh@gmail.com>
+Date: Sun, 22 Nov 2026 11:03:28 +0000
+Subject: [PATCH] mgmt: hawkbit: check config lengths before taking the lock
+
+hawkbit_set_config() copied the DDI token with strncpy() and no length
+check. A token longer than DDI_SECURITY_TOKEN_SIZE was left without a
+terminator, and the Authorization header built from it was cut short of
+its CRLF: the request never ended its header block, so the server kept
+waiting for more and every probe ran into the 300 s receive timeout.
+
+The address and domain checks returned -EINVAL with probe_sem still
+taken, after which no probe and no later configuration could run.
+
+Check all three lengths before taking probe_sem, and reject a token that
+does not fit.
+
+Assisted-by: Claude:claude-opus-5.5
+---
+ subsys/mgmt/hawkbit/hawkbit.c | 35 +++++++++++++++++++++++------------
+ 1 file changed, 23 insertions(+), 12 deletions(-)
+
+diff --git a/subsys/mgmt/hawkbit/hawkbit.c b/subsys/mgmt/hawkbit/hawkbit.c
+index d0d2e7e22be..f4e43c3b644 100644
+--- a/subsys/mgmt/hawkbit/hawkbit.c
++++ b/subsys/mgmt/hawkbit/hawkbit.c
+@@ -803,26 +803,37 @@ int hawkbit_default_config_data_cb(const char *device_id, uint8_t *buffer,
+ #ifdef CONFIG_HAWKBIT_SET_SETTINGS_RUNTIME
+ int hawkbit_set_config(struct hawkbit_runtime_config *config)
+ {
++	/* Checked before taking probe_sem, so a rejected value cannot leave it taken */
++	if (config->server_addr != NULL &&
++	    strnlen(config->server_addr, sizeof(hb_cfg.server_addr)) ==
++		    sizeof(hb_cfg.server_addr)) {
++		LOG_ERR("%s too long: %s", "hawkbit/server_addr", config->server_addr);
++		return -EINVAL;
++	}
++#ifdef CONFIG_HAWKBIT_USE_DOMAIN_NAME
++	if (config->server_domain != NULL &&
++	    strnlen(config->server_domain, sizeof(hb_cfg.server_domain)) ==
++		    sizeof(hb_cfg.server_domain)) {
++		LOG_ERR("%s too long: %s", "hawkbit/server_domain", config->server_domain);
++		return -EINVAL;
++	}
++#endif /* CONFIG_HAWKBIT_USE_DOMAIN_NAME */
++	/* A longer token would be left unterminated and cut the CRLF off its header */
++	if (config->auth_token != NULL &&
++	    strnlen(config->auth_token, sizeof(hb_cfg.ddi_security_token)) ==
++		    sizeof(hb_cfg.ddi_security_token)) {
++		LOG_ERR("%s too long", "hawkbit/ddi_token");
++		return -EINVAL;
++	}
++
+ 	if (k_sem_take(&probe_sem, HAWKBIT_SET_SERVER_TIMEOUT) == 0) {
+ 		if (config->server_addr != NULL) {
+-			if (strnlen(config->server_addr, sizeof(hb_cfg.server_addr)) ==
+-			    sizeof(hb_cfg.server_addr)) {
+-				LOG_ERR("%s too long: %s", "hawkbit/server_addr",
+-					config->server_addr);
+-				return -EINVAL;
+-			}
+ 			strncpy(hb_cfg.server_addr, config->server_addr,
+ 				sizeof(hb_cfg.server_addr));
+ 			LOG_DBG("configured %s: %s", "hawkbit/server_addr", hb_cfg.server_addr);
+ 		}
+ #ifdef CONFIG_HAWKBIT_USE_DOMAIN_NAME
+ 		if (config->server_domain != NULL) {
+-			if (strnlen(config->server_domain, CONFIG_HAWKBIT_DOMAIN_NAME_MAX_LEN + 1)
+-			    > CONFIG_HAWKBIT_DOMAIN_NAME_MAX_LEN) {
+-				LOG_ERR("%s too long: %s", "hawkbit/server_domain",
+-					config->server_domain);
+-				return -EINVAL;
+-			}
+ 			strncpy(hb_cfg.server_domain, config->server_domain,
+ 				sizeof(hb_cfg.server_domain));
+ 			LOG_DBG("configured %s: %s", "hawkbit/server_domain",
+-- 
+2.53.0
+

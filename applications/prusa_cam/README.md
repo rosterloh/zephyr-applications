@@ -112,7 +112,7 @@ Point it at a hawkBit server once from the shell; the settings persist:
 
     hawkbit set addr hawkbit.lan     # host name or IP literal
     hawkbit set port 8080
-    hawkbit set ddi_token <target token>
+    hawkbit set ddi_token <target token>  # at most 32 characters
     hawkbit run                      # poll now instead of waiting
 
 The target's controller ID is the chip's hardware ID (`hawkbit info`). Upload
