@@ -83,6 +83,7 @@ patches:
     email: richard.osterloh@gmail.com
     date: 2026-11-20
     upstreamable: true
+    merge-pr: https://github.com/zephyrproject-rtos/zephyr/pull/126689
     comments: |
       The DNS dispatcher (mDNS) reads with a blocking recvfrom() from the
       socket service; with an empty queue it waits holding the socket's
@@ -95,6 +96,7 @@ patches:
     email: richard.osterloh@gmail.com
     date: 2026-11-20
     upstreamable: true
+    merge-pr: https://github.com/zephyrproject-rtos/zephyr/pull/126690
     comments: |
       hawkBit closed descriptor 0 when its server name did not resolve
       (and some sockets twice), which here was the mDNS responder's
@@ -107,6 +109,7 @@ patches:
     email: richard.osterloh@gmail.com
     date: 2026-11-22
     upstreamable: true
+    merge-pr: https://github.com/zephyrproject-rtos/zephyr/pull/126691
     comments: |
       A DDI token over 32 characters was stored unterminated and cut the
       CRLF off the Authorization header, so every probe hung for the
