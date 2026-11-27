@@ -88,18 +88,6 @@ patches:
       socket service; with an empty queue it waits holding the socket's
       lock, which the RX thread needs, and the network deadlocks. Home
       Assistant resolving prusa_cam over mDNS hangs the DFR1154.
-  - path: zephyr/0008-mgmt-hawkbit-close-only-the-socket-it-opened.patch
-    sha256sum: 39a4a40487c6fb58e576ddd7993a424ba52de3ae57cea9af4fe2ada13cfc51b6
-    module: deps/zephyr
-    author: Richard Osterloh
-    email: richard.osterloh@gmail.com
-    date: 2026-11-20
-    upstreamable: true
-    comments: |
-      hawkBit closed descriptor 0 when its server name did not resolve
-      (and some sockets twice), which here was the mDNS responder's
-      socket; the DNS resolver then reused the descriptor and its answers
-      were dropped, so every lookup timed out until reboot.
   - path: zephyr/0009-mgmt-hawkbit-check-config-lengths-before-taking-the-.patch
     sha256sum: 3f3fb4f2425694dd9ec4a7ef09d3a59673c6c89e9e705b38c30ef8dca6fa80cc
     module: deps/zephyr
