@@ -6,18 +6,20 @@
 #ifndef PRUSA_CAM_CONNECT_H_
 #define PRUSA_CAM_CONNECT_H_
 
+#include <stdbool.h>
 #include <stdint.h>
 
 struct connect_status {
-	int64_t last_ms;  /* uptime of the last attempt, 0 = none */
-	int last_result;  /* HTTP status, or -errno */
-	uint32_t uploads; /* successful snapshot uploads */
-	bool stopped;     /* refused by the service; waits for a config change */
+	int64_t last_ms;                     /* uptime of the last attempt, 0 = none */
+	int last_result;                     /* HTTP status, or -errno */
+	uint32_t uploads;                    /* successful snapshot uploads */
+	bool stopped;                        /* refused by the service; waits for a config change */
+	char printer[sizeof("unreachable")]; /* PrusaLink state, "unreachable", or "" for none */
 };
 
 int connect_init(void);
 
-/* Upload a snapshot now (and resend camera info) instead of waiting. */
+/* Upload a snapshot now (and resend camera info) instead of waiting, printing or not. */
 void connect_kick(void);
 
 /* Check the token and fingerprint with GET /v1/camera-info; see last_result. */

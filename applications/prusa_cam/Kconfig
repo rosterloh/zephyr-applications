@@ -38,6 +38,13 @@ config PRUSA_CAM_STREAM_PORT
 	help
 	  The config page links to port 81.
 
+config PRUSA_CAM_PRUSALINK_PORT
+	int "Printer's PrusaLink port"
+	default 80
+	help
+	  With a printer address set, snapshots are uploaded only while it
+	  prints; its state comes from PrusaLink on this port.
+
 config PRUSA_CAM_ESPHOME
 	bool "Home Assistant (ESPHome native API)"
 	default y

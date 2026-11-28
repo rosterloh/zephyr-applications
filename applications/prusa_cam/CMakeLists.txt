@@ -22,6 +22,7 @@ target_sources(app PRIVATE
   src/cfg.c
   src/cam.c
   src/connect.c
+  src/prusalink.c
   src/stream.c
   src/web.c
 )

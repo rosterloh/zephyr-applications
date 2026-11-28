@@ -57,9 +57,9 @@ turns the shell's echo and VT100 codes off, and Up/Down recall earlier commands.
 |---|---|---|
 | `GET /` | no | Config page (no secrets in it) |
 | `GET /snapshot.jpg` | yes | A fresh frame |
-| `GET /api/status` | yes | Upload count, last result and what it means, and whether uploads are stopped |
+| `GET /api/status` | yes | Upload count, last result and what it means, whether uploads are stopped, and the printer's state |
 | `POST /api/test` | yes | Check the token with `GET /v1/camera-info`; the result shows in `/api/status` |
-| `GET`/`POST /api/config` | yes | JSON config; POST takes any subset of `name`, `token`, `password`, `interval`, `resolution`, `quality`, `hflip`, `vflip`, `flash`, `rotation` (0/90/180/270), `ip`, `netmask`, `gateway`, `dns` (`""` = DHCP / gateway), `brightness`, `contrast`, `saturation` (-2..2), `auto_exposure`, `auto_wb`, `auto_gain`, `ha_key` (write-only) |
+| `GET`/`POST /api/config` | yes | JSON config; POST takes any subset of `name`, `token`, `password`, `interval`, `resolution`, `quality`, `hflip`, `vflip`, `flash`, `rotation` (0/90/180/270), `ip`, `netmask`, `gateway`, `dns` (`""` = DHCP / gateway), `brightness`, `contrast`, `saturation` (-2..2), `auto_exposure`, `auto_wb`, `auto_gain`, `ha_key` (write-only), `printer_ip` (`""` = none), `printer_key` (write-only) |
 | `GET /shell` (WebSocket) | yes | Device shell; a bad login is closed right after the upgrade |
 | `GET :81/stream` | yes | MJPEG stream, one viewer at a time |
 
@@ -91,6 +91,21 @@ Resolutions run from QVGA to UXGA plus HD (1280x720) and FHD (1920x1080); the pa
 the shell offer only those the sensor reports as JPEG sizes (the OV2640 driver has no
 HD/FHD). WiFi retries back off from 10 s to 5 minutes while the network is missing or
 rejects the password.
+
+## Only while printing (PrusaLink)
+
+With the printer's address and PrusaLink API key set (config page, or
+`prusa set printer_ip <A.B.C.D>` and `prusa set printer_key <key>`; the key is on
+the printer under Settings > Network > PrusaLink), the camera asks the printer for
+its state (`GET /api/v1/status`, `X-Api-Key`, plain HTTP on port 80) each interval
+and uploads snapshots only while it is PRINTING, PAUSED or ATTENTION, plus one
+more as the print ends. Camera-info, `prusa snap` and the connection test still go
+through. If the printer does not answer, uploads run as if none were set.
+`prusa set printer_ip 0` turns it off. The local snapshot, the stream and Home
+Assistant are not affected.
+
+Written for Buddy firmware's PrusaLink (MK4, Core One, XL, MINI). PrusaLink on a
+Raspberry Pi (MK3) documents digest login, which this does not do; untested there.
 
 ## Home Assistant
 

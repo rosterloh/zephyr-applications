@@ -6,6 +6,7 @@
 /* strnlen() */
 #define _POSIX_C_SOURCE 200809L
 
+#include <ctype.h>
 #include <errno.h>
 #include <string.h>
 #include <strings.h>
@@ -38,6 +39,7 @@ static struct cfg cfg = {
 	.auto_wb = true,
 	.auto_gain = true,
 };
+static struct cfg_printer printer;
 static K_MUTEX_DEFINE(cfg_lock);
 /* The service wants 16..64 characters; the MAC alone is 12 hex digits. */
 #define FP_PREFIX "zephyrcam"
@@ -49,6 +51,15 @@ static int cfg_load(const char *key, size_t len, settings_read_cb read_cb, void 
 	struct cfg tmp = {0};
 	ssize_t n;
 
+	if (strcmp(key, "printer") == 0) {
+		struct cfg_printer p = {0};
+
+		if (read_cb(cb_arg, &p, sizeof(p)) == sizeof(p)) {
+			p.key[CFG_PRINTER_KEY_MAX] = '\0';
+			printer = p;
+		}
+		return 0;
+	}
 	if (strcmp(key, "v1") != 0) {
 		return 0;
 	}
@@ -114,6 +125,42 @@ int cfg_set(const struct cfg *in)
 	ret = settings_save_one("prusa/v1", &tmp, sizeof(tmp));
 	if (ret == 0) {
 		cfg = tmp;
+	}
+	k_mutex_unlock(&cfg_lock);
+
+	if (ret == 0) {
+		cfg_changed();
+	}
+	return ret;
+}
+
+void cfg_printer_get(struct cfg_printer *out)
+{
+	k_mutex_lock(&cfg_lock, K_FOREVER);
+	*out = printer;
+	k_mutex_unlock(&cfg_lock);
+}
+
+int cfg_printer_set(const struct cfg_printer *in)
+{
+	struct cfg_printer tmp = *in;
+	size_t len = strnlen(tmp.key, sizeof(tmp.key));
+	int ret;
+
+	/* Goes into a request header as is. */
+	if (len > CFG_PRINTER_KEY_MAX) {
+		return -EINVAL;
+	}
+	for (size_t i = 0; i < len; i++) {
+		if (!isalnum((unsigned char)tmp.key[i])) {
+			return -EINVAL;
+		}
+	}
+
+	k_mutex_lock(&cfg_lock, K_FOREVER);
+	ret = settings_save_one("prusa/printer", &tmp, sizeof(tmp));
+	if (ret == 0) {
+		printer = tmp;
 	}
 	k_mutex_unlock(&cfg_lock);
 

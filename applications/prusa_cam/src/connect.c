@@ -23,6 +23,7 @@
 #include "cfg.h"
 #include "connect.h"
 #include "prusa_camera.h"
+#include "prusalink.h"
 
 LOG_MODULE_REGISTER(connect, LOG_LEVEL_INF);
 
@@ -30,7 +31,8 @@ LOG_MODULE_REGISTER(connect, LOG_LEVEL_INF);
 
 enum {
 	INFO_STALE,
-	TEST_REQUESTED
+	TEST_REQUESTED,
+	SNAPSHOT_REQUESTED, /* uploads even while the printer is idle */
 };
 
 static K_SEM_DEFINE(kick, 0, 1);
@@ -105,6 +107,48 @@ static int send_info(const struct prusa_camera_auth *auth, const struct cfg *c)
 	return prusa_camera_put_info(auth, &info);
 }
 
+/*
+ * With a printer set, snapshots go up only while it prints, plus one when a
+ * print ends so Connect shows the result. An unreachable printer uploads as
+ * if none were set.
+ */
+static bool printer_allows_upload(void)
+{
+	static bool was_printing;
+	struct cfg_printer p;
+	char state[PRUSALINK_STATE_MAX] = "";
+	bool printing;
+	bool allow;
+	int ret;
+
+	cfg_printer_get(&p);
+	if (p.ip == 0) {
+		ret = -ENOENT;
+	} else {
+		ret = prusalink_state(&p, state);
+		if (ret != 0) {
+			LOG_WRN("PrusaLink -> %d", ret);
+		}
+	}
+	memset(&p, 0, sizeof(p));
+
+	k_mutex_lock(&status_lock, K_FOREVER);
+	strcpy(status.printer, ret == 0 ? state : ret == -ENOENT ? "" : "unreachable");
+	k_mutex_unlock(&status_lock);
+
+	if (ret != 0) {
+		was_printing = false;
+		return true;
+	}
+	printing = prusalink_printing(state);
+	if (printing != was_printing) {
+		LOG_INF("Printer %s: uploads %s", state, printing ? "on" : "off after this one");
+	}
+	allow = printing || was_printing;
+	was_printing = printing;
+	return allow;
+}
+
 static int send_snapshot(const struct prusa_camera_auth *auth)
 {
 	const uint8_t *jpeg;
@@ -154,6 +198,9 @@ static enum prusa_camera_next step(const struct prusa_camera_auth *auth, const s
 	} else if (atomic_test_bit(&flags, INFO_STALE)) {
 		kind = INFO;
 		ret = send_info(auth, c);
+	} else if (!atomic_test_and_clear_bit(&flags, SNAPSHOT_REQUESTED) &&
+		   !printer_allows_upload()) {
+		return PRUSA_CAMERA_NEXT_WAIT;
 	} else {
 		kind = SNAPSHOT;
 		ret = send_snapshot(auth);
@@ -229,6 +276,7 @@ int connect_init(void)
 void connect_kick(void)
 {
 	atomic_set_bit(&flags, INFO_STALE);
+	atomic_set_bit(&flags, SNAPSHOT_REQUESTED);
 	k_sem_give(&kick);
 }
 
