@@ -56,9 +56,11 @@ static bool parse_ip(const char *val, uint32_t *out)
 static int cmd_show(const struct shell *sh, size_t argc, char **argv)
 {
 	struct cfg c;
+	struct cfg_printer p;
 	struct connect_status st;
 
 	cfg_get(&c);
+	cfg_printer_get(&p);
 	connect_get_status(&st);
 	shell_print(sh, "name:        %s", c.name);
 	shell_print(sh, "token:       %s", c.token[0] ? "set" : "not set");
@@ -79,11 +81,39 @@ static int cmd_show(const struct shell *sh, size_t argc, char **argv)
 			    "address:     %u.%u.%u.%u/%u.%u.%u.%u gw %u.%u.%u.%u dns %u.%u.%u.%u",
 			    IP4(c.ip), IP4(c.netmask), IP4(c.gateway), IP4(c.dns));
 	}
+	if (p.ip == 0) {
+		shell_print(sh, "printer:     none, uploads every interval");
+	} else {
+		shell_print(sh, "printer:     %u.%u.%u.%u, key %s, state %s", IP4(p.ip),
+			    p.key[0] ? "set" : "not set",
+			    st.printer[0] ? st.printer : "not polled yet");
+	}
+	memset(&p, 0, sizeof(p));
 	shell_print(sh, "uploads:     %u, last result %d (%s)%s", st.uploads, st.last_result,
 		    st.last_ms ? prusa_camera_describe(st.last_result) : "none yet",
 		    st.stopped ? ", stopped until the config changes" : "");
 	memset(&c, 0, sizeof(c));
 	return 0;
+}
+
+static int set_printer(const struct shell *sh, const char *key, const char *val)
+{
+	struct cfg_printer p;
+	int ret = -EINVAL;
+
+	cfg_printer_get(&p);
+	if (strcmp(key, "printer_ip") == 0 ? parse_ip(val, &p.ip)
+					   : strlen(val) <= CFG_PRINTER_KEY_MAX) {
+		if (strcmp(key, "printer_key") == 0) {
+			strcpy(p.key, val);
+		}
+		ret = cfg_printer_set(&p);
+	}
+	memset(&p, 0, sizeof(p));
+	if (ret < 0) {
+		shell_error(sh, "rejected (%d)", ret);
+	}
+	return ret;
 }
 
 static int cmd_set(const struct shell *sh, size_t argc, char **argv)
@@ -93,6 +123,9 @@ static int cmd_set(const struct shell *sh, size_t argc, char **argv)
 	struct cfg c;
 	int ret;
 
+	if (strcmp(key, "printer_ip") == 0 || strcmp(key, "printer_key") == 0) {
+		return set_printer(sh, key, val);
+	}
 	cfg_get(&c);
 	if (strcmp(key, "name") == 0 && strlen(val) <= CFG_NAME_MAX) {
 		strcpy(c.name, val);
@@ -184,12 +217,14 @@ SHELL_STATIC_SUBCMD_SET_CREATE(
 		set, NULL,
 		"Set <name|token|password|interval|resolution|quality|hflip|vflip|flash|\n"
 		"     rotation|brightness|contrast|saturation|auto_exposure|auto_wb|auto_gain|\n"
-		"     ip|netmask|gateway|dns> <value>\n"
+		"     ip|netmask|gateway|dns|printer_ip|printer_key> <value>\n"
 		"token: 20 letters/digits; interval: 10 30 60 600\n"
 		"resolution: QVGA VGA SVGA XGA SXGA UXGA HD FHD, as the sensor allows\n"
 		"rotation: 0 90 180 270\n"
 		"brightness/contrast/saturation: -2..2; auto_*: 0 or 1\n"
-		"ip: A.B.C.D or dhcp; set netmask and gateway first; applies on reconnect",
+		"ip: A.B.C.D or dhcp; set netmask and gateway first; applies on reconnect\n"
+		"printer_ip: the printer's A.B.C.D, or 0: with it set, uploads run only while\n"
+		"            it prints (PrusaLink); printer_key: its PrusaLink API key",
 		cmd_set, 3, 0),
 	SHELL_CMD_ARG(test, NULL, "Check token and fingerprint with the service", cmd_test, 1, 0),
 	SHELL_CMD_ARG(snap, NULL, "Upload a snapshot now", cmd_snap, 1, 0),

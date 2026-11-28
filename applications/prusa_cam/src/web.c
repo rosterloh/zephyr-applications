@@ -33,7 +33,7 @@
 LOG_MODULE_REGISTER(web, LOG_LEVEL_INF);
 
 #define USER     "admin"
-#define BODY_MAX 576 /* every config field at its longest: 531 */
+#define BODY_MAX 640 /* every config field at its longest: 611 */
 
 HTTP_SERVER_REGISTER_HEADER_CAPTURE(capture_authorization, "Authorization");
 
@@ -145,6 +145,8 @@ struct config_out {
 	bool auto_exposure;
 	bool auto_wb;
 	bool auto_gain;
+	const char *printer_ip;
+	bool printer_key_set;
 	const char *resolutions[CFG_RESOLUTION_COUNT];
 	size_t resolutions_len;
 };
@@ -170,6 +172,8 @@ static const struct json_obj_descr config_out_descr[] = {
 	JSON_OBJ_DESCR_PRIM(struct config_out, auto_exposure, JSON_TOK_TRUE),
 	JSON_OBJ_DESCR_PRIM(struct config_out, auto_wb, JSON_TOK_TRUE),
 	JSON_OBJ_DESCR_PRIM(struct config_out, auto_gain, JSON_TOK_TRUE),
+	JSON_OBJ_DESCR_PRIM(struct config_out, printer_ip, JSON_TOK_STRING),
+	JSON_OBJ_DESCR_PRIM(struct config_out, printer_key_set, JSON_TOK_TRUE),
 	JSON_OBJ_DESCR_ARRAY(struct config_out, resolutions, CFG_RESOLUTION_COUNT, resolutions_len,
 			     JSON_TOK_STRING),
 };
@@ -181,6 +185,7 @@ struct status_out {
 	const char *result;
 	uint32_t uploads;
 	bool stopped;
+	const char *printer;
 };
 
 static const struct json_obj_descr status_out_descr[] = {
@@ -190,6 +195,7 @@ static const struct json_obj_descr status_out_descr[] = {
 	JSON_OBJ_DESCR_PRIM(struct status_out, result, JSON_TOK_STRING),
 	JSON_OBJ_DESCR_PRIM(struct status_out, uploads, JSON_TOK_UINT),
 	JSON_OBJ_DESCR_PRIM(struct status_out, stopped, JSON_TOK_TRUE),
+	JSON_OBJ_DESCR_PRIM(struct status_out, printer, JSON_TOK_STRING),
 };
 
 /* Encode into `out` and reply 200, or 500 if it does not fit. */
@@ -205,11 +211,13 @@ static void reply_json(struct http_response_ctx *rsp, const struct json_obj_desc
 
 static void reply_config(struct http_response_ctx *rsp)
 {
-	char ip[16], mask[16], gw[16], dns[16];
+	char ip[16], mask[16], gw[16], dns[16], pip[16];
 	struct cfg c;
+	struct cfg_printer p;
 	struct config_out o;
 
 	cfg_get(&c);
+	cfg_printer_get(&p);
 	o = (struct config_out){
 		.name = c.name,
 		.token_set = c.token[0] != '\0',
@@ -231,7 +239,10 @@ static void reply_config(struct http_response_ctx *rsp)
 		.auto_exposure = c.auto_exposure,
 		.auto_wb = c.auto_wb,
 		.auto_gain = c.auto_gain,
+		.printer_ip = ip_str(pip, p.ip),
+		.printer_key_set = p.key[0] != '\0',
 	};
+	memset(&p, 0, sizeof(p));
 	for (int i = 0; i < CFG_RESOLUTION_COUNT; i++) {
 		if (cam_resolution_ok(&cfg_resolutions[i])) {
 			o.resolutions[o.resolutions_len++] = cfg_resolutions[i].name;
@@ -263,6 +274,8 @@ struct cfg_post {
 	bool auto_wb;
 	bool auto_gain;
 	const char *ha_key;
+	const char *printer_ip;
+	const char *printer_key;
 };
 
 static const struct json_obj_descr cfg_post_descr[] = {
@@ -287,6 +300,8 @@ static const struct json_obj_descr cfg_post_descr[] = {
 	JSON_OBJ_DESCR_PRIM(struct cfg_post, auto_wb, JSON_TOK_TRUE),
 	JSON_OBJ_DESCR_PRIM(struct cfg_post, auto_gain, JSON_TOK_TRUE),
 	JSON_OBJ_DESCR_PRIM(struct cfg_post, ha_key, JSON_TOK_STRING),
+	JSON_OBJ_DESCR_PRIM(struct cfg_post, printer_ip, JSON_TOK_STRING),
+	JSON_OBJ_DESCR_PRIM(struct cfg_post, printer_key, JSON_TOK_STRING),
 };
 
 /* "" clears the address (DHCP / gateway as DNS); anything else must parse. */
@@ -304,6 +319,7 @@ static int apply_post(char *body, size_t len)
 {
 	struct cfg_post p = {0};
 	struct cfg c;
+	struct cfg_printer pr;
 	int64_t got = json_obj_parse(body, len, cfg_post_descr, ARRAY_SIZE(cfg_post_descr), &p);
 	int ret;
 
@@ -391,8 +407,24 @@ static int apply_post(char *body, size_t len)
 		memset(&c, 0, sizeof(c));
 		return -EINVAL;
 	}
+	/* Checked before cfg_set(); the key's characters in cfg_printer_set(). */
+	cfg_printer_get(&pr);
+	if (((got & BIT(21)) && parse_ip(p.printer_ip, &pr.ip) < 0) ||
+	    ((got & BIT(22)) && strlen(p.printer_key) > CFG_PRINTER_KEY_MAX)) {
+		memset(&c, 0, sizeof(c));
+		memset(&pr, 0, sizeof(pr));
+		return -EINVAL;
+	}
+	if (got & BIT(22)) {
+		strcpy(pr.key, p.printer_key);
+	}
 	ret = cfg_set(&c);
 	memset(&c, 0, sizeof(c));
+	/* Its own store too; the key is write-only. */
+	if (ret == 0 && (got & (BIT(21) | BIT(22)))) {
+		ret = cfg_printer_set(&pr);
+	}
+	memset(&pr, 0, sizeof(pr));
 	return ret;
 }
 
@@ -466,6 +498,7 @@ static int status_cb(struct http_client_ctx *client, enum http_transaction_statu
 		.result = st.last_ms ? prusa_camera_describe(st.last_result) : "",
 		.uploads = st.uploads,
 		.stopped = st.stopped,
+		.printer = st.printer,
 	};
 	reply_json(rsp, status_out_descr, ARRAY_SIZE(status_out_descr), &so);
 	return 0;

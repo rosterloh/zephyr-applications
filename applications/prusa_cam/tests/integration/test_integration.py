@@ -40,6 +40,7 @@ class FakeService(ThreadingHTTPServer):
         super().__init__(("0.0.0.0", SERVICE_PORT), Handler)
         self.requests: list[tuple[str, str, dict[str, str], bytes]] = []
         self.status = 204
+        self.printer_state: str | None = None  # PrusaLink's printer.state; None answers 404
         self.lock = threading.Lock()
 
     def wait_for(self, method: str, path: str, timeout: float = 30) -> tuple[dict[str, str], bytes]:
@@ -56,6 +57,10 @@ class FakeService(ThreadingHTTPServer):
         with self.lock:
             self.requests.clear()
 
+    def count(self, method: str, path: str) -> int:
+        with self.lock:
+            return sum((m, p) == (method, path) for m, p, _, _ in self.requests)
+
 
 class Handler(BaseHTTPRequestHandler):
     server: FakeService
@@ -64,9 +69,42 @@ class Handler(BaseHTTPRequestHandler):
         body = self.rfile.read(int(self.headers.get("Content-Length", 0)))
         with self.server.lock:
             self.server.requests.append((self.command, self.path, dict(self.headers), body))
+        if self.path == "/api/v1/status":  # the printer's PrusaLink, also on this port
+            self._prusalink()
+            return
         self.send_response(self.server.status)
         self.send_header("Content-Length", "0")
         self.end_headers()
+
+    def _prusalink(self) -> None:
+        state = self.server.printer_state
+        # Shaped like a Buddy firmware (MK4/Core One) reply.
+        body = (
+            b""
+            if state is None
+            else json.dumps(
+                {
+                    "storage": {"path": "/usb/", "name": "usb", "read_only": False},
+                    "printer": {
+                        "state": state,
+                        "temp_bed": 59.9,
+                        "target_bed": 60.0,
+                        "temp_nozzle": 214.8,
+                        "target_nozzle": 215.0,
+                        "axis_z": 0.2,
+                        "flow": 100,
+                        "speed": 100,
+                        "fan_hotend": 4567,
+                    },
+                    "job": {"id": 42, "progress": 12.5, "time_remaining": 3600, "time_printing": 300},
+                }
+            ).encode()
+        )
+        self.send_response(404 if state is None else 200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
 
     do_GET = do_PUT = _record
 
@@ -312,3 +350,48 @@ def test_rejected_token_stops_until_test_passes(service: FakeService, shell: She
         time.sleep(0.5)
     # camera-info is still stale, so it goes first, then the snapshot.
     service.wait_for("PUT", "/v1/snapshot", timeout=40)
+
+
+def test_uploads_only_while_printing(service: FakeService, host: str) -> None:
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:  # this machine, as the board sees it
+        s.connect((host.split(":")[0], 9))
+        printer = s.getsockname()[0]
+    service.status = 204
+    service.printer_state = "IDLE"
+    assert post_json(f"http://{host}/api/config", {"printer_key": "bad key"})[0] == 400
+    status, cfg = post_json(f"http://{host}/api/config", {"printer_ip": printer, "printer_key": "abcDEF123"})
+    assert status == 200 and cfg["printer_ip"] == printer and cfg["printer_key_set"] is True
+    assert "printer_key" not in cfg
+
+    def idle_for(seconds: float) -> None:
+        service.clear()
+        time.sleep(seconds)
+        assert service.count("GET", "/api/v1/status") >= 1
+        assert service.count("PUT", "/v1/snapshot") == 0
+
+    # Saving forces one upload; then the printer is polled and, idle, gets none.
+    service.wait_for("PUT", "/v1/snapshot", timeout=30)
+    headers, _ = service.wait_for("GET", "/api/v1/status", timeout=30)
+    assert headers["X-Api-Key"] == "abcDEF123"
+    idle_for(15)
+    status, _, body = get(f"http://{host}/api/status")
+    assert status == 200 and json.loads(body)["printer"] == "IDLE"
+
+    service.printer_state = "PRINTING"
+    service.clear()
+    service.wait_for("PUT", "/v1/snapshot", timeout=30)
+
+    # One more upload as the print ends, then none.
+    service.printer_state = "FINISHED"
+    service.clear()
+    service.wait_for("PUT", "/v1/snapshot", timeout=30)
+    idle_for(15)
+
+    # PrusaLink failing uploads as if no printer were set.
+    service.printer_state = None
+    service.clear()
+    service.wait_for("PUT", "/v1/snapshot", timeout=30)
+    assert json.loads(get(f"http://{host}/api/status")[2])["printer"] == "unreachable"
+
+    status, cfg = post_json(f"http://{host}/api/config", {"printer_ip": ""})
+    assert status == 200 and cfg["printer_ip"] == ""

@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Uploads only while the printer prints: set the printer's address and
+  PrusaLink API key and the camera polls PrusaLink each interval, uploading
+  while it is PRINTING, PAUSED or ATTENTION and once more as the print ends.
+  An unreachable printer uploads as before.
+
 ### Fixed
 
 - The board hung a few seconds after Home Assistant connected: the thread
